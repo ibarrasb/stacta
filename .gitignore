@@ -1,0 +1,86 @@
+# =========================
+# OS / Editor
+# =========================
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# IntelliJ / JetBrains
+.idea/
+*.iml
+out/
+
+# =========================
+# Env / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# =========================
+# Node (apps/web)
+# =========================
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+
+# =========================
+# Java / Spring (services/api)
+# =========================
+target/
+build/
+.gradle/
+.gradle-cache/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Spring Boot runtime files
+*.pid
+*.hprof
+
+# =========================
+# Testing / Coverage
+# =========================
+coverage/
+.nyc_output/
+reports/
+test-results/
+
+# =========================
+# Terraform / IaC (if you add infra later)
+# =========================
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# =========================
+# Misc
+# =========================
+tmp/
+temp/
+.cache/
