@@ -23,4 +23,4 @@ spring:
       host: localhost
       port: 16379
   cache:
-    type: redis
+    type: simple
