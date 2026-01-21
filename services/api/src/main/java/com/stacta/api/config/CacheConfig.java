@@ -1,15 +1,15 @@
 package com.stacta.api.config;
 
+import java.time.Duration;
+
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
-
-import java.time.Duration;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 @Configuration
 @EnableCaching
@@ -18,20 +18,20 @@ public class CacheConfig {
   @Bean
   RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
 
-    var json = GenericJacksonJsonRedisSerializer.builder().build();
-    var valuePair = RedisSerializationContext.SerializationPair.fromSerializer(json);
+    var stringPair = RedisSerializationContext.SerializationPair
+      .fromSerializer(new StringRedisSerializer());
 
-    // default TTL for any cache you don't explicitly configure
     var defaults = RedisCacheConfiguration.defaultCacheConfig()
-      .serializeValuesWith(valuePair)
-      .entryTtl(Duration.ofMinutes(10));
+      .serializeKeysWith(stringPair)
+      .serializeValuesWith(stringPair)          // ✅ values stored as plain strings
+      .entryTtl(Duration.ofMinutes(10))
+      .prefixCacheNameWith("stacta4:");         // ✅ bump prefix to avoid old junk
 
-    // special TTL for Fragella search results
     var fragellaSearch = defaults.entryTtl(Duration.ofMinutes(30));
 
     return RedisCacheManager.builder(connectionFactory)
       .cacheDefaults(defaults)
-      .withCacheConfiguration("fragellaSearch", fragellaSearch)
+      .withCacheConfiguration("fragellaSearchV2", fragellaSearch)
       .build();
   }
 }
