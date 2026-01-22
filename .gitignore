@@ -89,3 +89,7 @@ temp/
 services/api/.settings/
 services/api/.classpath
 services/api/.project
+
+# IDE junk
+services/api/.settings/
+
