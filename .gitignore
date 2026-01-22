@@ -84,3 +84,8 @@ terraform.rc
 tmp/
 temp/
 .cache/
+
+# IDE junk
+services/api/.settings/
+services/api/.classpath
+services/api/.project
