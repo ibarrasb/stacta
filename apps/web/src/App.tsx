@@ -1,9 +1,5 @@
-import { Button } from "@/components/ui/button";
+import LandingPage from "@/pages/Landing";
 
 export default function App() {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Button>Stacta</Button>
-    </div>
-  );
+  return <LandingPage />;
 }
