@@ -1,8 +1,58 @@
 // apps/web/src/pages/Auth/SignIn.tsx
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { authSignIn } from "@/lib/auth";
 
 export default function SignInPage() {
+  const navigate = useNavigate();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (!email || !password) {
+      setError("Enter your email and password.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authSignIn(email.trim(), password);
+
+  
+      navigate("/");
+    } catch (err: any) {
+      // Common Cognito errors
+      const name = err?.name || err?.code;
+      const msg = err?.message || "Sign in failed.";
+
+      if (name === "UserNotConfirmedException") {
+        // user exists but hasn’t confirmed email yet
+        navigate(`/confirm?email=${encodeURIComponent(email.trim())}`);
+        return;
+      }
+
+      if (name === "NotAuthorizedException") {
+        setError("Wrong email or password.");
+      } else if (name === "UserNotFoundException") {
+        setError("No account found with that email.");
+      } else if (name === "TooManyRequestsException") {
+        setError("Too many attempts. Try again in a bit.");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#050507] text-white">
       <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4">
@@ -29,12 +79,14 @@ export default function SignInPage() {
 
           {/* Card */}
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={onSubmit}>
               <div>
                 <label className="text-xs font-medium text-white/70">
                   Email
                 </label>
                 <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   type="email"
                   autoComplete="email"
                   placeholder="you@example.com"
@@ -47,18 +99,18 @@ export default function SignInPage() {
                   <label className="text-xs font-medium text-white/70">
                     Password
                   </label>
-                  <button
-                    type="button"
-                    className="text-xs text-white/60 hover:text-white"
-                  >
-                   
-                    <Link to="/forgot-password" className="text-white/70 hover:text-white hover:underline">
-  Forgot?
-</Link>
 
-                  </button>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs text-white/70 hover:text-white hover:underline"
+                  >
+                    Forgot?
+                  </Link>
                 </div>
+
                 <input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   type="password"
                   autoComplete="current-password"
                   placeholder="••••••••"
@@ -66,7 +118,15 @@ export default function SignInPage() {
                 />
               </div>
 
-              <Button className="h-11 w-full rounded-xl">Sign in</Button>
+              {error && (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                  {error}
+                </div>
+              )}
+
+              <Button className="h-11 w-full rounded-xl" disabled={loading}>
+                {loading ? "Signing in..." : "Sign in"}
+              </Button>
 
               <div className="pt-2 text-center text-sm text-white/60">
                 New here?{" "}

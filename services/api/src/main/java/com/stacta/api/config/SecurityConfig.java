@@ -2,7 +2,9 @@ package com.stacta.api.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -12,7 +14,25 @@ public class SecurityConfig {
   public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
     return http
       .csrf(csrf -> csrf.disable())
-      .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+      .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+      .authorizeHttpRequests(auth -> auth
+        // public endpoints
+        .requestMatchers("/health").permitAll()
+
+        // (optional) if you use swagger
+        .requestMatchers(
+          "/v3/api-docs/**",
+          "/swagger-ui/**",
+          "/swagger-ui.html"
+        ).permitAll()
+
+        // protect your API
+        .requestMatchers("/api/**").authenticated()
+
+        // everything else can be public (or lock it down if you want)
+        .anyRequest().permitAll()
+      )
+      .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
       .build();
   }
 }

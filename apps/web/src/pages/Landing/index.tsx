@@ -688,17 +688,21 @@ function FragranceModal({ fragrance, onClose }: { fragrance: Fragrance; onClose:
         <div className="mt-5 rounded-2xl border border-white/12 bg-white/6 p-4 text-sm text-white/72">
           Demo modal — later this is the full fragrance page (notes clusters, reviews, collection status).
         </div>
-
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <Button className="h-11 rounded-xl px-6">Add to collection</Button>
-          <Button
-            variant="secondary"
-            className="h-11 rounded-xl border border-white/12 bg-white/10 px-6 text-white hover:bg-white/15"
-          >
-            Write a review
-          </Button>
-        </div>
+  <Button className="h-11 rounded-xl px-6">Add to collection</Button>
+
+  <Button
+    variant="secondary"
+    className="h-11 rounded-xl border border-white/12 bg-white/10 px-6 text-white hover:bg-white/15"
+  >
+    Write a review
+  </Button>
+
+</div>
+
+
       </div>
+
     </div>
   );
 }

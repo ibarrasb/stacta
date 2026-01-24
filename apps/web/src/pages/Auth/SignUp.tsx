@@ -1,8 +1,57 @@
 // apps/web/src/pages/Auth/SignUp.tsx
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { authSignUp } from "@/lib/auth";
 
 export default function SignUpPage() {
+  const navigate = useNavigate();
+
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (!displayName.trim()) {
+      setError("Display name is required.");
+      return;
+    }
+    if (!email.trim() || !password) {
+      setError("Email and password are required.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authSignUp(email.trim(), password);
+
+      // NOTE: We’re not storing displayName in Cognito right now.
+      // Save it after login in your backend profile endpoint.
+      navigate(`/confirm?email=${encodeURIComponent(email.trim())}`);
+    } catch (err: any) {
+      const name = err?.name || err?.code;
+      const msg = err?.message || "Sign up failed.";
+
+      if (name === "UsernameExistsException") {
+        setError("An account with that email already exists.");
+      } else if (name === "InvalidPasswordException") {
+        setError("Password doesn’t meet the requirements.");
+      } else if (name === "InvalidParameterException") {
+        setError("Check your email format and try again.");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#050507] text-white">
       <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4">
@@ -29,12 +78,14 @@ export default function SignUpPage() {
 
           {/* Card */}
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={onSubmit}>
               <div>
                 <label className="text-xs font-medium text-white/70">
                   Display name
                 </label>
                 <input
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
                   type="text"
                   autoComplete="nickname"
                   placeholder="Eddie"
@@ -47,6 +98,8 @@ export default function SignUpPage() {
                   Email
                 </label>
                 <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   type="email"
                   autoComplete="email"
                   placeholder="you@example.com"
@@ -59,6 +112,8 @@ export default function SignUpPage() {
                   Password
                 </label>
                 <input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   type="password"
                   autoComplete="new-password"
                   placeholder="At least 8 characters"
@@ -69,7 +124,15 @@ export default function SignUpPage() {
                 </div>
               </div>
 
-              <Button className="h-11 w-full rounded-xl">Create account</Button>
+              {error && (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                  {error}
+                </div>
+              )}
+
+              <Button className="h-11 w-full rounded-xl" disabled={loading}>
+                {loading ? "Creating..." : "Create account"}
+              </Button>
 
               <div className="pt-2 text-center text-sm text-white/60">
                 Already have an account?{" "}
