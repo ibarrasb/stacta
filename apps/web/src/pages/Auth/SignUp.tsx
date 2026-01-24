@@ -53,7 +53,7 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050507] text-white">
+    <div className="min-h-screen text-white">
       <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4">
         <div className="w-full max-w-md">
           {/* Header */}

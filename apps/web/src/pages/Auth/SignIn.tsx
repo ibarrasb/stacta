@@ -1,11 +1,15 @@
 // apps/web/src/pages/Auth/SignIn.tsx
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { authSignIn } from "@/lib/auth";
 
 export default function SignInPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // where to go after login (set by RequireAuth)
+  const from = (location.state as any)?.from || "/home";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,16 +30,18 @@ export default function SignInPage() {
     try {
       await authSignIn(email.trim(), password);
 
-  
-      navigate("/");
+      // go to the route they originally tried to hit
+      navigate(from, { replace: true });
     } catch (err: any) {
-      // Common Cognito errors
       const name = err?.name || err?.code;
       const msg = err?.message || "Sign in failed.";
 
       if (name === "UserNotConfirmedException") {
-        // user exists but hasn’t confirmed email yet
-        navigate(`/confirm?email=${encodeURIComponent(email.trim())}`);
+        // user exists but hasn’t confirmed email yet — keep intended destination
+        navigate(`/confirm?email=${encodeURIComponent(email.trim())}`, {
+          replace: true,
+          state: { from },
+        });
         return;
       }
 
@@ -54,7 +60,7 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050507] text-white">
+    <div className="min-h-screen text-white">
       <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4">
         <div className="w-full max-w-md">
           {/* Header */}
@@ -69,9 +75,7 @@ export default function SignInPage() {
               </div>
             </div>
 
-            <h1 className="mt-6 text-2xl font-semibold tracking-tight">
-              Sign in
-            </h1>
+            <h1 className="mt-6 text-2xl font-semibold tracking-tight">Sign in</h1>
             <p className="mt-2 text-sm text-white/70">
               Pick up where you left off — your collection, reviews, and discoveries are waiting.
             </p>
@@ -81,9 +85,7 @@ export default function SignInPage() {
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <form className="space-y-4" onSubmit={onSubmit}>
               <div>
-                <label className="text-xs font-medium text-white/70">
-                  Email
-                </label>
+                <label className="text-xs font-medium text-white/70">Email</label>
                 <input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -96,9 +98,7 @@ export default function SignInPage() {
 
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-white/70">
-                    Password
-                  </label>
+                  <label className="text-xs font-medium text-white/70">Password</label>
 
                   <Link
                     to="/forgot-password"
@@ -130,19 +130,14 @@ export default function SignInPage() {
 
               <div className="pt-2 text-center text-sm text-white/60">
                 New here?{" "}
-                <Link
-                  to="/sign-up"
-                  className="font-semibold text-white/80 hover:text-white"
-                >
+                <Link to="/sign-up" className="font-semibold text-white/80 hover:text-white">
                   Create an account
                 </Link>
               </div>
             </form>
 
             <div className="mt-6 rounded-2xl border border-white/10 bg-neutral-950/35 p-4">
-              <div className="text-xs font-semibold text-white/70">
-                Coming next
-              </div>
+              <div className="text-xs font-semibold text-white/70">Coming next</div>
               <div className="mt-1 text-xs text-white/60">
                 Social discovery, Top 3 drops, and note art that makes profiles instantly readable.
               </div>
