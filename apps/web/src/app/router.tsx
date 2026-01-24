@@ -1,4 +1,7 @@
+// apps/web/src/app/router.tsx
 import { createBrowserRouter } from "react-router-dom";
+
+import AppLayout from "@/routes/AppLayout";
 
 import LandingPage from "@/pages/Landing";
 import SignInPage from "@/pages/Auth/SignIn";
@@ -14,59 +17,64 @@ import RedirectIfAuthed from "@/routes/RedirectIfAuthed";
 import HomePage from "@/pages/Home";
 
 export const router = createBrowserRouter([
-  { path: "/", element: <LandingPage /> },
+  {
+    element: <AppLayout />,
+    children: [
+      { path: "/", element: <LandingPage /> },
 
-  // auth routes (if already signed in -> bounce to /home)
-  {
-    path: "/sign-in",
-    element: (
-      <RedirectIfAuthed>
-        <SignInPage />
-      </RedirectIfAuthed>
-    ),
-  },
-  {
-    path: "/sign-up",
-    element: (
-      <RedirectIfAuthed>
-        <SignUpPage />
-      </RedirectIfAuthed>
-    ),
-  },
-  {
-    path: "/forgot-password",
-    element: (
-      <RedirectIfAuthed>
-        <ForgotPasswordPage />
-      </RedirectIfAuthed>
-    ),
-  },
-  {
-    path: "/confirm",
-    element: (
-      <RedirectIfAuthed>
-        <ConfirmSignUpPage />
-      </RedirectIfAuthed>
-    ),
-  },
+      // auth routes (if already signed in -> bounce to /home)
+      {
+        path: "/sign-in",
+        element: (
+          <RedirectIfAuthed>
+            <SignInPage />
+          </RedirectIfAuthed>
+        ),
+      },
+      {
+        path: "/sign-up",
+        element: (
+          <RedirectIfAuthed>
+            <SignUpPage />
+          </RedirectIfAuthed>
+        ),
+      },
+      {
+        path: "/forgot-password",
+        element: (
+          <RedirectIfAuthed>
+            <ForgotPasswordPage />
+          </RedirectIfAuthed>
+        ),
+      },
+      {
+        path: "/confirm",
+        element: (
+          <RedirectIfAuthed>
+            <ConfirmSignUpPage />
+          </RedirectIfAuthed>
+        ),
+      },
 
-  // protected
-  {
-    path: "/home",
-    element: (
-      <RequireAuth>
-        <HomePage />
-      </RequireAuth>
-    ),
-  },
-  {
-    path: "/collection",
-    element: (
-      <RequireAuth>
-        <HomePage />
-      </RequireAuth>
-    ),
-  },
+      // protected
+      {
+        path: "/home",
+        element: (
+          <RequireAuth>
+            <HomePage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "/collection",
+        element: (
+          <RequireAuth>
+            <HomePage />
+          </RequireAuth>
+        ),
+      },
 
-  { path: "*", element: <NotFoundPage /> },
+      { path: "*", element: <NotFoundPage /> },
+    ],
+  },
 ]);
