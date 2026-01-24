@@ -1,32 +1,21 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 
-// -----------------------------
-// Types (only what we render)
-// -----------------------------
-type NoteItem = { name: string; imageUrl: string };
-
-type NotesByStage = {
-  Top?: NoteItem[];
-  Middle?: NoteItem[];
-  Base?: NoteItem[];
-};
+type NoteItem = { name: string; imageUrl?: string; fallbackUrls?: string[] };
+type NotesByStage = { Top?: NoteItem[]; Middle?: NoteItem[]; Base?: NoteItem[] };
 
 type Fragrance = {
   name: string;
   brand: string;
   rating?: string;
-  imageUrl: string;
+  imageUrl?: string;
+  imageFallbacks?: string[];
   longevity?: string;
   sillage?: string;
   mainAccords?: string[];
   notes?: NotesByStage;
 };
 
-// -----------------------------
-// Data (only what we need)
-// - Removed: Ex Nihilo + Guerlain
-// -----------------------------
 const FRAGRANCES: Fragrance[] = [
   {
     name: "Pacific Chill",
@@ -36,23 +25,20 @@ const FRAGRANCES: Fragrance[] = [
       "https://d2k6fvhyk5xgx.cloudfront.net/images/pacific-chill-louis-vuitton-unisex.jpg",
     longevity: "Moderate",
     sillage: "Moderate",
-    mainAccords: ["citrus", "fruity", "aromatic", "green", "fresh spicy", "sweet"],
+    mainAccords: ["citrus", "fruity", "green", "fresh spicy", "sweet"],
     notes: {
       Top: [
         { name: "Citron", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Citron.png" },
         { name: "Mint", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Mint.png" },
         { name: "Orange", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Orange.png" },
-        { name: "Lemon", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Lemon.png" },
       ],
       Middle: [
         { name: "Apricot", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Apricot.png" },
         { name: "Basil", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Basil.png" },
-        { name: "May Rose", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/May%20Rose.png" },
       ],
       Base: [
         { name: "Fig", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Fig.png" },
-        { name: "Dates", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Dates.png" },
-        { name: "Ambrette", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Ambrette.png" },
+        { name: "May Rose", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/May%20Rose.png" },
       ],
     },
   },
@@ -63,22 +49,18 @@ const FRAGRANCES: Fragrance[] = [
     imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/images/sospiro-vibrato.jpg",
     longevity: "Long Lasting",
     sillage: "Strong",
-    mainAccords: ["citrus", "powdery", "fresh spicy", "woody", "green", "musky"],
+    mainAccords: ["citrus", "powdery", "fresh spicy", "woody"],
     notes: {
       Top: [
         { name: "Grapefruit", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Grapefruit.png" },
         { name: "Bergamot", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Bergamot.png" },
-        { name: "Jasmine", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Jasmine.png" },
-        { name: "Magnolia", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Magnolia.png" },
       ],
       Middle: [
         { name: "Ginger", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Ginger.png" },
-        { name: "Herbal Notes", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Herbal%20Notes.png" },
-        { name: "Powdery Notes", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Powdery%20Notes.png" },
+        { name: "Jasmine", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Jasmine.png" },
       ],
       Base: [
         { name: "Musk", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Musk.png" },
-        { name: "Cedar", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Cedar.png" },
         { name: "Amber", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Amber.png" },
       ],
     },
@@ -88,19 +70,22 @@ const FRAGRANCES: Fragrance[] = [
     brand: "Christian Dior",
     rating: "4.16",
     imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/images/dior-sauvage.jpg",
+    imageFallbacks: ["https://cdn.fragrancenet.com/images/photos/600x600/283046.jpg"],
     longevity: "Long Lasting",
     sillage: "Strong",
-    mainAccords: ["fresh spicy", "amber", "citrus", "aromatic", "musky", "woody"],
+    mainAccords: ["fresh spicy", "amber", "citrus", "woody"],
     notes: {
       Top: [
-        { name: "Calabrian Bergamot", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Calabrian%20Bergamot.png" },
-        { name: "Pepper", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Pepper.png" },
+        {
+          name: "Calabrian Bergamot",
+          imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Calabrian%20Bergamot.png",
+          fallbackUrls: ["https://d2k6fvhyk5xgx.cloudfront.net/note_images/Bergamot.png"],
+        },
+        { name: "Pink Pepper", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Pink%20Pepper.png" },
       ],
       Middle: [
         { name: "Lavender", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Lavender.png" },
-        { name: "Pink Pepper", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Pink%20Pepper.png" },
         { name: "Patchouli", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Patchouli.png" },
-        { name: "Geranium", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Geranium.png" },
       ],
       Base: [
         { name: "Ambroxan", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Ambroxan.png" },
@@ -109,746 +94,562 @@ const FRAGRANCES: Fragrance[] = [
     },
   },
   {
-    name: "Creed Royal Water",
-    brand: "Creed",
-    rating: "3.95",
-    imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/images/creed-royal-water.jpg",
-    longevity: "Long Lasting",
-    sillage: "Moderate",
-    mainAccords: ["citrus", "fresh spicy", "fresh", "aromatic", "green", "musky"],
-    notes: {
-      Top: [
-        { name: "Citruses", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Citruses.png" },
-        { name: "Bergamot", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Bergamot.png" },
-        { name: "Mandarin Orange", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Mandarin%20Orange.png" },
-      ],
-      Middle: [
-        { name: "Basil", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Basil.png" },
-        { name: "Allspice", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Allspice.png" },
-        { name: "Cumin", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Cumin.png" },
-      ],
-      Base: [
-        { name: "Musk", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Musk.png" },
-        { name: "Cedarwood", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Cedarwood.png" },
-      ],
-    },
-  },
-  {
     name: "Creed Virgin Island Water",
     brand: "Creed",
     rating: "3.79",
-    imageUrl:
-      "https://d2k6fvhyk5xgx.cloudfront.net/images/creed-virgin-island-water.jpg",
+    imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/images/creed-virgin-island-water.jpg",
+    imageFallbacks: ["https://cdn.fragrancenet.com/images/photos/600x600/298370.jpg"],
     longevity: "Moderate",
     sillage: "Moderate",
-    mainAccords: ["citrus", "sweet", "coconut", "gourmand", "vanilla", "rum"],
+    mainAccords: ["citrus", "coconut", "sweet", "rum"],
     notes: {
       Top: [
         { name: "Coconut", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Coconut.png" },
         { name: "Lime", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Lime.png" },
-        { name: "White Bergamot", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/White%20Bergamot.png" },
       ],
       Middle: [
         { name: "Ginger", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Ginger.png" },
         { name: "Hibiscus", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Hibiscus.png" },
-        { name: "Indian Jasmine", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Indian%20Jasmine.png" },
       ],
       Base: [
         { name: "White Rum", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/White%20Rum.png" },
-        { name: "Sugar Cane", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Sugar%20Cane.png" },
-        { name: "Musk", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Musk.png" },
-      ],
-    },
-  },
-  {
-    name: "Xerjoff Erba Gold",
-    brand: "Xerjoff",
-    rating: "4.30",
-    imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/images/xerjoff-erba-gold.jpg",
-    longevity: "Long Lasting",
-    sillage: "Strong",
-    mainAccords: ["citrus", "fruity", "fresh", "warm spicy", "sweet", "musky"],
-    notes: {
-      Top: [
-        { name: "Brazilian Orange", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Brazilian%20Orange.png" },
-        { name: "Sicilian Lemon", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Sicilian%20Lemon.png" },
-        { name: "Calabrian Bergamot", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Calabrian%20Bergamot.png" },
-        { name: "Ginger", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Ginger.png" },
-      ],
-      Middle: [
-        { name: "Melon", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Melon.png" },
-        { name: "Pear", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Pear.png" },
-        { name: "Cinnamon", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Cinnamon.png" },
-      ],
-      Base: [
-        { name: "White Musk", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/White%20Musk.png" },
-        { name: "Amber", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Amber.png" },
-        { name: "Madagascar Vanilla", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Madagascar%20Vanilla.png" },
-      ],
-    },
-  },
-  {
-    name: "Parfums De Marly Percival",
-    brand: "Parfums De Marly",
-    rating: "3.94",
-    imageUrl:
-      "https://d2k6fvhyk5xgx.cloudfront.net/images/parfums-de-marly-percival.jpg",
-    longevity: "Long Lasting",
-    sillage: "Moderate",
-    mainAccords: ["amber", "woody", "aromatic", "citrus", "fresh spicy", "lavender"],
-    notes: {
-      Top: [
-        { name: "Lavender", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Lavender.png" },
-        { name: "Mandarin Orange", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Mandarin%20Orange.png" },
-        { name: "Bergamot", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Bergamot.png" },
-      ],
-      Middle: [
-        { name: "Jasmine", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Jasmine.png" },
-        { name: "Coriander", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Coriander.png" },
-        { name: "Cinnamon", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Cinnamon.png" },
-      ],
-      Base: [
-        { name: "Ambroxan", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Ambroxan.png" },
         { name: "Musk", imageUrl: "https://d2k6fvhyk5xgx.cloudfront.net/note_images/Musk.png" },
       ],
     },
   },
 ];
 
-// -----------------------------
-// Helpers
-// -----------------------------
 function ratingText(r?: string) {
   if (!r) return "—";
   const n = Number(r);
-  if (Number.isNaN(n)) return r;
-  return n.toFixed(2);
+  return Number.isNaN(n) ? r : n.toFixed(2);
 }
 
 function cx(...classes: Array<string | false | undefined | null>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function pill(text: string) {
+function SmartImage({
+  src,
+  fallbacks,
+  alt,
+  className,
+}: {
+  src?: string;
+  fallbacks?: string[];
+  alt: string;
+  className?: string;
+}) {
+  const [i, setI] = useState(0);
+  const urls = useMemo(() => {
+    const list = [src, ...(fallbacks ?? [])].filter(Boolean) as string[];
+    return list.length ? list : [];
+  }, [src, fallbacks]);
+
+  if (!urls.length) {
+    return (
+      <div className={cx("grid place-items-center bg-white/5 text-white/40", className)}>
+        <span className="text-[11px]">no image</span>
+      </div>
+    );
+  }
+
   return (
-    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
-      {text}
+    <img
+      src={urls[i]}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      onError={() => {
+        if (i < urls.length - 1) setI(i + 1);
+      }}
+    />
+  );
+}
+
+function NoteBadge({ note }: { note: NoteItem }) {
+    return (
+      <div className="group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/7 px-3 py-2 hover:bg-white/12">
+        <div className="relative h-8 w-8 overflow-hidden rounded-full bg-white/6 ring-1 ring-white/10">
+          <SmartImage
+            src={note.imageUrl}
+            fallbacks={note.fallbackUrls}
+            alt={note.name}
+            className="h-full w-full object-cover scale-[1.18] transition group-hover:scale-[1.24]"
+          />
+        </div>
+  
+        <div className="text-xs text-white/78">{note.name}</div>
+      </div>
+    );
+  }
+  
+
+/** A distinct background: brighter “ink + aurora” vibe, not generic dark */
+function AuraBackground() {
+  return (
+    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
+      {/* base */}
+      <div className="absolute inset-0 bg-[#07070b]" />
+
+      {/* ink clouds */}
+      <div className="absolute -left-24 -top-28 h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(34,211,238,0.22),transparent_55%)] blur-2xl" />
+      <div className="absolute -right-28 top-20 h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_50%_40%,rgba(244,114,182,0.18),transparent_55%)] blur-2xl" />
+      <div className="absolute left-1/3 top-[55%] h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_40%_40%,rgba(99,102,241,0.20),transparent_58%)] blur-2xl" />
+
+      {/* subtle vignette + lift */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(7,7,11,0.35),rgba(7,7,11,1))]" />
+
+      {/* noise */}
+      <div className="absolute inset-0 opacity-[0.08] [background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22%3E%3Cfilter id=%22n%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22120%22 height=%22120%22 filter=%22url(%23n)%22 opacity=%220.22%22/%3E%3C/svg%3E')]" />
+    </div>
+  );
+}
+
+function GlassCard({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cx(
+        "rounded-3xl border border-white/12 bg-white/6 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur",
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs text-white/75">
+      {children}
     </span>
   );
 }
 
-// -----------------------------
-// Page
-// -----------------------------
-export default function LandingPage() {
-  const [open, setOpen] = useState<Fragrance | null>(null);
+function PeekTabs({
+  tab,
+  setTab,
+}: {
+  tab: "taste" | "review" | "notes";
+  setTab: (t: "taste" | "review" | "notes") => void;
+}) {
+  const btn = (id: typeof tab, label: string) => (
+    <button
+      onClick={() => setTab(id)}
+      className={cx(
+        "rounded-full px-3 py-1.5 text-xs transition",
+        tab === id ? "bg-white/14 text-white" : "text-white/60 hover:bg-white/6 hover:text-white"
+      )}
+    >
+      {label}
+    </button>
+  );
 
   return (
-    <div className="min-h-screen bg-[#050507] text-white">
-      <BackgroundFX />
+    <div className="flex items-center gap-1 rounded-full border border-white/12 bg-white/6 p-1">
+      {btn("taste", "Taste")}
+      {btn("review", "Review")}
+      {btn("notes", "Notes")}
+    </div>
+  );
+}
 
-      <Header />
+export default function LandingPage() {
+  const [tab, setTab] = useState<"taste" | "review" | "notes">("taste");
+  const [open, setOpen] = useState<Fragrance | null>(null);
 
-      <main>
-        <Hero />
+  const noteStrip = useMemo(() => {
+    const notes: NoteItem[] = [];
+    for (const f of FRAGRANCES) {
+      (f.notes?.Top ?? []).forEach((n) => notes.push(n));
+      (f.notes?.Middle ?? []).forEach((n) => notes.push(n));
+      (f.notes?.Base ?? []).forEach((n) => notes.push(n));
+    }
+    const seen = new Set<string>();
+    const unique: NoteItem[] = [];
+    for (const n of notes) {
+      const key = n.imageUrl || n.name;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(n);
+    }
+    return unique.slice(0, 12);
+  }, []);
 
-        <section id="social-proof" className="mx-auto max-w-6xl px-4 py-12">
-          <SectionTitle
-            eyebrow="What you can do"
-            title="Track, rate, and share what you wear."
-            subtitle="A clean way to log your collection, publish honest reviews, and discover scents through people you trust."
-          />
-          <FeatureGrid />
-        </section>
+  return (
+    <div className="min-h-screen text-white">
+      <AuraBackground />
 
-        <section id="feed" className="mx-auto max-w-6xl px-4 py-12">
-          <SectionTitle
-            eyebrow="The loop"
-            title="A feed that actually helps you find your next favorite."
-            subtitle="New reviews, fresh Top 3 drops, and quick “why it works” context — all in one scroll."
-          />
-          <div className="mt-8 grid gap-6 md:grid-cols-[1.05fr_0.95fr]">
-            <FeedMock onOpen={setOpen} />
-            <ProfileMock onOpen={setOpen} />
+      {/* NAV */}
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#07070b]/55 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-xl border border-white/12 bg-white/7">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.25),transparent_55%),radial-gradient(circle_at_70%_80%,rgba(244,114,182,0.22),transparent_55%)]" />
+              <span className="relative text-sm font-semibold">S</span>
+            </div>
+            <div className="leading-tight">
+              <div className="text-sm font-semibold">Stacta</div>
+              <div className="text-xs text-white/60">Taste-first fragrance discovery.</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              className="hidden h-9 rounded-xl border border-white/12 bg-white/10 px-4 text-white hover:bg-white/15 md:inline-flex"
+            >
+              Sign in
+            </Button>
+            <Button className="h-9 rounded-xl px-4">Join</Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-4">
+        {/* HERO */}
+        <section className="pt-10 md:pt-14">
+          <div className="grid gap-8 md:grid-cols-[1.08fr_0.92fr] md:items-center">
+            <div>
+              <div className="flex flex-wrap gap-2">
+                <Pill>Log fast</Pill>
+                <Pill>Structured reviews</Pill>
+                <Pill>Top 3</Pill>
+                <Pill>Note art</Pill>
+              </div>
+
+              <h1 className="mt-5 text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
+                Your taste,{" "}
+                <span className="bg-[linear-gradient(90deg,rgba(34,211,238,1),rgba(244,114,182,1),rgba(99,102,241,1))] bg-clip-text text-transparent">
+                  made visible
+                </span>
+                .
+              </h1>
+
+              <p className="mt-4 max-w-xl text-base text-white/72 md:text-lg">
+                Stacta is a social fragrance log where <span className="text-white">reviews stay consistent</span>,
+                <span className="text-white"> notes are visual</span>, and discovery comes from people whose taste you
+                actually trust.
+              </p>
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <Button className="h-11 rounded-xl px-6">Join the waitlist</Button>
+                <Button
+                  variant="secondary"
+                  className="h-11 rounded-xl border border-white/12 bg-white/10 px-6 text-white hover:bg-white/15"
+                  onClick={() => setTab("review")}
+                >
+                  See a quick peek
+                </Button>
+              </div>
+
+              {/* WHY DIFFERENT (short, clear, not salesy) */}
+              <div className="mt-8 grid gap-3 md:grid-cols-3">
+                <WhyCard
+                  title="Consistency"
+                  desc="Structured ratings so reviews are comparable — not random essays."
+                  accent="from-cyan-400/40"
+                />
+                <WhyCard
+                  title="Visual notes"
+                  desc="Note art makes scents easier to remember and faster to scan."
+                  accent="from-pink-400/40"
+                />
+                <WhyCard
+                  title="Taste graphs"
+                  desc="See patterns in what you like — then discover smarter."
+                  accent="from-indigo-400/40"
+                />
+              </div>
+            </div>
+
+            {/* PEEK PANEL */}
+            <GlassCard className="p-4 md:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">A quick peek</div>
+                  <div className="text-xs text-white/60">Three screenshots worth of clarity.</div>
+                </div>
+                <PeekTabs tab={tab} setTab={setTab} />
+              </div>
+
+              <div className="mt-4">
+                {tab === "taste" && <PeekTaste onOpen={setOpen} />}
+                {tab === "review" && <PeekReview onOpen={setOpen} />}
+                {tab === "notes" && <PeekNotes notes={noteStrip} />}
+              </div>
+            </GlassCard>
           </div>
         </section>
 
-        <section id="notes" className="mx-auto max-w-6xl px-4 py-12">
-          <SectionTitle
-            eyebrow="Notes, visualized"
-            title="Make notes instantly readable."
-            subtitle="Instead of walls of text, show note art in a dedicated section — easier to scan, easier to remember."
-          />
-          <NotesShowcase fragrances={FRAGRANCES} />
+        {/* ABOUT (a little more detail, still tight) */}
+        <section className="py-12">
+          <div className="grid gap-5 md:grid-cols-[1fr_1fr] md:items-start">
+            <GlassCard className="p-6">
+              <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                What we are
+              </div>
+              <div className="mt-2 text-2xl font-semibold md:text-3xl">
+                A fragrance profile that actually explains you.
+              </div>
+              <p className="mt-3 text-sm text-white/72 md:text-base">
+                Most apps stop at “owned” and a star rating. Stacta is built around taste:
+                the scents you wear, how they perform, and how your preferences evolve over time.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Pill>Collection + wishlist</Pill>
+                <Pill>Reviews with structure</Pill>
+                <Pill>Top 3 drops</Pill>
+                <Pill>Share-ready cards</Pill>
+              </div>
+            </GlassCard>
+
+            <GlassCard className="p-6">
+              <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
+                Why different
+              </div>
+              <div className="mt-2 space-y-3">
+                <DiffRow
+                  title="Comparable reviews"
+                  desc="Smell, performance, value — the same rubric across everyone."
+                />
+                <DiffRow
+                  title="Notes that pop"
+                  desc="Note art and clusters make the “why it works” obvious."
+                />
+                <DiffRow
+                  title="Discovery by taste"
+                  desc="Follow people who match your vibe — not generic “most popular.”"
+                />
+              </div>
+            </GlassCard>
+          </div>
         </section>
 
-        <section id="cta" className="mx-auto max-w-6xl px-4 py-14">
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 md:p-10">
+        {/* CTA */}
+        <section className="pb-14">
+          <GlassCard className="p-6 md:p-10">
             <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-2xl font-semibold md:text-3xl">
-                  Notes worth sharing.
+                  Build a profile worth sharing.
                 </div>
-                <div className="mt-2 max-w-xl text-white/70">
-                  Build your collection, leave honest reviews, and discover what’s next —
-                  through people with taste.
+                <div className="mt-2 max-w-xl text-white/72">
+                  If you’re tired of messy notes and meaningless stars, you’re gonna love Stacta.
                 </div>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Button className="h-11 rounded-xl px-6">Join the waitlist</Button>
-                <Button
-                  variant="secondary"
-                  className="h-11 rounded-xl border border-white/10 bg-white/10 px-6 text-white hover:bg-white/15"
-                >
-                  Explore a sample profile
-                </Button>
               </div>
             </div>
-          </div>
+          </GlassCard>
         </section>
       </main>
 
-      <Footer />
+      <footer className="border-t border-white/10">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-10 md:flex-row md:items-center md:justify-between">
+          <div className="text-sm text-white/60">© {new Date().getFullYear()} Stacta</div>
+          <div className="text-sm text-white/60">Taste-first fragrance discovery.</div>
+        </div>
+      </footer>
 
       {open && <FragranceModal fragrance={open} onClose={() => setOpen(null)} />}
     </div>
   );
 }
 
-// -----------------------------
-// UI Sections
-// -----------------------------
-function Header() {
-  return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#050507]/70 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5">
-            <span className="text-sm font-semibold">S</span>
-          </div>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold">Stacta</div>
-            <div className="text-xs text-white/60">Notes worth sharing.</div>
-          </div>
-        </div>
-
-        <div className="hidden items-center gap-2 md:flex">
-          <a href="#feed" className="rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white">
-            Feed
-          </a>
-          <a href="#notes" className="rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white">
-            Notes
-          </a>
-          <a href="#cta" className="rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white">
-            Get in
-          </a>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            className="hidden h-9 rounded-xl border border-white/10 bg-white/10 px-4 text-white hover:bg-white/15 md:inline-flex"
-          >
-            Sign in
-          </Button>
-          <Button className="h-9 rounded-xl px-4">Join</Button>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function Hero() {
-  return (
-    <section className="mx-auto max-w-6xl px-4 pt-10 md:pt-14">
-      <div className="grid gap-8 md:grid-cols-[1.1fr_0.9fr] md:items-center">
-        <div>
-          <div className="flex flex-wrap gap-2">
-            {pill("Add fast")}
-            {pill("Honest reviews")}
-            {pill("Top 3 drops")}
-            {pill("Discovery feed")}
-          </div>
-
-          <h1 className="mt-5 text-4xl font-semibold tracking-tight md:text-5xl">
-            Your collection, your taste —
-            <span className="block text-white/70">made shareable.</span>
-          </h1>
-
-          <p className="mt-4 max-w-xl text-base text-white/70 md:text-lg">
-            Log what you wear. Rate it consistently. Show your Top 3. Build a profile that
-            actually reflects your taste — and discover new scents through people you trust.
-          </p>
-
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <Button className="h-11 rounded-xl px-6">Create your profile</Button>
-            <Button
-              variant="secondary"
-              className="h-11 rounded-xl border border-white/10 bg-white/10 px-6 text-white hover:bg-white/15"
-            >
-              See how it works
-            </Button>
-          </div>
-
-          <div className="mt-7 flex flex-wrap items-center gap-3 text-sm text-white/60">
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-              structured ratings
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-              collection + wishlist
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-              built for sharing
-            </span>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 md:p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold">Trending right now</div>
-              <div className="text-xs text-white/60">Tap a card to preview.</div>
-            </div>
-            <div className="text-xs text-white/60">live demo</div>
-          </div>
-
-          <div className="mt-4 grid gap-3">
-            {FRAGRANCES.slice(0, 4).map((f) => (
-              <button
-                key={`${f.brand}-${f.name}`}
-                onClick={() => {}}
-                className="flex items-center gap-3 rounded-2xl border border-white/10 bg-neutral-950/35 p-3 text-left hover:bg-white/5"
-              >
-                <img
-                  src={f.imageUrl}
-                  alt={`${f.brand} ${f.name}`}
-                  className="h-12 w-12 rounded-xl object-cover"
-                  loading="lazy"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{f.name}</div>
-                  <div className="truncate text-xs text-white/60">{f.brand}</div>
-                  <div className="mt-1 text-xs text-white/60">
-                    {f.longevity ?? "—"} • {f.sillage ?? "—"} • {ratingText(f.rating)}
-                  </div>
-                </div>
-                <div className="text-xs text-white/50">→</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function FeatureGrid() {
-  const items = [
-    {
-      title: "Collection that feels alive",
-      desc: "A grid you actually want to show: collection, wishlist, Top 3, and quick stats.",
-      icon: "📦",
-    },
-    {
-      title: "Honest, consistent reviews",
-      desc: "Structured ratings so reviews mean something — not random paragraphs.",
-      icon: "⭐️",
-    },
-    {
-      title: "Discovery through taste",
-      desc: "Follow people who match your vibe and let the feed do the work.",
-      icon: "🧭",
-    },
-    {
-      title: "Share-ready by default",
-      desc: "Clean cards and pages so sharing feels natural when you want to.",
-      icon: "🪄",
-    },
-  ];
-
-  return (
-    <div className="mt-8 grid gap-4 md:grid-cols-2">
-      {items.map((it) => (
-        <div
-          key={it.title}
-          className="rounded-3xl border border-white/10 bg-white/5 p-6"
-        >
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-neutral-950/40">
-              <span className="text-lg">{it.icon}</span>
-            </div>
-            <div className="text-lg font-semibold">{it.title}</div>
-          </div>
-          <p className="mt-3 text-sm text-white/70">{it.desc}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function FeedMock({ onOpen }: { onOpen: (f: Fragrance) => void }) {
-  const feed = [
-    {
-      user: { handle: "scent.curator", name: "Marco" },
-      action: "reviewed",
-      fragrance: FRAGRANCES.find((f) => f.name === "Sospiro Vibrato")!,
-      blurb: "Electric citrus → powdery warmth. Feels expensive and clean.",
-      ratings: { smell: 5, performance: 5, overall: 5 },
-    },
-    {
-      user: { handle: "notesandnose", name: "Nia" },
-      action: "posted a Top 3",
-      fragrance: FRAGRANCES.find((f) => f.name === "Pacific Chill")!,
-      blurb: "Fresh, bright, and addictive. My go-to when I want easy confidence.",
-      ratings: { smell: 4, performance: 3, overall: 4 },
-    },
-    {
-      user: { handle: "dailywear", name: "Chris" },
-      action: "reviewed",
-      fragrance: FRAGRANCES.find((f) => f.name === "Parfums De Marly Percival")!,
-      blurb: "Clean and versatile. Works in almost any setting.",
-      ratings: { smell: 4, performance: 4, overall: 4 },
-    },
-  ];
-
-  return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 p-4 md:p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-semibold">Feed</div>
-          <div className="text-xs text-white/60">Reviews + Top 3 drops</div>
-        </div>
-        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
-          cursor
-        </span>
-      </div>
-
-      <div className="mt-4 space-y-3">
-        {feed.map((item, idx) => (
-          <div
-            key={idx}
-            className="rounded-2xl border border-white/10 bg-neutral-950/35 p-4"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm">
-                  <span className="font-semibold">{item.user.name}</span>{" "}
-                  <span className="text-white/60">@{item.user.handle}</span>
-                </div>
-                <div className="text-xs text-white/60">
-                  {item.action}{" "}
-                  <button
-                    onClick={() => onOpen(item.fragrance)}
-                    className="font-semibold text-white/80 hover:text-white"
-                  >
-                    {item.fragrance.name}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs text-white/60">
-                <span className="rounded-full bg-white/10 px-2 py-1">
-                  {item.ratings.overall}/5
-                </span>
-              </div>
-            </div>
-
-            <p className="mt-3 text-sm text-white/70">{item.blurb}</p>
-
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/60">
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                smell {item.ratings.smell}/5
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                performance {item.ratings.performance}/5
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                overall {item.ratings.overall}/5
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ProfileMock({ onOpen }: { onOpen: (f: Fragrance) => void }) {
-  const top3 = [
-    FRAGRANCES.find((f) => f.name === "Sospiro Vibrato")!,
-    FRAGRANCES.find((f) => f.name === "Dior Sauvage")!,
-    FRAGRANCES.find((f) => f.name === "Pacific Chill")!,
-  ];
-
-  const collection = [
-    FRAGRANCES.find((f) => f.name === "Parfums De Marly Percival")!,
-    FRAGRANCES.find((f) => f.name === "Creed Virgin Island Water")!,
-    FRAGRANCES.find((f) => f.name === "Xerjoff Erba Gold")!,
-    FRAGRANCES.find((f) => f.name === "Creed Royal Water")!,
-  ];
-
-  return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 p-4 md:p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-semibold">Sample profile</div>
-          <div className="text-xs text-white/60">Top 3 + collection preview</div>
-        </div>
-        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
-          public
-        </span>
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-white/10 bg-neutral-950/35 p-4">
-        <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-2xl border border-white/10 bg-white/5">
-            <span className="text-sm font-semibold">ED</span>
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">Eddie</div>
-            <div className="truncate text-xs text-white/60">@eddie</div>
-          </div>
-          <div className="ml-auto">
-            <Button
-              variant="secondary"
-              className="h-9 rounded-xl border border-white/10 bg-white/10 px-4 text-white hover:bg-white/15"
-            >
-              Follow
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-          <Stat label="collection" value="42" />
-          <Stat label="reviews" value="18" />
-          <Stat label="top 3 drops" value="9" />
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold">Top 3</div>
-          <div className="text-xs text-white/60">tap to preview</div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-3 gap-3">
-          {top3.map((f, idx) => (
-            <Top3Mini key={idx} rank={(idx + 1) as 1 | 2 | 3} f={f} onOpen={() => onOpen(f)} />
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold">Collection</div>
-          <div className="text-xs text-white/60">quick look</div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          {collection.map((f) => (
-            <button
-              key={`${f.brand}-${f.name}`}
-              onClick={() => onOpen(f)}
-              className="flex items-center gap-3 rounded-2xl border border-white/10 bg-neutral-950/35 p-3 text-left hover:bg-white/5"
-            >
-              <img
-                src={f.imageUrl}
-                alt={`${f.brand} ${f.name}`}
-                className="h-10 w-10 rounded-xl object-cover"
-                loading="lazy"
-              />
-              <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold">{f.name}</div>
-                <div className="truncate text-[11px] text-white/60">{f.brand}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NotesShowcase({ fragrances }: { fragrances: Fragrance[] }) {
-  const allNotes = useMemo(() => {
-    const list: Array<{ note: NoteItem; stage: "Top" | "Middle" | "Base" }> = [];
-
-    for (const f of fragrances) {
-      const top = f.notes?.Top ?? [];
-      const mid = f.notes?.Middle ?? [];
-      const base = f.notes?.Base ?? [];
-
-      top.forEach((n) => list.push({ note: n, stage: "Top" }));
-      mid.forEach((n) => list.push({ note: n, stage: "Middle" }));
-      base.forEach((n) => list.push({ note: n, stage: "Base" }));
-    }
-
-    // dedupe by imageUrl so we don’t show repeats
-    const seen = new Set<string>();
-    const unique: Array<{ note: NoteItem; stage: "Top" | "Middle" | "Base" }> = [];
-    for (const item of list) {
-      if (!item.note?.imageUrl) continue;
-      if (seen.has(item.note.imageUrl)) continue;
-      seen.add(item.note.imageUrl);
-      unique.push(item);
-    }
-
-    return unique.slice(0, 28);
-  }, [fragrances]);
-
-  return (
-    <div className="mt-8 grid gap-6 md:grid-cols-[1.1fr_0.9fr]">
-      <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-lg font-semibold">Detailed notes section</div>
-            <div className="mt-1 text-sm text-white/70">
-              This is where the note art belongs — bigger, cleaner, and actually readable.
-            </div>
-          </div>
-          <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
-            visual-first
-          </span>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {allNotes.slice(0, 12).map(({ note, stage }) => (
-            <div
-              key={note.imageUrl}
-              className="group rounded-2xl border border-white/10 bg-neutral-950/35 p-3 hover:bg-white/10"
-            >
-              <div className="flex items-center gap-3">
-                <div className="grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-white/5">
-                  <img
-                    src={note.imageUrl}
-                    alt={note.name}
-                    className="h-9 w-9 object-contain transition group-hover:scale-[1.06]"
-                    loading="lazy"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold">{note.name}</div>
-                  <div className="text-xs text-white/60">{stage} note</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-white/10 bg-neutral-950/35 p-4 text-sm text-white/70">
-          Later: group by Top / Middle / Base, add “dominant themes”, and show note clusters on profiles.
-        </div>
-      </div>
-
-      <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-lg font-semibold">Note palette</div>
-            <div className="mt-1 text-sm text-white/70">
-              A clean grid of note art you can scan in seconds.
-            </div>
-          </div>
-          <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70">
-            fast scan
-          </span>
-        </div>
-
-        <div className="mt-5 grid grid-cols-4 gap-3 sm:grid-cols-5">
-          {allNotes.map(({ note }) => (
-            <div
-              key={note.imageUrl}
-              className="group grid place-items-center rounded-2xl border border-white/10 bg-neutral-950/35 p-3 hover:bg-white/10"
-              title={note.name}
-            >
-              <img
-                src={note.imageUrl}
-                alt={note.name}
-                className="h-10 w-10 object-contain transition group-hover:scale-[1.06]"
-                loading="lazy"
-              />
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4 text-xs text-white/60">
-          The feed + profiles stay clean — notes get their own dedicated moment here.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Top3Mini({ rank, f, onOpen }: { rank: 1 | 2 | 3; f: Fragrance; onOpen: () => void }) {
-  return (
-    <button
-      onClick={onOpen}
-      className="rounded-2xl border border-white/10 bg-neutral-950/35 p-3 text-left hover:bg-white/5"
-    >
-      <div className="flex items-center justify-between">
-        <div className="text-[11px] font-semibold text-white/80">#{rank}</div>
-        <div className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/70">
-          {ratingText(f.rating)}
-        </div>
-      </div>
-
-      <div className="mt-2 flex items-center gap-2">
-        <img
-          src={f.imageUrl}
-          alt={`${f.brand} ${f.name}`}
-          className="h-9 w-9 rounded-lg object-cover"
-          loading="lazy"
-        />
-        <div className="min-w-0">
-          <div className="truncate text-[12px] font-semibold">{f.name}</div>
-          <div className="truncate text-[11px] text-white/60">{f.brand}</div>
-        </div>
-      </div>
-
-      <div className="mt-2 text-[11px] text-white/60">
-        {f.longevity ?? "—"} • {f.sillage ?? "—"}
-      </div>
-    </button>
-  );
-}
-
-function SectionTitle({
-  eyebrow,
+function WhyCard({
   title,
-  subtitle,
+  desc,
+  accent,
 }: {
-  eyebrow: string;
   title: string;
-  subtitle: string;
+  desc: string;
+  accent: string; // tailwind gradient helper piece
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="text-xs font-semibold uppercase tracking-wider text-white/60">
-        {eyebrow}
+    <div className="relative overflow-hidden rounded-2xl border border-white/12 bg-white/6 p-4">
+      <div className={cx("absolute inset-0 opacity-[0.45] bg-gradient-to-br", accent, "to-transparent")} />
+      <div className="relative">
+        <div className="text-sm font-semibold">{title}</div>
+        <div className="mt-1 text-sm text-white/72">{desc}</div>
       </div>
-      <div className="text-2xl font-semibold md:text-3xl">{title}</div>
-      <div className="max-w-2xl text-sm text-white/70 md:text-base">{subtitle}</div>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function DiffRow({ title, desc }: { title: string; desc: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-      <div className="text-lg font-semibold">{value}</div>
+    <div className="rounded-2xl border border-white/12 bg-white/6 p-4">
+      <div className="text-sm font-semibold">{title}</div>
+      <div className="mt-1 text-sm text-white/72">{desc}</div>
+    </div>
+  );
+}
+
+function PeekTaste({ onOpen }: { onOpen: (f: Fragrance) => void }) {
+  const f = FRAGRANCES[1];
+  const tags = ["citrus-forward", "clean", "dressy", "expensive vibe"];
+  return (
+    <div className="rounded-2xl border border-white/12 bg-[#0b0b12]/55 p-4">
+      <div className="text-sm font-semibold">Taste snapshot</div>
+      <div className="mt-3 flex items-center gap-3">
+        <SmartImage
+          src={f.imageUrl}
+          fallbacks={f.imageFallbacks}
+          alt={`${f.brand} ${f.name}`}
+          className="h-12 w-12 rounded-xl object-cover"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold">{f.name}</div>
+          <div className="truncate text-xs text-white/60">{f.brand}</div>
+          <div className="mt-1 text-xs text-white/60">
+            {f.longevity ?? "—"} • {f.sillage ?? "—"} • {ratingText(f.rating)}
+          </div>
+        </div>
+        <Button
+          variant="secondary"
+          className="h-9 rounded-xl border border-white/12 bg-white/10 px-3 text-white hover:bg-white/15"
+          onClick={() => onOpen(f)}
+        >
+          Open
+        </Button>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {tags.map((t) => (
+          <span key={t} className="rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs text-white/75">
+            {t}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-white/12 bg-white/6 p-4">
+        <div className="text-xs font-semibold uppercase tracking-wider text-white/60">Taste graph</div>
+        <div className="mt-2 grid gap-2">
+          <TasteBar label="citrus" value={82} />
+          <TasteBar label="fresh spicy" value={66} />
+          <TasteBar label="powdery" value={54} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TasteBar({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="w-24 text-xs text-white/65">{label}</div>
+      <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,rgba(34,211,238,0.9),rgba(244,114,182,0.9),rgba(99,102,241,0.9))]"
+          style={{ width: `${value}%` }}
+        />
+      </div>
+      <div className="w-10 text-right text-xs text-white/60">{value}%</div>
+    </div>
+  );
+}
+
+function PeekReview({ onOpen }: { onOpen: (f: Fragrance) => void }) {
+  const f = FRAGRANCES[2];
+  return (
+    <div className="rounded-2xl border border-white/12 bg-[#0b0b12]/55 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">Structured review</div>
+          <div className="text-xs text-white/60">Comparable, not vibes-only.</div>
+        </div>
+        <span className="rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs text-white/75">
+          @eddie
+        </span>
+      </div>
+
+      <button
+        onClick={() => onOpen(f)}
+        className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-white/12 bg-white/6 p-3 text-left hover:bg-white/10"
+      >
+        <SmartImage
+          src={f.imageUrl}
+          fallbacks={f.imageFallbacks}
+          alt={`${f.brand} ${f.name}`}
+          className="h-11 w-11 rounded-xl object-cover"
+        />
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">{f.name}</div>
+          <div className="truncate text-xs text-white/60">{f.brand}</div>
+        </div>
+        <div className="ml-auto rounded-full bg-white/10 px-2 py-1 text-xs text-white/70">
+          {ratingText(f.rating)}
+        </div>
+      </button>
+
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <Score label="smell" score="5/5" />
+        <Score label="performance" score="5/5" />
+        <Score label="value" score="3/5" />
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-white/12 bg-white/6 p-4 text-sm text-white/72">
+        Fresh spicy + amber with a bright opening. Reliable, loud, and easy — but the “everywhere” factor is real.
+      </div>
+    </div>
+  );
+}
+
+function Score({ label, score }: { label: string; score: string }) {
+  return (
+    <div className="rounded-2xl border border-white/12 bg-white/6 p-3">
       <div className="text-xs text-white/60">{label}</div>
+      <div className="text-sm font-semibold">{score}</div>
+    </div>
+  );
+}
+
+function PeekNotes({ notes }: { notes: NoteItem[] }) {
+  return (
+    <div className="rounded-2xl border border-white/12 bg-[#0b0b12]/55 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">Note art (clean)</div>
+          <div className="text-xs text-white/60">Lives on the fragrance detail page.</div>
+        </div>
+        <span className="rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs text-white/75">
+          scan fast
+        </span>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {notes.map((n) => (
+          <NoteBadge key={n.imageUrl || n.name} note={n} />
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-white/12 bg-white/6 p-4 text-sm text-white/72">
+        Instead of a messy list of notes, we show visual note badges + clusters so you remember scents faster.
+      </div>
     </div>
   );
 }
 
 function FragranceModal({ fragrance, onClose }: { fragrance: Fragrance; onClose: () => void }) {
-  const accordPills = (fragrance.mainAccords ?? []).slice(0, 6);
+  const accords = (fragrance.mainAccords ?? []).slice(0, 6);
+
   return (
     <div className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4">
-      <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-[#0b0b0f] p-4 md:p-6">
+      <div className="w-full max-w-xl rounded-3xl border border-white/12 bg-[#0b0b12] p-4 md:p-6">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <img
+            <SmartImage
               src={fragrance.imageUrl}
+              fallbacks={fragrance.imageFallbacks}
               alt={`${fragrance.brand} ${fragrance.name}`}
               className="h-14 w-14 rounded-2xl object-cover"
             />
@@ -863,74 +664,36 @@ function FragranceModal({ fragrance, onClose }: { fragrance: Fragrance; onClose:
 
           <button
             onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/70 hover:bg-white/10"
+            className="rounded-xl border border-white/12 bg-white/6 px-3 py-2 text-sm text-white/70 hover:bg-white/10"
           >
             Close
           </button>
         </div>
 
-        {accordPills.length > 0 && (
+        {accords.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
-            {accordPills.map((a) => (
-              <span key={a} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
+            {accords.map((a) => (
+              <span key={a} className="rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs text-white/75">
                 {a}
               </span>
             ))}
           </div>
         )}
 
-        <div className="mt-5 rounded-2xl border border-white/10 bg-neutral-950/35 p-4 text-sm text-white/70">
-          This modal is just a landing demo. Later, this becomes the real fragrance page:
-          reviews, collection status, and full notes breakdown.
+        <div className="mt-5 rounded-2xl border border-white/12 bg-white/6 p-4 text-sm text-white/72">
+          Demo modal — later this is the full fragrance page (notes clusters, reviews, collection status).
         </div>
 
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
           <Button className="h-11 rounded-xl px-6">Add to collection</Button>
           <Button
             variant="secondary"
-            className="h-11 rounded-xl border border-white/10 bg-white/10 px-6 text-white hover:bg-white/15"
+            className="h-11 rounded-xl border border-white/12 bg-white/10 px-6 text-white hover:bg-white/15"
           >
             Write a review
           </Button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Footer() {
-  return (
-    <footer className="border-t border-white/10">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-10 md:flex-row md:items-center md:justify-between">
-        <div className="text-sm text-white/60">
-          © {new Date().getFullYear()} Stacta — Notes worth sharing.
-        </div>
-        <div className="flex gap-2 text-sm text-white/60">
-          <a className="rounded-lg px-3 py-2 hover:bg-white/5 hover:text-white" href="#feed">
-            Feed
-          </a>
-          <a className="rounded-lg px-3 py-2 hover:bg-white/5 hover:text-white" href="#notes">
-            Notes
-          </a>
-          <a className="rounded-lg px-3 py-2 hover:bg-white/5 hover:text-white" href="#cta">
-            Join
-          </a>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-// -----------------------------
-// Background FX (subtle)
-// -----------------------------
-function BackgroundFX() {
-  return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
-      <div className="absolute inset-0 bg-[radial-gradient(1200px_800px_at_20%_10%,rgba(255,255,255,0.08),transparent_55%),radial-gradient(900px_700px_at_80%_20%,rgba(255,255,255,0.06),transparent_55%),radial-gradient(900px_700px_at_50%_90%,rgba(255,255,255,0.04),transparent_55%)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(5,5,7,0.6),rgba(5,5,7,1))]" />
-      <div className="absolute -left-24 top-20 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
-      <div className="absolute -right-24 top-44 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
     </div>
   );
 }
