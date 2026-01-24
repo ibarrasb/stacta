@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 
 type NoteItem = { name: string; imageUrl?: string; fallbackUrls?: string[] };
 type NotesByStage = { Top?: NoteItem[]; Middle?: NoteItem[]; Base?: NoteItem[] };
@@ -302,13 +303,17 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              className="hidden h-9 rounded-xl border border-white/12 bg-white/10 px-4 text-white hover:bg-white/15 md:inline-flex"
-            >
-              Sign in
-            </Button>
-            <Button className="h-9 rounded-xl px-4">Join</Button>
+                <Button
+                asChild
+                variant="secondary"
+                className="hidden h-9 rounded-xl border border-white/12 bg-white/10 px-4 text-white hover:bg-white/15 md:inline-flex"
+                >
+                    <Link to="/sign-in">Sign in</Link>
+                </Button>
+
+                <Button asChild className="h-9 rounded-xl px-4">
+                    <Link to="/sign-up">Join</Link>
+                </Button>
           </div>
         </div>
       </header>
