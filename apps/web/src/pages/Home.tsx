@@ -2,10 +2,21 @@
 import { Button } from "@/components/ui/button";
 import { authSignOut } from "@/lib/auth";
 
+const ONBOARDED_KEY = "stacta:onboardedSub";
+
 export default function HomePage() {
   async function onSignOut() {
-    await authSignOut();
-    window.location.href = "/sign-in";
+    try {
+      // Clear any app-specific onboarding marker so a different user on the same browser
+      // doesn't incorrectly skip onboarding.
+      localStorage.removeItem(ONBOARDED_KEY);
+
+      // Sign out of Cognito/Amplify
+      await authSignOut();
+    } finally {
+      // Hard redirect to reset in-memory auth state + route guards
+      window.location.href = "/sign-in";
+    }
   }
 
   return (

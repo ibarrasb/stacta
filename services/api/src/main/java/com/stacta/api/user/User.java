@@ -1,0 +1,56 @@
+package com.stacta.api.user;
+
+import java.time.Instant;
+import java.util.UUID;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "users")
+public class User {
+
+  @Id
+  @GeneratedValue
+  private UUID id;
+
+  @Column(name = "cognito_sub", nullable = false, unique = true)
+  private String cognitoSub;
+
+  @Column(name = "username", unique = true)
+  private String username;
+
+  @Column(name = "display_name", nullable = false)
+  private String displayName;
+
+  @Column(name = "bio")
+  private String bio;
+
+  @Column(name = "avatar_url")
+  private String avatarUrl;
+
+  @Column(name = "created_at", nullable = false, updatable = false)
+  private Instant createdAt = Instant.now();
+
+  @Column(name = "updated_at", nullable = false)
+  private Instant updatedAt = Instant.now();
+
+  @PreUpdate
+  void preUpdate() {
+    this.updatedAt = Instant.now();
+  }
+
+  // getters/setters
+  public UUID getId() { return id; }
+  public String getCognitoSub() { return cognitoSub; }
+  public void setCognitoSub(String cognitoSub) { this.cognitoSub = cognitoSub; }
+  public String getUsername() { return username; }
+  public void setUsername(String username) { this.username = username; }
+  public String getDisplayName() { return displayName; }
+  public void setDisplayName(String displayName) { this.displayName = displayName; }
+  public String getBio() { return bio; }
+  public void setBio(String bio) { this.bio = bio; }
+  public String getAvatarUrl() { return avatarUrl; }
+  public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+  public Instant getCreatedAt() { return createdAt; }
+  public Instant getUpdatedAt() { return updatedAt; }
+}

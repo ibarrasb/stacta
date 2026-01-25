@@ -4,6 +4,12 @@ import { RouterProvider } from "react-router-dom";
 import { router } from "@/app/router";
 import { configureAmplify } from "./lib/amplify";
 import "./index.css";
+import { fetchAuthSession } from "aws-amplify/auth";
+
+(window as any).getAccessToken = async () => {
+  const s = await fetchAuthSession();
+  return s.tokens?.accessToken?.toString();
+};
 
 configureAmplify();
 

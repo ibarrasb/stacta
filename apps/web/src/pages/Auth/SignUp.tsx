@@ -4,6 +4,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { authSignUp } from "@/lib/auth";
 
+const PENDING_DISPLAY_NAME_KEY = "stacta:pendingDisplayName";
+
 export default function SignUpPage() {
   const navigate = useNavigate();
 
@@ -31,8 +33,10 @@ export default function SignUpPage() {
     try {
       await authSignUp(email.trim(), password);
 
-      // NOTE: We’re not storing displayName in Cognito right now.
-      // Save it after login in your backend profile endpoint.
+      // ✅ Save displayName so we can POST it to our backend after the user signs in
+      localStorage.setItem(PENDING_DISPLAY_NAME_KEY, displayName.trim());
+
+      // user confirms email next
       navigate(`/confirm?email=${encodeURIComponent(email.trim())}`);
     } catch (err: any) {
       const name = err?.name || err?.code;
@@ -71,9 +75,7 @@ export default function SignUpPage() {
               </div>
             </div>
 
-            <h1 className="mt-6 text-2xl font-semibold tracking-tight">
-              Sign up
-            </h1>
+            <h1 className="mt-6 text-2xl font-semibold tracking-tight">Sign up</h1>
             <p className="mt-2 text-sm text-white/70">
               Build a shareable collection, drop honest reviews, and discover through taste.
             </p>
@@ -83,9 +85,7 @@ export default function SignUpPage() {
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <form className="space-y-4" onSubmit={onSubmit}>
               <div>
-                <label className="text-xs font-medium text-white/70">
-                  Display name
-                </label>
+                <label className="text-xs font-medium text-white/70">Display name</label>
                 <input
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
@@ -97,9 +97,7 @@ export default function SignUpPage() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-white/70">
-                  Email
-                </label>
+                <label className="text-xs font-medium text-white/70">Email</label>
                 <input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -111,9 +109,7 @@ export default function SignUpPage() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-white/70">
-                  Password
-                </label>
+                <label className="text-xs font-medium text-white/70">Password</label>
                 <input
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -139,26 +135,20 @@ export default function SignUpPage() {
 
               <div className="pt-2 text-center text-sm text-white/60">
                 Already have an account?{" "}
-                <Link
-                  to="/sign-in"
-                  className="font-semibold text-white/80 hover:text-white"
-                >
+                <Link to="/sign-in" className="font-semibold text-white/80 hover:text-white">
                   Sign in
                 </Link>
               </div>
             </form>
 
             <div className="mt-6 rounded-2xl border border-white/10 bg-neutral-950/35 p-4">
-              <div className="text-xs font-semibold text-white/70">
-                Why Stacta?
-              </div>
+              <div className="text-xs font-semibold text-white/70">Why Stacta?</div>
               <div className="mt-1 text-xs text-white/60">
                 Profiles are built for sharing: collection + wishlist, consistent ratings, and visual notes that make taste instantly legible.
               </div>
             </div>
           </div>
 
-          {/* Footer */}
           <div className="mt-6 text-center text-xs text-white/50">
             By creating an account, you agree to our Terms and Privacy Policy.
           </div>

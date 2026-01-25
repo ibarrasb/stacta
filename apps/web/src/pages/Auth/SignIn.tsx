@@ -3,6 +3,19 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { authSignIn } from "@/lib/auth";
+import { authedFetch } from "@/lib/api/client";
+
+const PENDING_DISPLAY_NAME_KEY = "stacta:pendingDisplayName";
+const ONBOARDED_KEY = "stacta:onboardedSub";
+
+function friendlyFetchError(err: unknown) {
+  // Fetch/network failures are usually TypeError with "Failed to fetch"
+  const msg = (err as any)?.message || "";
+  if (typeof msg === "string" && msg.toLowerCase().includes("failed to fetch")) {
+    return "Couldn’t reach the API. Check VITE_API_URL (should be http://localhost:8081) and that your backend is running.";
+  }
+  return msg || "Network error calling API.";
+}
 
 export default function SignInPage() {
   const navigate = useNavigate();
@@ -17,6 +30,53 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  async function ensureOnboarded() {
+    let meRes: Response;
+
+    try {
+      meRes = await authedFetch("/api/v1/me");
+    } catch (e) {
+      throw new Error(friendlyFetchError(e));
+    }
+
+    // ✅ already onboarded
+    if (meRes.ok) {
+      const me = await meRes.json();
+      if (me?.cognitoSub) localStorage.setItem(ONBOARDED_KEY, me.cognitoSub);
+      return;
+    }
+
+    // ✅ expected on first login: 404 { error: "NOT_ONBOARDED" }
+    if (meRes.status === 404) {
+      const displayName = (localStorage.getItem(PENDING_DISPLAY_NAME_KEY) || "").trim();
+      const body = { displayName: displayName || "New user" };
+
+      let obRes: Response;
+      try {
+        obRes = await authedFetch("/api/v1/onboarding", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        throw new Error(friendlyFetchError(e));
+      }
+
+      if (!obRes.ok) {
+        const text = await obRes.text().catch(() => "");
+        throw new Error(`POST /api/v1/onboarding failed (${obRes.status}) ${text}`);
+      }
+
+      const created = await obRes.json();
+      if (created?.cognitoSub) localStorage.setItem(ONBOARDED_KEY, created.cognitoSub);
+      localStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
+      return;
+    }
+
+    // ❌ anything else is a real problem
+    const text = await meRes.text().catch(() => "");
+    throw new Error(`GET /api/v1/me failed (${meRes.status}) ${text}`);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -30,6 +90,9 @@ export default function SignInPage() {
     try {
       await authSignIn(email.trim(), password);
 
+      // ✅ run onboarding right after sign-in
+      await ensureOnboarded();
+
       // go to the route they originally tried to hit
       navigate(from, { replace: true });
     } catch (err: any) {
@@ -37,7 +100,6 @@ export default function SignInPage() {
       const msg = err?.message || "Sign in failed.";
 
       if (name === "UserNotConfirmedException") {
-        // user exists but hasn’t confirmed email yet — keep intended destination
         navigate(`/confirm?email=${encodeURIComponent(email.trim())}`, {
           replace: true,
           state: { from },
@@ -52,7 +114,8 @@ export default function SignInPage() {
       } else if (name === "TooManyRequestsException") {
         setError("Too many attempts. Try again in a bit.");
       } else {
-        setError(msg);
+        // ✅ show onboarding / API errors if they happen
+        setError(err?.message || msg);
       }
     } finally {
       setLoading(false);
@@ -65,18 +128,19 @@ export default function SignInPage() {
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="flex items-center gap-3">
-              <img
-                src="/stacta.png"
-                alt="Stacta"
-                className="h-12 w-12 select-none object-contain"
-                draggable={false}
-              />
+            <img
+              src="/stacta.png"
+              alt="Stacta"
+              className="h-12 w-12 select-none object-contain"
+              draggable={false}
+            />
 
-              <div className="leading-tight">
-                <div className="text-sm font-semibold">Stacta</div>
-                <div className="text-xs text-white/60">Welcome back</div>
-              </div>
+            <div className="leading-tight">
+              <div className="text-sm font-semibold">Stacta</div>
+              <div className="text-xs text-white/60">Welcome back</div>
             </div>
+          </div>
+
           {/* Card */}
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <form className="space-y-4" onSubmit={onSubmit}>
