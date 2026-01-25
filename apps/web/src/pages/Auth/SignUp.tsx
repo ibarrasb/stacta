@@ -59,9 +59,12 @@ export default function SignUpPage() {
           {/* Header */}
           <div className="mb-6">
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/5">
-                <span className="text-sm font-semibold">S</span>
-              </div>
+              <img
+                src="/stacta.png"
+                alt="Stacta"
+                className="h-12 w-12 select-none object-contain"
+                draggable={false}
+              />
               <div className="leading-tight">
                 <div className="text-sm font-semibold">Stacta</div>
                 <div className="text-xs text-white/60">Create your profile</div>

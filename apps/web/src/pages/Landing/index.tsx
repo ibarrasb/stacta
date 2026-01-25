@@ -291,11 +291,13 @@ export default function LandingPage() {
       {/* NAV */}
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#07070b]/55 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-xl border border-white/12 bg-white/7">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.25),transparent_55%),radial-gradient(circle_at_70%_80%,rgba(244,114,182,0.22),transparent_55%)]" />
-              <span className="relative text-sm font-semibold">S</span>
-            </div>
+        <div className="flex items-center gap-3">
+              <img
+                src="/stacta.png"
+                alt="Stacta"
+                className="h-15 w-15 select-none object-contain"
+                draggable={false}
+              />
             <div className="leading-tight">
               <div className="text-sm font-semibold">Stacta</div>
               <div className="text-xs text-white/60">Taste-first fragrance discovery.</div>

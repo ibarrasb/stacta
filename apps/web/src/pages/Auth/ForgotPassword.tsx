@@ -9,6 +9,10 @@ import { authForgotPassword, authConfirmForgotPassword } from "@/lib/auth";
 const RESEND_COOLDOWN_SECONDS = 180;
 const RESEND_STORAGE_KEY = "stacta:forgotPassword:resendAvailableAt";
 
+//Don’t reveal whether an account exists (prevents account enumeration)
+const GENERIC_SENT_MSG =
+  "If an account exists for that email, you’ll receive a reset code shortly.";
+
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState<"request" | "confirm">("request");
 
@@ -93,18 +97,23 @@ export default function ForgotPasswordPage() {
     try {
       await authForgotPassword(email.trim());
       setStep("confirm");
-      setMessage("We sent a reset code to your email.");
-      startCooldown(); // start immediately after request
+      setMessage(GENERIC_SENT_MSG);
+      startCooldown();
     } catch (err: any) {
       const name = err?.name || err?.code;
-      const msg = err?.message || "Could not send reset code.";
 
+      //treat user-not-found like success (don’t reveal existence)
       if (name === "UserNotFoundException") {
-        setError("No account found with that email.");
-      } else if (name === "LimitExceededException" || name === "TooManyRequestsException") {
+        setStep("confirm");
+        setMessage(GENERIC_SENT_MSG);
+        startCooldown();
+      } else if (
+        name === "LimitExceededException" ||
+        name === "TooManyRequestsException"
+      ) {
         setError("Too many requests. Try again in a bit.");
       } else {
-        setError(msg);
+        setError("Could not send reset code. Try again.");
       }
     } finally {
       setLoading(false);
@@ -125,18 +134,22 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     try {
       await authForgotPassword(email.trim());
-      setMessage("New code sent. Check your email.");
+      setMessage(GENERIC_SENT_MSG);
       startCooldown();
     } catch (err: any) {
       const name = err?.name || err?.code;
-      const msg = err?.message || "Could not resend code.";
 
+      //treat user-not-found like success (don’t reveal existence)
       if (name === "UserNotFoundException") {
-        setError("No account found with that email.");
-      } else if (name === "LimitExceededException" || name === "TooManyRequestsException") {
+        setMessage(GENERIC_SENT_MSG);
+        startCooldown();
+      } else if (
+        name === "LimitExceededException" ||
+        name === "TooManyRequestsException"
+      ) {
         setError("Too many requests. Try again in a bit.");
       } else {
-        setError(msg);
+        setError("Could not resend code. Try again.");
       }
     } finally {
       setLoading(false);
@@ -186,13 +199,14 @@ export default function ForgotPasswordPage() {
               <h1 className="text-2xl font-semibold">Reset your password</h1>
               <p className="mt-2 text-sm text-white/70">
                 {step === "request"
-                  ? "Enter your email and we’ll send you a reset code."
+                  ? "Enter your email. If an account exists, we’ll send a reset code."
                   : "Enter the code from your email and set a new password."}
               </p>
 
               {step === "confirm" && (
                 <p className="mt-2 text-xs text-white/50">
-                  Codes may take a few minutes to arrive. If you don’t see it, check spam/promotions.
+                  Codes may take a few minutes to arrive. If you don’t see it,
+                  check spam/promotions.
                 </p>
               )}
             </div>
