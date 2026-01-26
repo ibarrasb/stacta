@@ -1,6 +1,6 @@
 // apps/web/src/pages/Auth/ForgotPassword.tsx
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,11 +9,13 @@ import { authForgotPassword, authConfirmForgotPassword } from "@/lib/auth";
 const RESEND_COOLDOWN_SECONDS = 180;
 const RESEND_STORAGE_KEY = "stacta:forgotPassword:resendAvailableAt";
 
-//Don’t reveal whether an account exists (prevents account enumeration)
+// Don’t reveal whether an account exists (prevents account enumeration)
 const GENERIC_SENT_MSG =
   "If an account exists for that email, you’ll receive a reset code shortly.";
 
 export default function ForgotPasswordPage() {
+  const navigate = useNavigate();
+
   const [step, setStep] = useState<"request" | "confirm">("request");
 
   const [email, setEmail] = useState("");
@@ -102,7 +104,15 @@ export default function ForgotPasswordPage() {
     } catch (err: any) {
       const name = err?.name || err?.code;
 
-      //treat user-not-found like success (don’t reveal existence)
+      //Unconfirmed users should confirm first
+      if (name === "UserNotConfirmedException") {
+        navigate(`/confirm?email=${encodeURIComponent(email.trim())}`, {
+          replace: true,
+        });
+        return;
+      }
+
+      //Treat user-not-found like success (don’t reveal existence)
       if (name === "UserNotFoundException") {
         setStep("confirm");
         setMessage(GENERIC_SENT_MSG);
@@ -139,7 +149,15 @@ export default function ForgotPasswordPage() {
     } catch (err: any) {
       const name = err?.name || err?.code;
 
-      //treat user-not-found like success (don’t reveal existence)
+      //Unconfirmed users should confirm first
+      if (name === "UserNotConfirmedException") {
+        navigate(`/confirm?email=${encodeURIComponent(email.trim())}`, {
+          replace: true,
+        });
+        return;
+      }
+
+      //Treat user-not-found like success (don’t reveal existence)
       if (name === "UserNotFoundException") {
         setMessage(GENERIC_SENT_MSG);
         startCooldown();
@@ -170,7 +188,7 @@ export default function ForgotPasswordPage() {
     try {
       await authConfirmForgotPassword(email.trim(), code.trim(), newPassword);
       setMessage("Password updated. You can sign in now.");
-      clearAvailableAtMs(); // optional: clear cooldown once complete
+      clearAvailableAtMs(); //clear cooldown once complete
       setCooldown(0);
     } catch (err: any) {
       const name = err?.name || err?.code;
@@ -182,6 +200,11 @@ export default function ForgotPasswordPage() {
         setError("That code expired. Send a new one.");
       } else if (name === "InvalidPasswordException") {
         setError("Password doesn’t meet the requirements.");
+      } else if (name === "UserNotConfirmedException") {
+        //If Cognito still considers them unconfirmed, push to confirm flow
+        navigate(`/confirm?email=${encodeURIComponent(email.trim())}`, {
+          replace: true,
+        });
       } else {
         setError(msg);
       }
@@ -295,7 +318,9 @@ export default function ForgotPasswordPage() {
                     disabled={loading || cooldown > 0}
                     className="text-sm text-white/70 hover:text-white hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
+                    {cooldown > 0
+                      ? `Resend code in ${cooldown}s`
+                      : "Resend code"}
                   </button>
                 </div>
               </form>

@@ -1,3 +1,4 @@
+// apps/web/src/pages/Auth/ConfirmSignUp.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,11 @@ export default function ConfirmSignUpPage() {
     setCooldown(RESEND_COOLDOWN_SECONDS);
   }
 
+  // Keep state in sync if the query param changes
+  useEffect(() => {
+    setEmail(emailFromQuery);
+  }, [emailFromQuery]);
+
   // On page enter: immediately apply cooldown (persisted) if we have an email
   useEffect(() => {
     if (!emailFromQuery) return;
@@ -93,7 +99,7 @@ export default function ConfirmSignUpPage() {
     setMessage(null);
 
     if (!email.trim() || !code.trim()) {
-      setError("Enter your email and the confirmation code.");
+      setError("Enter the confirmation code.");
       return;
     }
 
@@ -123,7 +129,7 @@ export default function ConfirmSignUpPage() {
     setMessage(null);
 
     if (!email.trim()) {
-      setError("Enter your email first.");
+      setError("Missing email. Please sign up again.");
       return;
     }
 
@@ -178,15 +184,27 @@ export default function ConfirmSignUpPage() {
             )}
 
             <form className="space-y-4" onSubmit={onSubmit}>
+              {/* ✅ Read-only email (copyable) */}
               <div>
                 <label className="text-xs font-medium text-white/70">Email</label>
+
                 <input
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  type="email"
-                  placeholder="you@example.com"
-                  className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-neutral-950/40 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-white/20"
+                  readOnly
+                  aria-readonly="true"
+                  className="mt-2 h-11 w-full cursor-not-allowed rounded-xl border border-white/10 bg-neutral-950/30 px-3 text-sm text-white/70 outline-none ring-0"
                 />
+
+                <div className="mt-2 text-xs text-white/50">
+                  Confirming <span className="text-white/70">{email}</span>. Need a different email?{" "}
+                  <Link
+                    to="/sign-up"
+                    className="text-white/70 hover:text-white hover:underline"
+                  >
+                    Sign up again
+                  </Link>
+                  .
+                </div>
               </div>
 
               <div>
@@ -199,7 +217,7 @@ export default function ConfirmSignUpPage() {
                 />
               </div>
 
-              <Button className="h-11 w-full rounded-xl" disabled={loading}>
+              <Button className="h-11 w-full rounded-xl" disabled={loading || !email.trim()}>
                 {loading ? "Confirming..." : "Confirm account"}
               </Button>
 
@@ -207,7 +225,7 @@ export default function ConfirmSignUpPage() {
                 <button
                   type="button"
                   onClick={onResend}
-                  disabled={resending || loading || cooldown > 0}
+                  disabled={resending || loading || cooldown > 0 || !email.trim()}
                   className="text-sm text-white/70 hover:text-white hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {cooldown > 0
