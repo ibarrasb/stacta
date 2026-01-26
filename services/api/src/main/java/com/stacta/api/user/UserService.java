@@ -5,6 +5,7 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.stacta.api.config.ApiException;
 import com.stacta.api.user.dto.MeResponse;
 import com.stacta.api.user.dto.OnboardingRequest;
 
@@ -28,13 +29,37 @@ public class UserService {
     u.setCognitoSub(sub);
     u.setDisplayName(req.displayName().trim());
 
-    // username is optional for now
+    // ✅ username optional, but if provided enforce normalization + validation + uniqueness
     if (req.username() != null && !req.username().trim().isEmpty()) {
-      u.setUsername(req.username().trim());
+      String username = normalizeUsername(req.username());
+
+      // 3–20 chars, starts with letter/number, only letters/numbers/underscore
+      if (!username.matches("^[a-z0-9][a-z0-9_]{2,19}$")) {
+        throw new ApiException("INVALID_USERNAME");
+      }
+
+      // If another user already has this username (case-insensitive), reject
+      repo.findByUsernameIgnoreCase(username).ifPresent(existing -> {
+        if (!existing.getCognitoSub().equals(sub)) {
+          throw new ApiException("USERNAME_TAKEN");
+        }
+      });
+
+      u.setUsername(username);
     }
 
     User saved = repo.save(u);
     return toMe(saved);
+  }
+
+  private String normalizeUsername(String raw) {
+    String cleaned = raw
+      .trim()
+      .toLowerCase()
+      .replaceAll("^@+", "")
+      .replaceAll("[^a-z0-9_]", "");
+
+    return cleaned.length() > 20 ? cleaned.substring(0, 20) : cleaned;
   }
 
   private MeResponse toMe(User u) {

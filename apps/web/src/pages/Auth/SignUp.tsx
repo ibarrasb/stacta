@@ -1,11 +1,13 @@
 // apps/web/src/pages/Auth/SignUp.tsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { authSignUp } from "@/lib/auth";
 
 const PENDING_DISPLAY_NAME_KEY = "stacta:pendingDisplayName";
 const PENDING_USERNAME_KEY = "stacta:pendingUsername";
+
+const API_BASE = (import.meta as any).env?.VITE_API_URL || "http://localhost:8081";
 
 // normalize username: lowercase, keep letters/numbers/underscore, max 20
 function normalizeUsername(raw: string) {
@@ -22,6 +24,8 @@ function isValidUsername(u: string) {
   return /^[a-z0-9][a-z0-9_]{2,19}$/.test(u);
 }
 
+type UsernameStatus = "idle" | "invalid" | "checking" | "available" | "taken" | "error";
+
 export default function SignUpPage() {
   const navigate = useNavigate();
 
@@ -34,6 +38,103 @@ export default function SignUpPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // username availability UX
+  const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>("idle");
+  const [usernameHelp, setUsernameHelp] = useState<string>("3–20 chars. Letters, numbers, underscore.");
+
+  const abortRef = useRef<AbortController | null>(null);
+  const debounceRef = useRef<number | null>(null);
+
+  // ✅ avoid stale pending values from previous attempts
+  useEffect(() => {
+    localStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
+    localStorage.removeItem(PENDING_USERNAME_KEY);
+  }, []);
+
+  // ✅ debounce + check availability when username changes
+  useEffect(() => {
+    // clear any pending debounce
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+
+    // cancel in-flight request
+    if (abortRef.current) abortRef.current.abort();
+
+    // If user hasn't typed anything
+    if (!usernameRaw.trim()) {
+      setUsernameStatus("idle");
+      setUsernameHelp("3–20 chars. Letters, numbers, underscore.");
+      return;
+    }
+
+    // If after normalization it's empty or invalid, don't call backend
+    if (!username || !isValidUsername(username)) {
+      setUsernameStatus("invalid");
+      setUsernameHelp(username ? "Username is invalid. Use 3–20 chars: letters/numbers/underscore." : "Username is required.");
+      return;
+    }
+
+    // Debounce the API call
+    setUsernameStatus("checking");
+    setUsernameHelp("Checking availability…");
+
+    debounceRef.current = window.setTimeout(async () => {
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+
+      try {
+        const url = `${API_BASE}/api/v1/usernames/available?username=${encodeURIComponent(username)}`;
+        const res = await fetch(url, { signal: ctrl.signal });
+
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+
+          // expected shape: { available: boolean, normalized: string, reason: "AVAILABLE"|"TAKEN" }
+          const available = Boolean(data?.available);
+          const normalized = typeof data?.normalized === "string" ? data.normalized : username;
+
+          if (available) {
+            setUsernameStatus("available");
+            setUsernameHelp(`✅ @${normalized} is available`);
+          } else {
+            setUsernameStatus("taken");
+            setUsernameHelp(`❌ @${normalized} is taken`);
+          }
+          return;
+        }
+
+        // 400 likely means invalid (server-side validation)
+        if (res.status === 400) {
+          setUsernameStatus("invalid");
+          setUsernameHelp("Username is invalid. Use 3–20 chars: letters/numbers/underscore.");
+          return;
+        }
+
+        const text = await res.text().catch(() => "");
+        setUsernameStatus("error");
+        setUsernameHelp(`Couldn’t check username (${res.status}). ${text ? "Try again." : ""}`);
+      } catch (e: any) {
+        // ignore aborts (user kept typing)
+        if (e?.name === "AbortError") return;
+
+        setUsernameStatus("error");
+        setUsernameHelp("Couldn’t check username. Is the backend running and VITE_API_URL correct?");
+      }
+    }, 450);
+
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, [usernameRaw, username]);
+
+  const canSubmitUsername =
+    username &&
+    isValidUsername(username) &&
+    usernameStatus !== "checking" &&
+    usernameStatus !== "taken" &&
+    usernameStatus !== "invalid" &&
+    usernameStatus !== "error";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -58,6 +159,14 @@ export default function SignUpPage() {
       return;
     }
 
+    // block submit if we know it's taken/invalid or still checking
+    if (!canSubmitUsername) {
+      if (usernameStatus === "checking") setError("Hold up — still checking that username.");
+      else if (usernameStatus === "taken") setError("That username is taken. Pick another one.");
+      else setError("Fix your username before continuing.");
+      return;
+    }
+
     if (!em || !password) {
       setError("Email and password are required.");
       return;
@@ -77,7 +186,9 @@ export default function SignUpPage() {
       const msg = err?.message || "Sign up failed.";
 
       if (name === "UsernameExistsException") {
-        setError("An account with that email already exists.");
+        // This can mean: account exists OR they signed up but never confirmed
+        setError("That email already started signup. Try signing in, or confirm your account from the code email.");
+        // optional: navigate(`/confirm?email=${encodeURIComponent(em)}`);
       } else if (name === "InvalidPasswordException") {
         setError("Password doesn’t meet the requirements.");
       } else if (name === "InvalidParameterException") {
@@ -145,10 +256,12 @@ export default function SignUpPage() {
                     className="h-11 w-full rounded-xl border border-white/10 bg-neutral-950/40 pl-7 pr-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-white/20"
                   />
                 </div>
+
                 <div className="mt-2 text-xs text-white/50">
-                  {username
-                    ? `Will be saved as @${username}`
-                    : "3–20 chars. Letters, numbers, underscore."}
+                  {usernameHelp}
+                  {usernameStatus === "checking" && (
+                    <span className="ml-2 inline-block animate-pulse text-white/40">…</span>
+                  )}
                 </div>
               </div>
 
@@ -185,7 +298,7 @@ export default function SignUpPage() {
                 </div>
               )}
 
-              <Button className="h-11 w-full rounded-xl" disabled={loading}>
+              <Button className="h-11 w-full rounded-xl" disabled={loading || !canSubmitUsername}>
                 {loading ? "Creating..." : "Create account"}
               </Button>
 

@@ -6,10 +6,10 @@ import { authSignIn } from "@/lib/auth";
 import { authedFetch } from "@/lib/api/client";
 
 const PENDING_DISPLAY_NAME_KEY = "stacta:pendingDisplayName";
+const PENDING_USERNAME_KEY = "stacta:pendingUsername";
 const ONBOARDED_KEY = "stacta:onboardedSub";
 
 function friendlyFetchError(err: unknown) {
-  // Fetch/network failures are usually TypeError with "Failed to fetch"
   const msg = (err as any)?.message || "";
   if (typeof msg === "string" && msg.toLowerCase().includes("failed to fetch")) {
     return "Couldn’t reach the API. Check VITE_API_URL (should be http://localhost:8081) and that your backend is running.";
@@ -43,13 +43,22 @@ export default function SignInPage() {
     if (meRes.ok) {
       const me = await meRes.json();
       if (me?.cognitoSub) localStorage.setItem(ONBOARDED_KEY, me.cognitoSub);
+
+      // If we ever had pending onboarding fields, clear them
+      localStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
+      localStorage.removeItem(PENDING_USERNAME_KEY);
       return;
     }
 
     // ✅ expected on first login: 404 { error: "NOT_ONBOARDED" }
     if (meRes.status === 404) {
       const displayName = (localStorage.getItem(PENDING_DISPLAY_NAME_KEY) || "").trim();
-      const body = { displayName: displayName || "New user" };
+      const username = (localStorage.getItem(PENDING_USERNAME_KEY) || "").trim();
+
+      const body: { displayName: string; username?: string } = {
+        displayName: displayName || "New user",
+        ...(username ? { username } : {}),
+      };
 
       let obRes: Response;
       try {
@@ -68,7 +77,10 @@ export default function SignInPage() {
 
       const created = await obRes.json();
       if (created?.cognitoSub) localStorage.setItem(ONBOARDED_KEY, created.cognitoSub);
+
+      // ✅ onboarding completed, clear pending values
       localStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
+      localStorage.removeItem(PENDING_USERNAME_KEY);
       return;
     }
 

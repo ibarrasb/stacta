@@ -27,6 +27,8 @@ public class SecurityConfig {
           "/swagger-ui.html"
         ).permitAll()
 
+        .requestMatchers("/api/v1/usernames/available").permitAll()
+
         // protect your API
         .requestMatchers("/api/**").authenticated()
 
