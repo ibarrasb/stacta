@@ -1,15 +1,34 @@
 // apps/web/src/pages/Auth/SignUp.tsx
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { authSignUp } from "@/lib/auth";
 
 const PENDING_DISPLAY_NAME_KEY = "stacta:pendingDisplayName";
+const PENDING_USERNAME_KEY = "stacta:pendingUsername";
+
+// normalize username: lowercase, keep letters/numbers/underscore, max 20
+function normalizeUsername(raw: string) {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/[^a-z0-9_]/g, "")
+    .slice(0, 20);
+}
+
+function isValidUsername(u: string) {
+  // 3-20 chars, starts with letter/number, only letters/numbers/underscore
+  return /^[a-z0-9][a-z0-9_]{2,19}$/.test(u);
+}
 
 export default function SignUpPage() {
   const navigate = useNavigate();
 
   const [displayName, setDisplayName] = useState("");
+  const [usernameRaw, setUsernameRaw] = useState("");
+  const username = useMemo(() => normalizeUsername(usernameRaw), [usernameRaw]);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -20,24 +39,39 @@ export default function SignUpPage() {
     e.preventDefault();
     setError(null);
 
-    if (!displayName.trim()) {
+    const dn = displayName.trim();
+    const un = normalizeUsername(usernameRaw);
+    const em = email.trim();
+
+    if (!dn) {
       setError("Display name is required.");
       return;
     }
-    if (!email.trim() || !password) {
+
+    if (!un) {
+      setError("Username is required.");
+      return;
+    }
+
+    if (!isValidUsername(un)) {
+      setError("Username must be 3–20 characters and use only letters, numbers, or underscores.");
+      return;
+    }
+
+    if (!em || !password) {
       setError("Email and password are required.");
       return;
     }
 
     setLoading(true);
     try {
-      await authSignUp(email.trim(), password);
+      await authSignUp(em, password);
 
-      // ✅ Save displayName so we can POST it to our backend after the user signs in
-      localStorage.setItem(PENDING_DISPLAY_NAME_KEY, displayName.trim());
+      // Save for backend onboarding after login
+      localStorage.setItem(PENDING_DISPLAY_NAME_KEY, dn);
+      localStorage.setItem(PENDING_USERNAME_KEY, un);
 
-      // user confirms email next
-      navigate(`/confirm?email=${encodeURIComponent(email.trim())}`);
+      navigate(`/confirm?email=${encodeURIComponent(em)}`);
     } catch (err: any) {
       const name = err?.name || err?.code;
       const msg = err?.message || "Sign up failed.";
@@ -94,6 +128,28 @@ export default function SignUpPage() {
                   placeholder="Eddie"
                   className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-neutral-950/40 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-white/20"
                 />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-white/70">Username</label>
+                <div className="relative mt-2">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-white/40">
+                    @
+                  </span>
+                  <input
+                    value={usernameRaw}
+                    onChange={(e) => setUsernameRaw(e.target.value)}
+                    type="text"
+                    autoComplete="username"
+                    placeholder="eddie"
+                    className="h-11 w-full rounded-xl border border-white/10 bg-neutral-950/40 pl-7 pr-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-white/20"
+                  />
+                </div>
+                <div className="mt-2 text-xs text-white/50">
+                  {username
+                    ? `Will be saved as @${username}`
+                    : "3–20 chars. Letters, numbers, underscore."}
+                </div>
               </div>
 
               <div>

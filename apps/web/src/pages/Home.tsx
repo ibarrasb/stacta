@@ -1,20 +1,18 @@
 // apps/web/src/pages/Home.tsx
 import { Button } from "@/components/ui/button";
 import { authSignOut } from "@/lib/auth";
+import { useNavigate } from "react-router-dom";
 
 const ONBOARDED_KEY = "stacta:onboardedSub";
 
 export default function HomePage() {
+  const navigate = useNavigate();
+
   async function onSignOut() {
     try {
-      // Clear any app-specific onboarding marker so a different user on the same browser
-      // doesn't incorrectly skip onboarding.
       localStorage.removeItem(ONBOARDED_KEY);
-
-      // Sign out of Cognito/Amplify
       await authSignOut();
     } finally {
-      // Hard redirect to reset in-memory auth state + route guards
       window.location.href = "/sign-in";
     }
   }
@@ -29,7 +27,18 @@ export default function HomePage() {
           </p>
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <Button className="h-11 rounded-xl px-6">Go to search</Button>
+            <Button className="h-11 rounded-xl px-6" onClick={() => navigate("/search")}>
+              Go to search
+            </Button>
+
+            <Button
+              variant="secondary"
+              className="h-11 rounded-xl border border-white/12 bg-white/10 px-6 text-white hover:bg-white/15"
+              onClick={() => navigate("/profile")}
+            >
+              My profile
+            </Button>
+
             <Button
               variant="secondary"
               className="h-11 rounded-xl border border-white/12 bg-white/10 px-6 text-white hover:bg-white/15"
