@@ -4,12 +4,11 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stacta.api.fragrance.dto.FragranceSearchResult;
 import com.stacta.api.integrations.fragella.FragellaClient;
 import com.stacta.api.integrations.fragella.FragellaDtos;
-
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class FragellaSearchService {
@@ -31,17 +30,15 @@ public class FragellaSearchService {
     this.objectMapper = objectMapper;
   }
 
-  //persist=false path uses this (calls cacheService.searchJson THROUGH proxy)
   public List<FragranceSearchResult> searchCached(String q, int limit) {
     try {
-      String json = cacheService.searchJson(q, limit); //cached
+      String json = cacheService.searchJson(q, limit);
       return objectMapper.readValue(json, new TypeReference<List<FragranceSearchResult>>() {});
     } catch (Exception e) {
       throw new RuntimeException("Failed to parse cached Fragella search JSON", e);
     }
   }
 
-  // persist=true path uses these
   public List<FragellaDtos.Fragrance> searchRaw(String q, int limit) {
     return client.search(q, limit);
   }

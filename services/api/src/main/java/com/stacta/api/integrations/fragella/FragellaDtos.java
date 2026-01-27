@@ -1,52 +1,56 @@
 package com.stacta.api.integrations.fragella;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 import java.util.List;
+import java.util.Map;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class FragellaDtos {
 
-  @JsonIgnoreProperties(ignoreUnknown = true)
   public record Fragrance(
     @JsonProperty("Name") String name,
     @JsonProperty("Brand") String brand,
     @JsonProperty("Year") String year,
+    @JsonProperty("rating") String rating,
+
     @JsonProperty("Image URL") String imageUrl,
     @JsonProperty("Gender") String gender,
-
-    // docs show this is lowercase "rating"
-    @JsonProperty("rating") String rating,
 
     @JsonProperty("Price") String price,
     @JsonProperty("Price Value") String priceValue,
 
-    @JsonProperty("General Notes") List<String> generalNotes,
+    @JsonProperty("OilType") String oilType,
+    @JsonProperty("Longevity") String longevity,
+    @JsonProperty("Sillage") String sillage,
+    @JsonProperty("Confidence") String confidence,
+    @JsonProperty("Popularity") String popularity,
+
     @JsonProperty("Main Accords") List<String> mainAccords,
+    @JsonProperty("General Notes") List<String> generalNotes,
+
+    @JsonProperty("Main Accords Percentage") Map<String, String> mainAccordsPercentage,
+    @JsonProperty("Season Ranking") List<Ranking> seasonRanking,
+    @JsonProperty("Occasion Ranking") List<Ranking> occasionRanking,
 
     @JsonProperty("Notes") Notes notes,
 
-    @JsonProperty("Image Fallbacks") List<String> imageFallbacks,
-    @JsonProperty("Purchase URL") String purchaseUrl
+    @JsonProperty("Purchase URL") String purchaseUrl,
+    @JsonProperty("Image Fallbacks") List<String> imageFallbacks
   ) {}
 
-  @JsonIgnoreProperties(ignoreUnknown = true)
   public record Notes(
     @JsonProperty("Top") List<Note> top,
     @JsonProperty("Middle") List<Note> middle,
     @JsonProperty("Base") List<Note> base
   ) {}
 
-  @JsonIgnoreProperties(ignoreUnknown = true)
   public record Note(
-    // Fragella note objects use lowercase keys per docs
-    @JsonProperty("name")
-    @JsonAlias({"Name"}) // keep this just in case / backward compat
-    String name,
+    @JsonProperty("name") String name,
+    @JsonProperty("imageUrl") String imageUrl
+  ) {}
 
-    @JsonProperty("imageUrl")
-    @JsonAlias({"Image URL", "image_url"})
-    String imageUrl
+  public record Ranking(
+    @JsonProperty("name") String name,
+    @JsonProperty("score") Double score
   ) {}
 }

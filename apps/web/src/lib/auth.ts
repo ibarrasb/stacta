@@ -104,9 +104,10 @@ export async function authConfirmForgotPassword(
 
 // TOKEN for calling your backend
 export async function getAccessToken(): Promise<string | null> {
-  const session = await fetchAuthSession();
+  const session = await fetchAuthSession({ forceRefresh: true });
   return session.tokens?.accessToken?.toString() ?? null;
 }
+
 
 // Cognito user id (sub)
 export async function getUserSub(): Promise<string | null> {

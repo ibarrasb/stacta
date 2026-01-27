@@ -5,11 +5,10 @@ import java.util.List;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stacta.api.fragrance.dto.FragranceSearchResult;
 import com.stacta.api.integrations.fragella.FragellaClient;
 import com.stacta.api.integrations.fragella.FragellaDtos;
-
-import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class FragellaSearchCacheService {
@@ -24,7 +23,6 @@ public class FragellaSearchCacheService {
     this.objectMapper = objectMapper;
   }
 
-  // MUST be called from another bean (NOT from inside this class)
   @Cacheable(
     cacheNames = "fragellaSearchV2",
     key = "'v2:' + (#q == null ? '' : #q.trim().toLowerCase()) + '|' + #limit"

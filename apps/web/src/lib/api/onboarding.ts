@@ -3,7 +3,7 @@ import type { MeResponse } from "@/lib/api/types";
 
 export type CreateOnboardingRequest = {
   displayName: string;
-  username?: string; // optional on backend
+  username?: string;
 };
 
 export const createOnboarding = (body: CreateOnboardingRequest) =>

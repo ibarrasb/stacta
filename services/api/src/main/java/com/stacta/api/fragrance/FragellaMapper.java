@@ -1,36 +1,90 @@
 package com.stacta.api.fragrance;
 
-import com.stacta.api.fragrance.dto.FragranceSearchResult;
-import com.stacta.api.integrations.fragella.FragellaDtos;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.List;
 
-import tools.jackson.databind.ObjectMapper;
+import org.springframework.stereotype.Component;
+
+import com.stacta.api.fragrance.dto.FragranceSearchResult;
+import com.stacta.api.fragrance.dto.NoteDto;
+import com.stacta.api.fragrance.dto.NotesDto;
+import com.stacta.api.fragrance.dto.RankingDto;
+import com.stacta.api.integrations.fragella.FragellaDtos;
 
 @Component
 public class FragellaMapper {
 
-  private final ObjectMapper objectMapper;
-
-  public FragellaMapper(ObjectMapper objectMapper) {
-    this.objectMapper = objectMapper;
-  }
-
   public List<FragranceSearchResult> mapRaw(List<FragellaDtos.Fragrance> raw) {
     if (raw == null || raw.isEmpty()) return List.of();
 
-    try {
-      List<FragranceSearchResult> out = new ArrayList<>(raw.size());
-      for (var item : raw) {
-        // convert raw DTO -> JSON tree -> FragranceSearchResult (no fragile manual mapping)
-        var node = objectMapper.valueToTree(item);
-        out.add(objectMapper.treeToValue(node, FragranceSearchResult.class));
-      }
-      return out;
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to map FragellaDtos.Fragrance -> FragranceSearchResult", e);
+    List<FragranceSearchResult> out = new ArrayList<>(raw.size());
+
+    for (var f : raw) {
+      NotesDto notesDto = mapNotes(f.notes());
+
+      out.add(new FragranceSearchResult(
+        "fragella",
+        null,
+
+        f.name(),
+        f.brand(),
+        f.year(),
+        f.imageUrl(),
+        f.gender(),
+
+        f.rating(),
+        f.price(),
+        f.priceValue(),
+
+        f.oilType(),
+        f.longevity(),
+        f.sillage(),
+        f.confidence(),
+        f.popularity(),
+
+        f.mainAccordsPercentage(),
+        mapRanking(f.seasonRanking()),
+        mapRanking(f.occasionRanking()),
+
+        f.mainAccords(),
+        f.generalNotes(),
+        notesDto,
+        f.purchaseUrl()
+      ));
     }
+
+    return out;
+  }
+
+  private NotesDto mapNotes(FragellaDtos.Notes notes) {
+    if (notes == null) return null;
+
+    return new NotesDto(
+      mapNoteList(notes.top()),
+      mapNoteList(notes.middle()),
+      mapNoteList(notes.base())
+    );
+  }
+
+  private List<NoteDto> mapNoteList(List<FragellaDtos.Note> list) {
+    if (list == null || list.isEmpty()) return List.of();
+
+    List<NoteDto> out = new ArrayList<>(list.size());
+    for (var n : list) {
+      if (n == null) continue;
+      out.add(new NoteDto(n.name(), n.imageUrl()));
+    }
+    return out;
+  }
+
+  private List<RankingDto> mapRanking(List<FragellaDtos.Ranking> list) {
+    if (list == null || list.isEmpty()) return List.of();
+
+    List<RankingDto> out = new ArrayList<>(list.size());
+    for (var r : list) {
+      if (r == null) continue;
+      out.add(new RankingDto(r.name(), r.score()));
+    }
+    return out;
   }
 }

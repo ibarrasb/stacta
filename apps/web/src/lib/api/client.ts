@@ -14,32 +14,28 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * authedFetch returns parsed JSON (typed) by default.
- * If the endpoint returns no content (204) or empty body, it returns undefined.
- *
- * Usage:
- *   const me = await authedFetch<MeResponse>("/api/v1/me");
- *   await authedFetch<void>("/api/v1/logout", { method: "POST" });
- */
 export async function authedFetch<T = unknown>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
-  const session = await fetchAuthSession();
+  // force refresh so you don’t randomly 401 after idle
+  const session = await fetchAuthSession({ forceRefresh: true });
   const token = session.tokens?.accessToken?.toString();
 
-  const headers = new Headers(init.headers);
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  // if no token, fail fast (RequireAuth should redirect)
+  if (!token) {
+    throw new ApiError("Not authenticated", 401, null);
+  }
 
-  // Only set JSON content-type when sending a body and caller didn't override it
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
 
-  // Parse response safely (json if possible, otherwise text). Tolerate empty bodies.
   const contentType = res.headers.get("content-type") ?? "";
   const isJson = contentType.includes("application/json");
 
