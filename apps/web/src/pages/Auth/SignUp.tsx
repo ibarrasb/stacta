@@ -197,7 +197,7 @@ export default function SignUpPage() {
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="mb-6">
-            <div className="flex items-center gap-3">
+            <div className="mt-4 flex items-center gap-3">
               <img
                 src="/stacta.png"
                 alt="Stacta"
@@ -210,7 +210,7 @@ export default function SignUpPage() {
               </div>
             </div>
 
-            <h1 className="mt-6 text-2xl font-semibold tracking-tight">Sign up</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Sign up</h1>
             <p className="mt-2 text-sm text-white/70">
               Build a shareable collection, drop honest reviews, and discover through taste.
             </p>
@@ -226,7 +226,7 @@ export default function SignUpPage() {
                   onChange={(e) => setDisplayName(e.target.value)}
                   type="text"
                   autoComplete="nickname"
-                  placeholder="Eddie"
+                  placeholder="John Doe"
                   className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-neutral-950/40 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-white/20"
                 />
               </div>
@@ -242,7 +242,7 @@ export default function SignUpPage() {
                     onChange={(e) => setUsernameRaw(e.target.value)}
                     type="text"
                     autoComplete="username"
-                    placeholder="eddie"
+                    placeholder="stacta"
                     className="h-11 w-full rounded-xl border border-white/10 bg-neutral-950/40 pl-7 pr-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-white/20"
                   />
                 </div>
@@ -309,7 +309,7 @@ export default function SignUpPage() {
             </div>
           </div>
 
-          <div className="mt-6 text-center text-xs text-white/50">
+          <div className="mt-1 text-center text-xs text-white/50">
             By creating an account, you agree to our Terms and Privacy Policy.
           </div>
         </div>
