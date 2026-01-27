@@ -24,7 +24,7 @@ public class FragellaSearchCacheService {
     this.objectMapper = objectMapper;
   }
 
-  // ✅ MUST be called from another bean (NOT from inside this class)
+  // MUST be called from another bean (NOT from inside this class)
   @Cacheable(
     cacheNames = "fragellaSearchV2",
     key = "'v2:' + (#q == null ? '' : #q.trim().toLowerCase()) + '|' + #limit"

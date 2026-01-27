@@ -184,7 +184,7 @@ export default function ConfirmSignUpPage() {
             )}
 
             <form className="space-y-4" onSubmit={onSubmit}>
-              {/* ✅ Read-only email (copyable) */}
+              {/*  Read-only email (copyable) */}
               <div>
                 <label className="text-xs font-medium text-white/70">Email</label>
 

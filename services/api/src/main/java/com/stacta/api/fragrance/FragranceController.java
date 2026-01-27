@@ -35,12 +35,12 @@ public class FragranceController {
     if (limit < 1) limit = 1;
     if (limit > 20) limit = 20;
 
-    // ✅ cached mode (persist=false)
+    //cached mode (persist=false)
     if (!persist) {
       return searchService.searchCached(q, limit);
     }
 
-    // ✅ ingest mode (persist=true): NO cache
+    //ingest mode (persist=true): NO cache
     List<FragellaDtos.Fragrance> raw = searchService.searchRaw(q, limit);
 
     if (!raw.isEmpty()) {

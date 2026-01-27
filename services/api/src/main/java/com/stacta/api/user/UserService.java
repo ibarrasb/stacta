@@ -29,7 +29,7 @@ public class UserService {
     u.setCognitoSub(sub);
     u.setDisplayName(req.displayName().trim());
 
-    // ✅ username optional, but if provided enforce normalization + validation + uniqueness
+    //username optional, but if provided enforce normalization + validation + uniqueness
     if (req.username() != null && !req.username().trim().isEmpty()) {
       String username = normalizeUsername(req.username());
 

@@ -31,10 +31,10 @@ public class FragellaSearchService {
     this.objectMapper = objectMapper;
   }
 
-  // ✅ persist=false path uses this (calls cacheService.searchJson THROUGH proxy)
+  //persist=false path uses this (calls cacheService.searchJson THROUGH proxy)
   public List<FragranceSearchResult> searchCached(String q, int limit) {
     try {
-      String json = cacheService.searchJson(q, limit); // ✅ cached
+      String json = cacheService.searchJson(q, limit); //cached
       return objectMapper.readValue(json, new TypeReference<List<FragranceSearchResult>>() {});
     } catch (Exception e) {
       throw new RuntimeException("Failed to parse cached Fragella search JSON", e);

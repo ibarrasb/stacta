@@ -23,9 +23,9 @@ public class CacheConfig {
 
     var defaults = RedisCacheConfiguration.defaultCacheConfig()
       .serializeKeysWith(stringPair)
-      .serializeValuesWith(stringPair)          // ✅ values stored as plain strings
+      .serializeValuesWith(stringPair)          //values stored as plain strings
       .entryTtl(Duration.ofMinutes(10))
-      .prefixCacheNameWith("stacta4:");         // ✅ bump prefix to avoid old junk
+      .prefixCacheNameWith("stacta4:");         //bump prefix to avoid old junk
 
     var fragellaSearch = defaults.entryTtl(Duration.ofMinutes(30));
 

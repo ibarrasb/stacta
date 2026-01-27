@@ -15,14 +15,14 @@ public class CorsConfig {
   public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration config = new CorsConfiguration();
 
-    // ✅ Dev origin (add prod later)
+    //Dev origin (add prod later)
     config.setAllowedOrigins(List.of(
       "http://localhost:5173"
     ));
 
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
-    // ✅ IMPORTANT: allow Authorization header for Bearer token
+    //IMPORTANT: allow Authorization header for Bearer token
     config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
 
     // Optional: only needed if you read headers on client

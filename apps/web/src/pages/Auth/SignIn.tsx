@@ -39,7 +39,7 @@ export default function SignInPage() {
       throw new Error(friendlyFetchError(e));
     }
 
-    // ✅ already onboarded
+    //already onboarded
     if (meRes.ok) {
       const me = await meRes.json();
       if (me?.cognitoSub) localStorage.setItem(ONBOARDED_KEY, me.cognitoSub);
@@ -50,7 +50,7 @@ export default function SignInPage() {
       return;
     }
 
-    // ✅ expected on first login: 404 { error: "NOT_ONBOARDED" }
+    // expected on first login: 404 { error: "NOT_ONBOARDED" }
     if (meRes.status === 404) {
       const displayName = (localStorage.getItem(PENDING_DISPLAY_NAME_KEY) || "").trim();
       const username = (localStorage.getItem(PENDING_USERNAME_KEY) || "").trim();
@@ -78,13 +78,13 @@ export default function SignInPage() {
       const created = await obRes.json();
       if (created?.cognitoSub) localStorage.setItem(ONBOARDED_KEY, created.cognitoSub);
 
-      // ✅ onboarding completed, clear pending values
+      // onboarding completed, clear pending values
       localStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
       localStorage.removeItem(PENDING_USERNAME_KEY);
       return;
     }
 
-    // ❌ anything else is a real problem
+    // anything else is a real problem
     const text = await meRes.text().catch(() => "");
     throw new Error(`GET /api/v1/me failed (${meRes.status}) ${text}`);
   }
@@ -102,7 +102,7 @@ export default function SignInPage() {
     try {
       await authSignIn(email.trim(), password);
 
-      // ✅ run onboarding right after sign-in
+      //run onboarding right after sign-in
       await ensureOnboarded();
 
       // go to the route they originally tried to hit
@@ -126,7 +126,7 @@ export default function SignInPage() {
       } else if (name === "TooManyRequestsException") {
         setError("Too many attempts. Try again in a bit.");
       } else {
-        // ✅ show onboarding / API errors if they happen
+        // show onboarding / API errors if they happen
         setError(err?.message || msg);
       }
     } finally {

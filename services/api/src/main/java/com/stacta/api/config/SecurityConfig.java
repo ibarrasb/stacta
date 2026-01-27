@@ -14,7 +14,7 @@ public class SecurityConfig {
   public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
     return http
       .csrf(csrf -> csrf.disable())
-      .cors(Customizer.withDefaults()) // ✅ ADD THIS
+      .cors(Customizer.withDefaults())
       .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
       .authorizeHttpRequests(auth -> auth
         // public endpoints
@@ -32,7 +32,7 @@ public class SecurityConfig {
         // protect your API
         .requestMatchers("/api/**").authenticated()
 
-        // ✅ recommend: lock down everything else by default
+        //lock down everything else by default
         .anyRequest().authenticated()
       )
       .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))

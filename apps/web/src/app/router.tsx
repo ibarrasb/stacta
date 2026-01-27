@@ -75,8 +75,8 @@ export const router = createBrowserRouter([
           </RequireAuth>
         ),
       },
-      { 
-        path: "/search", 
+      {
+        path: "/search",
         element: (
         <RequireAuth>
           <SearchPage />
@@ -90,7 +90,7 @@ export const router = createBrowserRouter([
             <ProfilePage />
           </RequireAuth>
         ),
-      },      
+      },
 
 
       { path: "*", element: <NotFoundPage /> },

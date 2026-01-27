@@ -46,13 +46,13 @@ export default function SignUpPage() {
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<number | null>(null);
 
-  // ✅ avoid stale pending values from previous attempts
+  // avoid stale pending values from previous attempts
   useEffect(() => {
     localStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
     localStorage.removeItem(PENDING_USERNAME_KEY);
   }, []);
 
-  // ✅ debounce + check availability when username changes
+  // debounce + check availability when username changes
   useEffect(() => {
     // clear any pending debounce
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
