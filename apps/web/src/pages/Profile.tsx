@@ -1,19 +1,8 @@
-// apps/web/src/pages/Profile.tsx
 import { useEffect, useState } from "react";
-import { authedFetch } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-
-type MeResponse = {
-  id: string;
-  cognitoSub: string;
-  username: string | null;
-  displayName: string | null;
-  bio: string | null;
-  avatarUrl: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
+import { getMe } from "@/lib/api/me";
+import type { MeResponse } from "@/lib/api/types";
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -29,13 +18,7 @@ export default function ProfilePage() {
       setError(null);
 
       try {
-        const res = await authedFetch("/api/v1/me");
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          throw new Error(`GET /api/v1/me failed (${res.status}) ${text}`);
-        }
-
-        const data = (await res.json()) as MeResponse;
+        const data = await getMe();
         if (!cancelled) setMe(data);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Failed to load profile.");
@@ -81,7 +64,7 @@ export default function ProfilePage() {
             <div className="space-y-4">
               <div>
                 <div className="text-xs font-medium text-white/60">Display name</div>
-                <div className="mt-1 text-sm">{me.displayName ?? "—"}</div>
+                <div className="mt-1 text-sm">{me.displayName || "—"}</div>
               </div>
 
               <div>

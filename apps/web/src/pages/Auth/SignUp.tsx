@@ -3,11 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { authSignUp } from "@/lib/auth";
+import { UsernameCheckError, checkUsernameAvailable } from "@/lib/api/usernames";
 
 const PENDING_DISPLAY_NAME_KEY = "stacta:pendingDisplayName";
 const PENDING_USERNAME_KEY = "stacta:pendingUsername";
-
-const API_BASE = (import.meta as any).env?.VITE_API_URL || "http://localhost:8081";
 
 // normalize username: lowercase, keep letters/numbers/underscore, max 20
 function normalizeUsername(raw: string) {
@@ -70,7 +69,11 @@ export default function SignUpPage() {
     // If after normalization it's empty or invalid, don't call backend
     if (!username || !isValidUsername(username)) {
       setUsernameStatus("invalid");
-      setUsernameHelp(username ? "Username is invalid. Use 3–20 chars: letters/numbers/underscore." : "Username is required.");
+      setUsernameHelp(
+        username
+          ? "Username is invalid. Use 3–20 chars: letters/numbers/underscore."
+          : "Username is required."
+      );
       return;
     }
 
@@ -83,39 +86,24 @@ export default function SignUpPage() {
       abortRef.current = ctrl;
 
       try {
-        const url = `${API_BASE}/api/v1/usernames/available?username=${encodeURIComponent(username)}`;
-        const res = await fetch(url, { signal: ctrl.signal });
+        const data = await checkUsernameAvailable(username, ctrl.signal);
 
-        if (res.ok) {
-          const data = await res.json().catch(() => null);
-
-          // expected shape: { available: boolean, normalized: string, reason: "AVAILABLE"|"TAKEN" }
-          const available = Boolean(data?.available);
-          const normalized = typeof data?.normalized === "string" ? data.normalized : username;
-
-          if (available) {
-            setUsernameStatus("available");
-            setUsernameHelp(`✅ @${normalized} is available`);
-          } else {
-            setUsernameStatus("taken");
-            setUsernameHelp(`❌ @${normalized} is taken`);
-          }
-          return;
+        if (data.available) {
+          setUsernameStatus("available");
+          setUsernameHelp(`✅ @${data.normalized} is available`);
+        } else {
+          setUsernameStatus("taken");
+          setUsernameHelp(`❌ @${data.normalized} is taken`);
         }
+      } catch (e: any) {
+        // ignore aborts (user kept typing)
+        if (e?.name === "AbortError") return;
 
-        // 400 likely means invalid (server-side validation)
-        if (res.status === 400) {
+        if (e instanceof UsernameCheckError && e.status === 400) {
           setUsernameStatus("invalid");
           setUsernameHelp("Username is invalid. Use 3–20 chars: letters/numbers/underscore.");
           return;
         }
-
-        const text = await res.text().catch(() => "");
-        setUsernameStatus("error");
-        setUsernameHelp(`Couldn’t check username (${res.status}). ${text ? "Try again." : ""}`);
-      } catch (e: any) {
-        // ignore aborts (user kept typing)
-        if (e?.name === "AbortError") return;
 
         setUsernameStatus("error");
         setUsernameHelp("Couldn’t check username. Is the backend running and VITE_API_URL correct?");
@@ -187,7 +175,9 @@ export default function SignUpPage() {
 
       if (name === "UsernameExistsException") {
         // This can mean: account exists OR they signed up but never confirmed
-        setError("That email already started signup. Try signing in, or confirm your account from the code email.");
+        setError(
+          "That email already started signup. Try signing in, or confirm your account from the code email."
+        );
         // optional: navigate(`/confirm?email=${encodeURIComponent(em)}`);
       } else if (name === "InvalidPasswordException") {
         setError("Password doesn’t meet the requirements.");
@@ -313,7 +303,8 @@ export default function SignUpPage() {
             <div className="mt-6 rounded-2xl border border-white/10 bg-neutral-950/35 p-4">
               <div className="text-xs font-semibold text-white/70">Why Stacta?</div>
               <div className="mt-1 text-xs text-white/60">
-                Profiles are built for sharing: collection + wishlist, consistent ratings, and visual notes that make taste instantly legible.
+                Profiles are built for sharing: collection + wishlist, consistent ratings, and visual
+                notes that make taste instantly legible.
               </div>
             </div>
           </div>

@@ -3,7 +3,10 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { authSignIn } from "@/lib/auth";
-import { authedFetch } from "@/lib/api/client";
+
+import { ApiError } from "@/lib/api/client";
+import { getMe } from "@/lib/api/me";
+import { createOnboarding } from "@/lib/api/onboarding";
 
 const PENDING_DISPLAY_NAME_KEY = "stacta:pendingDisplayName";
 const PENDING_USERNAME_KEY = "stacta:pendingUsername";
@@ -31,62 +34,41 @@ export default function SignInPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function ensureOnboarded() {
-    let meRes: Response;
-
     try {
-      meRes = await authedFetch("/api/v1/me");
-    } catch (e) {
-      throw new Error(friendlyFetchError(e));
-    }
-
-    //already onboarded
-    if (meRes.ok) {
-      const me = await meRes.json();
+      // already onboarded
+      const me = await getMe();
       if (me?.cognitoSub) localStorage.setItem(ONBOARDED_KEY, me.cognitoSub);
 
       // If we ever had pending onboarding fields, clear them
       localStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
       localStorage.removeItem(PENDING_USERNAME_KEY);
       return;
-    }
+    } catch (e) {
+      // expected on first login: 404 { error: "NOT_ONBOARDED" }
+      if (e instanceof ApiError && e.status === 404) {
+        const displayName = (localStorage.getItem(PENDING_DISPLAY_NAME_KEY) || "").trim();
+        const username = (localStorage.getItem(PENDING_USERNAME_KEY) || "").trim();
 
-    // expected on first login: 404 { error: "NOT_ONBOARDED" }
-    if (meRes.status === 404) {
-      const displayName = (localStorage.getItem(PENDING_DISPLAY_NAME_KEY) || "").trim();
-      const username = (localStorage.getItem(PENDING_USERNAME_KEY) || "").trim();
+        const body: { displayName: string; username?: string } = {
+          displayName: displayName || "New user",
+          ...(username ? { username } : {}),
+        };
 
-      const body: { displayName: string; username?: string } = {
-        displayName: displayName || "New user",
-        ...(username ? { username } : {}),
-      };
+        try {
+          const created = await createOnboarding(body);
+          if (created?.cognitoSub) localStorage.setItem(ONBOARDED_KEY, created.cognitoSub);
 
-      let obRes: Response;
-      try {
-        obRes = await authedFetch("/api/v1/onboarding", {
-          method: "POST",
-          body: JSON.stringify(body),
-        });
-      } catch (e) {
-        throw new Error(friendlyFetchError(e));
+          // onboarding completed, clear pending values
+          localStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
+          localStorage.removeItem(PENDING_USERNAME_KEY);
+          return;
+        } catch (err) {
+          throw new Error(friendlyFetchError(err));
+        }
       }
 
-      if (!obRes.ok) {
-        const text = await obRes.text().catch(() => "");
-        throw new Error(`POST /api/v1/onboarding failed (${obRes.status}) ${text}`);
-      }
-
-      const created = await obRes.json();
-      if (created?.cognitoSub) localStorage.setItem(ONBOARDED_KEY, created.cognitoSub);
-
-      // onboarding completed, clear pending values
-      localStorage.removeItem(PENDING_DISPLAY_NAME_KEY);
-      localStorage.removeItem(PENDING_USERNAME_KEY);
-      return;
+      throw new Error(friendlyFetchError(e));
     }
-
-    // anything else is a real problem
-    const text = await meRes.text().catch(() => "");
-    throw new Error(`GET /api/v1/me failed (${meRes.status}) ${text}`);
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -102,7 +84,7 @@ export default function SignInPage() {
     try {
       await authSignIn(email.trim(), password);
 
-      //run onboarding right after sign-in
+      // run onboarding right after sign-in
       await ensureOnboarded();
 
       // go to the route they originally tried to hit
