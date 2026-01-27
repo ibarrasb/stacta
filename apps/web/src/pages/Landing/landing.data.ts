@@ -38,7 +38,6 @@ export const FRAGRANCES: Fragrance[] = [
       ],
     },
   },
-  // ... keep the rest exactly as you had it
 ];
 
 export const landingCopy = {
