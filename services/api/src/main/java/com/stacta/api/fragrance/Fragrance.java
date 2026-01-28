@@ -64,6 +64,25 @@ public class Fragrance {
     updatedAt = OffsetDateTime.now();
   }
 
+    // COMMUNITY fields (Phase 1)
+    @Column(name = "created_by_user_id")
+    private UUID createdByUserId;
+  
+    @Column(name = "visibility", nullable = false)
+    private String visibility = "PRIVATE"; // PRIVATE | PUBLIC
+  
+    @Column(name = "concentration")
+    private String concentration;
+  
+    @Column(name = "longevity_score")
+    private Integer longevityScore; // 1..5
+  
+    @Column(name = "sillage_score")
+    private Integer sillageScore; // 1..5
+  
+
+
+
   // getters/setters
 
   public UUID getId() { return id; }
@@ -100,4 +119,24 @@ public class Fragrance {
 
   public OffsetDateTime getCreatedAt() { return createdAt; }
   public OffsetDateTime getUpdatedAt() { return updatedAt; }
+
+  //Community
+  public UUID getCreatedByUserId() { return createdByUserId; }
+  public void setCreatedByUserId(UUID createdByUserId) { this.createdByUserId = createdByUserId; }
+
+  public String getVisibility() { return visibility; }
+  public void setVisibility(String visibility) { this.visibility = visibility; }
+
+  public String getConcentration() { return concentration; }
+  public void setConcentration(String concentration) { this.concentration = concentration; }
+
+  public Integer getLongevityScore() { return longevityScore; }
+  public void setLongevityScore(Integer longevityScore) { this.longevityScore = longevityScore; }
+
+  public Integer getSillageScore() { return sillageScore; }
+  public void setSillageScore(Integer sillageScore) { this.sillageScore = sillageScore; }
+    
+  public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+
 }

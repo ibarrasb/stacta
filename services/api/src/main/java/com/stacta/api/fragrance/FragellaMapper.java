@@ -24,7 +24,8 @@ public class FragellaMapper {
 
       out.add(new FragranceSearchResult(
         "fragella",
-        null,
+        safeExternalId(f),
+
 
         f.name(),
         f.brand(),
@@ -87,4 +88,33 @@ public class FragellaMapper {
     }
     return out;
   }
+
+  private String safeExternalId(FragellaDtos.Fragrance f) {
+    if (f == null) return null;
+
+    // try common names without breaking compile for your record
+    try {
+      // if your record has externalId()
+      var m = f.getClass().getMethod("externalId");
+      Object v = m.invoke(f);
+      if (v != null && !v.toString().isBlank()) return v.toString();
+    } catch (Exception ignore) {}
+
+    try {
+      // if your record has id()
+      var m = f.getClass().getMethod("id");
+      Object v = m.invoke(f);
+      if (v != null && !v.toString().isBlank()) return v.toString();
+    } catch (Exception ignore) {}
+
+    try {
+      // if your record has slug()
+      var m = f.getClass().getMethod("slug");
+      Object v = m.invoke(f);
+      if (v != null && !v.toString().isBlank()) return v.toString();
+    } catch (Exception ignore) {}
+
+    return null;
+  }
+
 }

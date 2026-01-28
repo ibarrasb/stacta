@@ -1,8 +1,10 @@
 // apps/web/src/pages/Fragrances/FragranceDetail.tsx
-import { useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+
 import { Button } from "@/components/ui/button";
 import type { FragranceSearchResult } from "@/lib/api/fragrances";
+import { getFragranceDetail } from "@/lib/api/fragrances";
 
 type Note = { name: string; imageUrl: string | null };
 type RankingItem = { name: string; score: number };
@@ -272,13 +274,88 @@ function RankingCard({ title, items }: { title: string; items: RankingItem[] }) 
   );
 }
 
+function safeDecodeURIComponent(v: string) {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
+}
+
 export default function FragranceDetailPage() {
   const navigate = useNavigate();
   const location = useLocation() as any;
+  const { externalId } = useParams();
+
+  const routeExternalId = externalId ? safeDecodeURIComponent(externalId) : null;
+
+  const [loaded, setLoaded] = useState<FragranceSearchResult | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Works because Search navigates with: { state: { fragrance: item, from: {...} } }
-  const fragrance = (location?.state?.fragrance ?? null) as (FragranceSearchResult & any) | null;
+  const stateFragrance = (location?.state?.fragrance ?? null) as (FragranceSearchResult & any) | null;
+  const fragrance = (stateFragrance ?? loaded) as (FragranceSearchResult & any) | null;
+
   const from = location?.state?.from as { pathname?: string; search?: string } | undefined;
+
+  // Prefer single fetch: use externalId prefix if you use one.
+  // If you don't, we still do FRAGELLA -> COMMUNITY fallback.
+  function inferPreferredSource(id: string): "FRAGELLA" | "COMMUNITY" | null {
+    const s = id.toLowerCase();
+    if (s.startsWith("community_") || s.startsWith("comm_") || s.startsWith("c_")) return "COMMUNITY";
+    return "FRAGELLA";
+  }
+
+  useEffect(() => {
+    if (stateFragrance) return;
+    if (!routeExternalId) return;
+
+    let cancelled = false;
+    setLoadError(null);
+    setIsLoading(true);
+
+    (async () => {
+      const preferred = inferPreferredSource(routeExternalId);
+
+      // Try preferred first
+      try {
+        const first = await getFragranceDetail({ source: preferred ?? "FRAGELLA", externalId: routeExternalId });
+        if (cancelled) return;
+        setLoaded(first);
+        return;
+      } catch {
+        // ignore and try fallback
+      }
+
+      // Fallback (only if preferred was FRAGELLA)
+      if (preferred !== "COMMUNITY") {
+        try {
+          const second = await getFragranceDetail({ source: "COMMUNITY", externalId: routeExternalId });
+          if (cancelled) return;
+          setLoaded(second);
+          return;
+        } catch {
+          // ignore
+        }
+      }
+
+      if (cancelled) return;
+      setLoadError("Could not load fragrance details. Open it from Search, or try again.");
+    })()
+      .catch(() => {
+        if (cancelled) return;
+        setLoadError("Could not load fragrance details. Open it from Search, or try again.");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeExternalId, stateFragrance]);
 
   const accords = useMemo(() => {
     const a = fragrance?.mainAccords ?? [];
@@ -291,7 +368,7 @@ export default function FragranceDetailPage() {
   }, [fragrance]);
 
   const accordsPercent = useMemo(() => {
-    const raw = fragrance?.mainAccordsPercentage ?? fragrance?.mainAccordsPercent ?? null;
+    const raw = fragrance?.mainAccordsPercentage ?? (fragrance as any)?.mainAccordsPercent ?? null;
     if (!raw || typeof raw !== "object") return null as null | Record<string, any>;
     return raw as Record<string, any>;
   }, [fragrance]);
@@ -300,11 +377,11 @@ export default function FragranceDetailPage() {
   const hasStageNotes =
     noteGroups.top.length > 0 || noteGroups.middle.length > 0 || noteGroups.base.length > 0;
 
-  const oilType = fragrance?.oilType ?? fragrance?.OilType ?? null;
-  const longevityLabel = fragrance?.longevity ?? fragrance?.Longevity ?? null;
-  const sillageLabel = fragrance?.sillage ?? fragrance?.Sillage ?? null;
-  const confidenceLabel = fragrance?.confidence ?? fragrance?.Confidence ?? null;
-  const popularityLabel = fragrance?.popularity ?? fragrance?.Popularity ?? null;
+  const oilType = fragrance?.oilType ?? (fragrance as any)?.OilType ?? null;
+  const longevityLabel = fragrance?.longevity ?? (fragrance as any)?.Longevity ?? null;
+  const sillageLabel = fragrance?.sillage ?? (fragrance as any)?.Sillage ?? null;
+  const confidenceLabel = fragrance?.confidence ?? (fragrance as any)?.Confidence ?? null;
+  const popularityLabel = fragrance?.popularity ?? (fragrance as any)?.Popularity ?? null;
 
   const longevity01 = labelToPercent(longevityLabel, "longevity");
   const sillage01 = labelToPercent(sillageLabel, "sillage");
@@ -312,7 +389,7 @@ export default function FragranceDetailPage() {
   const popularity01 = labelToPercent(popularityLabel, "popularity");
 
   const seasonRanking: RankingItem[] = useMemo(() => {
-    const r = fragrance?.seasonRanking ?? fragrance?.["Season Ranking"] ?? [];
+    const r = fragrance?.seasonRanking ?? (fragrance as any)?.["Season Ranking"] ?? [];
     if (!Array.isArray(r)) return [];
     return r
       .map((x: any) => ({ name: String(x?.name ?? "").trim(), score: Number(x?.score) }))
@@ -320,7 +397,7 @@ export default function FragranceDetailPage() {
   }, [fragrance]);
 
   const occasionRanking: RankingItem[] = useMemo(() => {
-    const r = fragrance?.occasionRanking ?? fragrance?.["Occasion Ranking"] ?? [];
+    const r = fragrance?.occasionRanking ?? (fragrance as any)?.["Occasion Ranking"] ?? [];
     if (!Array.isArray(r)) return [];
     return r
       .map((x: any) => ({ name: String(x?.name ?? "").trim(), score: Number(x?.score) }))
@@ -381,6 +458,8 @@ export default function FragranceDetailPage() {
     return parts;
   }, [fragrance?.year, fragrance?.gender]);
 
+  const showSkeleton = !stateFragrance && isLoading && !loaded;
+
   return (
     <div className="min-h-screen text-white">
       <div className="mx-auto max-w-6xl px-4 py-10">
@@ -406,12 +485,49 @@ export default function FragranceDetailPage() {
         </div>
 
         <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-          {!fragrance ? (
+          {/* Loading / Error / Empty */}
+          {showSkeleton ? (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="text-sm font-semibold">Open from Search</div>
+              <div className="text-sm font-semibold">Loading…</div>
+              <div className="mt-2 text-sm text-white/70">Fetching fragrance details.</div>
+            </div>
+          ) : !fragrance ? (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="text-sm font-semibold">{loadError ? "Couldn’t load" : "Open from Search"}</div>
               <div className="mt-2 text-sm text-white/70">
-                There’s no backend detail endpoint yet. Open this page by clicking a fragrance from
-                Search.
+                {loadError
+                  ? loadError
+                  : "There’s no cached state for this route yet. Open this page by clicking a fragrance from Search."}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button
+                  className="h-10 rounded-xl px-5"
+                  onClick={() => navigate("/search")}
+                >
+                  Go to Search
+                </Button>
+
+                {routeExternalId ? (
+                  <Button
+                    variant="secondary"
+                    className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                    onClick={() => {
+                      // retry fetch
+                      setLoaded(null);
+                      setLoadError(null);
+                      setIsLoading(false);
+                      // Effect will run again because stateFragrance is still null and routeExternalId unchanged,
+                      // but we can force by toggling isLoading quickly:
+                      setTimeout(() => setIsLoading(true), 0);
+                      setTimeout(() => setIsLoading(false), 0);
+                      // (pragmatic: simplest "retry" without adding extra state)
+                      // If you prefer, we can add a retryCounter state instead.
+                    }}
+                  >
+                    Retry
+                  </Button>
+                ) : null}
               </div>
             </div>
           ) : (

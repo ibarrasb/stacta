@@ -1,58 +1,58 @@
+// apps/web/src/pages/Search/index.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { searchFragrances, type FragranceSearchResult } from "@/lib/api/fragrances";
+import AddCommunityFragranceDialog from "@/components/fragrances/AddCommunityFragranceDialog";
 
 function normalize(item: any): FragranceSearchResult {
-    return {
-      source: item?.source ?? "fragella",
-      externalId: item?.externalId ?? item?.id ?? item?.slug ?? null,
-  
-      name: item?.name ?? "",
-      brand: item?.brand ?? "",
-      year: item?.year ?? null,
-      imageUrl: item?.imageUrl ?? null,
-      gender: item?.gender ?? null,
-  
-      rating: item?.rating ?? null,
-      price: item?.price ?? null,
-      priceValue: item?.priceValue ?? null,
-      purchaseUrl: item?.purchaseUrl ?? null,
-  
-      oilType: item?.oilType ?? null,
-      longevity: item?.longevity ?? null,
-      sillage: item?.sillage ?? null,
-      confidence: item?.confidence ?? null,
-      popularity: item?.popularity ?? null,
-  
-      mainAccords: Array.isArray(item?.mainAccords) ? item.mainAccords : [],
-      generalNotes: Array.isArray(item?.generalNotes) ? item.generalNotes : [],
-  
-      mainAccordsPercentage: item?.mainAccordsPercentage ?? null,
-  
-      seasonRanking: Array.isArray(item?.seasonRanking) ? item.seasonRanking : [],
-      occasionRanking: Array.isArray(item?.occasionRanking) ? item.occasionRanking : [],
-  
-      notes: item?.notes ?? null,
-    };
-  }
-  
+  return {
+    source: item?.source ?? "fragella",
+    externalId: item?.externalId ?? item?.id ?? item?.slug ?? null,
 
-  function makeRouteId(item: FragranceSearchResult, idx: number) {
-    // Prefer a stable backend id if you ever have one
-    const ext = item.externalId?.trim();
-    if (ext) return ext;
-  
-    // Otherwise: opaque id (no source/brand/name leaks into URL)
-    const rand =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? (crypto as any).randomUUID()
-        : `r${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  
-    return `f_${rand}_${idx}`;
-  }
-  
+    name: item?.name ?? "",
+    brand: item?.brand ?? "",
+    year: item?.year ?? null,
+    imageUrl: item?.imageUrl ?? null,
+    gender: item?.gender ?? null,
+
+    rating: item?.rating ?? null,
+    price: item?.price ?? null,
+    priceValue: item?.priceValue ?? null,
+    purchaseUrl: item?.purchaseUrl ?? null,
+
+    oilType: item?.oilType ?? null,
+    longevity: item?.longevity ?? null,
+    sillage: item?.sillage ?? null,
+    confidence: item?.confidence ?? null,
+    popularity: item?.popularity ?? null,
+
+    mainAccords: Array.isArray(item?.mainAccords) ? item.mainAccords : [],
+    generalNotes: Array.isArray(item?.generalNotes) ? item.generalNotes : [],
+
+    mainAccordsPercentage: item?.mainAccordsPercentage ?? null,
+
+    seasonRanking: Array.isArray(item?.seasonRanking) ? item.seasonRanking : [],
+    occasionRanking: Array.isArray(item?.occasionRanking) ? item.occasionRanking : [],
+
+    notes: item?.notes ?? null,
+  };
+}
+
+function makeRouteId(item: FragranceSearchResult, idx: number) {
+  // Prefer a stable backend id if you ever have one
+  const ext = item.externalId?.trim();
+  if (ext) return ext;
+
+  // Otherwise: opaque id (no source/brand/name leaks into URL)
+  const rand =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? (crypto as any).randomUUID()
+      : `r${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+  return `f_${rand}_${idx}`;
+}
 
 function makeQuery(brand: string, fragrance: string) {
   const b = brand.trim();
@@ -94,6 +94,9 @@ export default function SearchPage() {
   const query = useMemo(() => makeQuery(brand, fragrance), [brand, fragrance]);
   const canSearch = brand.trim().length > 0 && fragrance.trim().length > 0 && query.length >= 3;
 
+  const [addOpen, setAddOpen] = useState(false);
+  const [didSearch, setDidSearch] = useState(false);
+
   // Restore from sessionStorage if URL has brand+fragrance
   useEffect(() => {
     const b = params.get("brand") ?? "";
@@ -116,6 +119,9 @@ export default function SearchPage() {
 
       setResults(parsed.results);
       setVisibleCount(parsed.visibleCount ?? 10);
+
+      // When we restore results, assume they came from a search
+      setDidSearch(true);
 
       // restore scroll AFTER render
       requestAnimationFrame(() => {
@@ -145,6 +151,7 @@ export default function SearchPage() {
 
   async function onSearch() {
     setError(null);
+    setDidSearch(true);
 
     if (!canSearch) {
       setError('Enter brand first, then fragrance name. Example: "Dior" + "Sauvage".');
@@ -199,15 +206,29 @@ export default function SearchPage() {
 
   const canShowMore = results.length > 10 && visibleCount < 20;
 
+  // B) "Low confidence" heuristic: no strong match among returned results
+  const hasStrongMatch = useMemo(() => {
+    const b = brand.trim().toLowerCase();
+    const f = fragrance.trim().toLowerCase();
+    if (!b || !f) return false;
+
+    return results.some((r) => {
+      const rb = (r.brand ?? "").toLowerCase();
+      const rn = (r.name ?? "").toLowerCase();
+      return rb.includes(b) && rn.includes(f);
+    });
+  }, [results, brand, fragrance]);
+
+  const showProminentCantFind =
+    didSearch && !loading && results.length > 0 && query.length >= 3 && !hasStrongMatch;
+
   return (
     <div className="min-h-screen text-white">
       <div className="mx-auto max-w-5xl px-4 py-10">
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
-            <p className="mt-1 text-sm text-white/60">
-              Enter the brand first, then the fragrance name.
-            </p>
+            <p className="mt-1 text-sm text-white/60">Enter the brand first, then the fragrance name.</p>
           </div>
 
           <Button
@@ -257,6 +278,7 @@ export default function SearchPage() {
         </div>
 
         <div className="mt-6">
+          {/* Header row when we have results */}
           {visibleResults.length > 0 && (
             <div className="mb-3 flex items-center justify-between">
               <div className="text-sm text-white/70">
@@ -264,34 +286,59 @@ export default function SearchPage() {
                 <span className="font-semibold text-white">{Math.min(results.length, 20)}</span>
               </div>
 
-              {canShowMore && (
+              <div className="flex items-center gap-2">
                 <Button
                   variant="secondary"
                   className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
-                  onClick={() => {
-                    const next = Math.min(20, visibleCount + 10);
-                    setVisibleCount(next);
-                    setParams(
-                      {
-                        brand: brand.trim(),
-                        fragrance: fragrance.trim(),
-                        visible: String(next),
-                      },
-                      { replace: true }
-                    );
-                    saveCache({ visibleCount: next, scrollY: window.scrollY });
-                  }}
+                  onClick={() => setAddOpen(true)}
                 >
-                  More results
+                  Not seeing it?
                 </Button>
-              )}
+
+                {canShowMore && (
+                  <Button
+                    variant="secondary"
+                    className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                    onClick={() => {
+                      const next = Math.min(20, visibleCount + 10);
+                      setVisibleCount(next);
+                      setParams(
+                        {
+                          brand: brand.trim(),
+                          fragrance: fragrance.trim(),
+                          visible: String(next),
+                        },
+                        { replace: true }
+                      );
+                      saveCache({ visibleCount: next, scrollY: window.scrollY });
+                    }}
+                  >
+                    More results
+                  </Button>
+                )}
+              </div>
             </div>
           )}
 
+          {/* B) Prominent CTA when returned results look like they're missing the exact match */}
+          {showProminentCantFind && (
+            <div className="mb-4 rounded-3xl border border-white/10 bg-white/5 p-6">
+              <div className="text-sm font-semibold">Can’t find what you’re looking for?</div>
+              <div className="mt-1 text-sm text-white/60">
+                Add it as a community fragrance (private by default).
+              </div>
+              <div className="mt-4">
+                <Button className="h-10 rounded-xl px-5" onClick={() => setAddOpen(true)}>
+                  Add community fragrance
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Results grid */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleResults.map((item, idx) => {
-            const routeId = encodeURIComponent(makeRouteId(item, idx));
-
+              const routeId = encodeURIComponent(makeRouteId(item, idx));
 
               return (
                 <button
@@ -299,7 +346,7 @@ export default function SearchPage() {
                   className="group overflow-hidden rounded-3xl border border-white/10 bg-white/5 text-left transition hover:bg-white/7"
                   onClick={() => {
                     saveCache({ scrollY: window.scrollY });
-            
+
                     const search = params.toString();
                     navigate(`/fragrances/${routeId}`, {
                       state: {
@@ -343,7 +390,36 @@ export default function SearchPage() {
               );
             })}
           </div>
+
+          {/* A) Always show subtle link (works even when results exist) */}
+          {didSearch && !loading && query.length >= 3 && (
+            <div className="mt-6 flex items-center justify-center">
+              <button
+                className="text-sm text-white/60 underline-offset-4 hover:underline"
+                onClick={() => setAddOpen(true)}
+              >
+                Can’t find what you’re looking for? Add it as a community fragrance.
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Dialog */}
+        <AddCommunityFragranceDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          initialBrand={brand}
+          initialName={fragrance}
+          onCreated={(created) => {
+            const id = created.externalId ?? "";
+            navigate(`/fragrances/${encodeURIComponent(id)}`, {
+              state: {
+                fragrance: created,
+                from: { pathname: "/search", search: params.toString() ? `?${params.toString()}` : "" },
+              },
+            });
+          }}
+        />
       </div>
     </div>
   );

@@ -49,4 +49,15 @@ public class FragranceController {
 
     return searchService.mapRaw(raw);
   }
+    @GetMapping("/{externalId}")
+  public FragranceSearchResult getByExternalId(
+    @PathVariable("externalId") String externalId,
+    @RequestParam(value = "source", defaultValue = "FRAGELLA") String source
+  ) {
+    if (externalId == null || externalId.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "externalId is required");
+    }
+    return searchService.getPersistedDetail(source, externalId.trim());
+  }
+
 }

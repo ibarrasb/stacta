@@ -45,3 +45,50 @@ export function searchFragrances(params: { q: string; limit?: number; persist?: 
     `/api/v1/fragrances/search?q=${q}&limit=${limit}&persist=${persist}`
   );
 }
+
+export type NoteDictionaryItem = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  usageCount: number | null;
+};
+
+export function searchNotes(params: { search: string; limit?: number }) {
+  const q = encodeURIComponent(params.search);
+  const limit = params.limit ?? 30;
+  return authedFetch<NoteDictionaryItem[]>(`/api/v1/notes?search=${q}&limit=${limit}`);
+}
+
+export type CreateCommunityFragranceRequest = {
+  name: string;
+  brand: string;
+  year?: string | null;
+  concentration?: string | null;
+  longevityScore?: number | null; // 1-5
+  sillageScore?: number | null;   // 1-5
+  visibility?: "PRIVATE" | "PUBLIC";
+  topNoteIds?: string[];
+  middleNoteIds?: string[];
+  baseNoteIds?: string[];
+};
+
+export function createCommunityFragrance(body: CreateCommunityFragranceRequest) {
+  return authedFetch<FragranceSearchResult>(`/api/v1/community-fragrances`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function searchCommunityFragrances(params: { q: string; limit?: number }) {
+  const q = encodeURIComponent(params.q);
+  const limit = params.limit ?? 20;
+  return authedFetch<FragranceSearchResult[]>(
+    `/api/v1/community-fragrances/search?q=${q}&limit=${limit}`
+  );
+}
+
+export function getFragranceDetail(params: { source?: "FRAGELLA" | "COMMUNITY"; externalId: string }) {
+  const source = params.source ?? "FRAGELLA";
+  const externalId = encodeURIComponent(params.externalId);
+  return authedFetch<FragranceSearchResult>(`/api/v1/fragrances/${externalId}?source=${source}`);
+}
