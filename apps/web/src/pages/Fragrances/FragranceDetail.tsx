@@ -31,42 +31,40 @@ function pct(n01: number) {
 function labelToPercent(label: any, kind: "longevity" | "sillage" | "confidence" | "popularity") {
   const v = normalizeLabel(label);
 
-  // Longevity mappings
   if (kind === "longevity") {
     const map: Record<string, number> = {
       "very weak": 0.15,
       weak: 0.25,
-      "short": 0.28,
+      short: 0.28,
       "short lasting": 0.28,
 
       moderate: 0.5,
-      "medium": 0.5,
-      "average": 0.5,
+      medium: 0.5,
+      average: 0.5,
 
-      "long": 0.75,
+      long: 0.75,
       "long lasting": 0.78,
       "very long": 0.9,
       "very long lasting": 0.92,
-      "beast": 0.95,
+      beast: 0.95,
       "beast mode": 0.98,
     };
     return map[v] ?? 0;
   }
 
-  // Sillage mappings
   if (kind === "sillage") {
     const map: Record<string, number> = {
-      "intimate": 0.22,
-      "soft": 0.28,
-      "close": 0.28,
+      intimate: 0.22,
+      soft: 0.28,
+      close: 0.28,
 
       moderate: 0.5,
       medium: 0.5,
 
       strong: 0.78,
-      "heavy": 0.85,
+      heavy: 0.85,
       "very strong": 0.92,
-      "enormous": 0.95,
+      enormous: 0.95,
       "room filling": 0.95,
     };
     return map[v] ?? 0;
@@ -138,11 +136,8 @@ function Bar({
         {rightText ? <div className="text-xs font-medium text-white/85">{rightText}</div> : null}
       </div>
 
-      <div className="h-2.5 w-full rounded-full bg-white/10 ring-1 ring-white/10 overflow-hidden">
-        <div
-          className={cx("h-full rounded-full bg-gradient-to-r", g)}
-          style={{ width: w }}
-        />
+      <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+        <div className={cx("h-full rounded-full bg-gradient-to-r", g)} style={{ width: w }} />
       </div>
     </div>
   );
@@ -218,14 +213,10 @@ function PyramidRow({ title, notes }: { title: string; notes: Note[] }) {
   );
 }
 
-function RankingCard({
-  title,
-  items,
-}: {
-  title: string;
-  items: RankingItem[];
-}) {
-  const clean = (items ?? []).filter((x) => x && typeof x.name === "string" && Number.isFinite(x.score));
+function RankingCard({ title, items }: { title: string; items: RankingItem[] }) {
+  const clean = (items ?? []).filter(
+    (x) => x && typeof x.name === "string" && Number.isFinite(x.score)
+  );
   const sorted = clean.slice().sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const max = Math.max(1, ...sorted.map((x) => x.score || 0));
 
@@ -233,8 +224,10 @@ function RankingCard({
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-xs font-medium text-white/70">{title}</div>
-          <div className="mt-1 text-[11px] text-white/45">relative (provider scores)</div>
+          <div className="text-xs font-medium text-white/80">{title}</div>
+          <div className="mt-1 text-[11px] text-white/45">
+            model score (compare within this fragrance)
+          </div>
         </div>
         <div className="text-[10px] text-white/45">ranking</div>
       </div>
@@ -245,11 +238,17 @@ function RankingCard({
             const v01 = clamp01((it.score || 0) / max);
             const grad = BAR_GRADIENTS[hashIdx(`${title}:${it.name}`, BAR_GRADIENTS.length)];
             return (
-              <div key={`${it.name}-${it.score}`} className="grid grid-cols-[90px_1fr_130px] items-center gap-3">
+              <div
+                key={`${it.name}-${it.score}`}
+                className="grid grid-cols-[90px_1fr_130px] items-center gap-3"
+              >
                 <div className="text-xs text-white/80 capitalize">{it.name}</div>
 
-                <div className="h-2.5 w-full rounded-full bg-white/10 ring-1 ring-white/10 overflow-hidden">
-                  <div className={cx("h-full rounded-full bg-gradient-to-r", grad)} style={{ width: pct(v01) }} />
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+                  <div
+                    className={cx("h-full rounded-full bg-gradient-to-r", grad)}
+                    style={{ width: pct(v01) }}
+                  />
                 </div>
 
                 <div className="flex items-center justify-end gap-2">
@@ -265,7 +264,9 @@ function RankingCard({
       </div>
 
       <div className="mt-4 text-xs text-white/45">
-        We don’t know the exact global scale—this is best read as a relative ranking within the list.
+        These are algorithmic suitability scores (notes + accords). Use them to compare options
+        within this fragrance—not as an absolute 0–5 scale, and not as a global comparison across
+        different fragrances.
       </div>
     </div>
   );
@@ -277,7 +278,6 @@ export default function FragranceDetailPage() {
 
   // Works because Search navigates with: { state: { fragrance: item, from: {...} } }
   const fragrance = (location?.state?.fragrance ?? null) as (FragranceSearchResult & any) | null;
-
   const from = location?.state?.from as { pathname?: string; search?: string } | undefined;
 
   const accords = useMemo(() => {
@@ -290,13 +290,9 @@ export default function FragranceDetailPage() {
     return Array.isArray(n) ? n.filter(Boolean) : [];
   }, [fragrance]);
 
-  // Optional: "Main Accords Percentage" from provider (if backend passes it through)
   const accordsPercent = useMemo(() => {
     const raw = fragrance?.mainAccordsPercentage ?? fragrance?.mainAccordsPercent ?? null;
     if (!raw || typeof raw !== "object") return null as null | Record<string, any>;
-
-    // some payloads use: { sweet: "Dominant" } not numeric
-    // we support both numeric (0..1 or 0..100) AND categorical strings
     return raw as Record<string, any>;
   }, [fragrance]);
 
@@ -310,13 +306,11 @@ export default function FragranceDetailPage() {
   const confidenceLabel = fragrance?.confidence ?? fragrance?.Confidence ?? null;
   const popularityLabel = fragrance?.popularity ?? fragrance?.Popularity ?? null;
 
-  // Fix: Longevity bar empty (normalize + mapping)
   const longevity01 = labelToPercent(longevityLabel, "longevity");
   const sillage01 = labelToPercent(sillageLabel, "sillage");
   const confidence01 = labelToPercent(confidenceLabel, "confidence");
   const popularity01 = labelToPercent(popularityLabel, "popularity");
 
-  // Rankings
   const seasonRanking: RankingItem[] = useMemo(() => {
     const r = fragrance?.seasonRanking ?? fragrance?.["Season Ranking"] ?? [];
     if (!Array.isArray(r)) return [];
@@ -356,10 +350,14 @@ export default function FragranceDetailPage() {
         // numeric support (0..1 or 0..100)
         if (typeof v === "number" && Number.isFinite(v)) {
           const n = v > 1 ? v / 100 : v;
-          return { name: key, value01: clamp01(n), labelRight: `${Math.round(clamp01(n) * 100)}%` };
+          return {
+            name: key,
+            value01: clamp01(n),
+            labelRight: `${Math.round(clamp01(n) * 100)}%`,
+          };
         }
 
-        // categorical strings support: Dominant/Prominent/Moderate
+        // categorical strings: Dominant/Prominent/Moderate
         const lv = normalizeLabel(v);
         const map: Record<string, number> = {
           dominant: 0.92,
@@ -372,11 +370,16 @@ export default function FragranceDetailPage() {
       })
       .filter(Boolean) as Array<{ name: string; value01: number; labelRight: string }>;
 
-    // Sort high to low
     entries.sort((a, b) => b.value01 - a.value01);
-
     return entries;
   }, [accordsPercent]);
+
+  const headerMeta = useMemo(() => {
+    const parts: string[] = [];
+    if (fragrance?.year) parts.push(`Year ${fragrance.year}`);
+    if (fragrance?.gender) parts.push(String(fragrance.gender));
+    return parts;
+  }, [fragrance?.year, fragrance?.gender]);
 
   return (
     <div className="min-h-screen text-white">
@@ -388,21 +391,18 @@ export default function FragranceDetailPage() {
           </div>
 
           <Button
-  variant="secondary"
-  className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
-  onClick={() => {
-    if (from?.pathname) {
-      navigate(`${from.pathname}${from.search ?? ""}`);
-      return;
-    }
-    navigate(-1);
-  }}
->
-  Back
-</Button>
-
-
-
+            variant="secondary"
+            className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+            onClick={() => {
+              if (from?.pathname) {
+                navigate(`${from.pathname}${from.search ?? ""}`);
+                return;
+              }
+              navigate(-1);
+            }}
+          >
+            Back
+          </Button>
         </div>
 
         <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
@@ -410,20 +410,21 @@ export default function FragranceDetailPage() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="text-sm font-semibold">Open from Search</div>
               <div className="mt-2 text-sm text-white/70">
-                There’s no backend detail endpoint yet. Open this page by clicking a fragrance from Search.
+                There’s no backend detail endpoint yet. Open this page by clicking a fragrance from
+                Search.
               </div>
             </div>
           ) : (
             <div className="grid gap-6 lg:grid-cols-[380px_1fr] lg:items-start">
               {/* LEFT */}
-              <div className="lg:sticky lg:top-6 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+              <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 lg:sticky lg:top-6">
                 <div className="p-4">
                   <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
                     {fragrance.imageUrl ? (
                       <img
                         src={fragrance.imageUrl}
                         alt={`${fragrance.brand} ${fragrance.name}`}
-                        className="h-auto w-full object-contain bg-white/5"
+                        className="w-full bg-white/5 object-contain"
                         loading="lazy"
                       />
                     ) : (
@@ -459,65 +460,66 @@ export default function FragranceDetailPage() {
                   </div>
 
                   <div className="mt-4 grid grid-cols-3 gap-3">
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-[11px] text-white/60">Rating</div>
-                        <div className="mt-1 text-sm font-semibold">{fragrance.rating ?? "—"}</div>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-[11px] text-white/60">Year</div>
-                        <div className="mt-1 text-sm font-semibold">{fragrance.year ?? "—"}</div>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-[11px] text-white/60">Price</div>
-                        <div className="mt-1 text-sm font-semibold">
-                            {fragrance.priceValue ?? fragrance.price ?? "—"}
-                        </div>
-                        </div>
-                        
-                  </div>
-                       {/* Performance (longevity + sillage + signals) */}
-                <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-medium text-white/80">Performance</div>
-                      <div className="mt-1 text-[11px] text-white/45">longevity • sillage • signals</div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <div className="text-[11px] text-white/60">Rating</div>
+                      <div className="mt-1 text-sm font-semibold">{fragrance.rating ?? "—"}</div>
                     </div>
-                    <div className="text-[10px] text-white/45">from provider</div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <div className="text-[11px] text-white/60">Year</div>
+                      <div className="mt-1 text-sm font-semibold">{fragrance.year ?? "—"}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <div className="text-[11px] text-white/60">Price</div>
+                      <div className="mt-1 text-sm font-semibold">
+                        {fragrance.priceValue ?? fragrance.price ?? "—"}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="mt-4 space-y-4">
-                    <Bar
-                      label="Longevity"
-                      value01={longevity01}
-                      rightText={longevityLabel ? String(longevityLabel) : "—"}
-                      gradientClass={BAR_GRADIENTS[0]}
-                    />
-                    <Bar
-                      label="Sillage"
-                      value01={sillage01}
-                      rightText={sillageLabel ? String(sillageLabel) : "—"}
-                      gradientClass={BAR_GRADIENTS[1]}
-                    />
-                    <Bar
-                      label="Confidence"
-                      value01={confidence01}
-                      rightText={confidenceLabel ? String(confidenceLabel) : "—"}
-                      gradientClass={BAR_GRADIENTS[2]}
-                    />
-                    <Bar
-                      label="Popularity"
-                      value01={popularity01}
-                      rightText={popularityLabel ? String(popularityLabel) : "—"}
-                      gradientClass={BAR_GRADIENTS[3]}
-                    />
-                  </div>
+                  {/* Performance (longevity + sillage + signals) */}
+                  <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-medium text-white/80">Performance</div>
+                        <div className="mt-1 text-[11px] text-white/45">
+                          longevity • sillage • signals
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-white/45">from provider</div>
+                    </div>
 
-                  <div className="mt-4 text-xs text-white/45">
-                    These are categorical labels from the provider (not verified by us).
+                    <div className="mt-4 space-y-4">
+                      <Bar
+                        label="Longevity"
+                        value01={longevity01}
+                        rightText={longevityLabel ? String(longevityLabel) : "—"}
+                        gradientClass={BAR_GRADIENTS[0]}
+                      />
+                      <Bar
+                        label="Sillage"
+                        value01={sillage01}
+                        rightText={sillageLabel ? String(sillageLabel) : "—"}
+                        gradientClass={BAR_GRADIENTS[1]}
+                      />
+                      <Bar
+                        label="Confidence"
+                        value01={confidence01}
+                        rightText={confidenceLabel ? String(confidenceLabel) : "—"}
+                        gradientClass={BAR_GRADIENTS[2]}
+                      />
+                      <Bar
+                        label="Popularity"
+                        value01={popularity01}
+                        rightText={popularityLabel ? String(popularityLabel) : "—"}
+                        gradientClass={BAR_GRADIENTS[3]}
+                      />
+                    </div>
+
+                    <div className="mt-4 text-xs text-white/45">
+                      Confidence/Popularity are categorical provider labels (not verified by us).
+                    </div>
                   </div>
                 </div>
-                </div>
-                
               </div>
 
               {/* RIGHT */}
@@ -529,7 +531,7 @@ export default function FragranceDetailPage() {
                     {fragrance.name || "—"}
                   </div>
 
-                  {/* Oil Type under name */}
+                  {/* Oil Type + meta */}
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {oilType ? (
                       <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/85">
@@ -538,12 +540,10 @@ export default function FragranceDetailPage() {
                     ) : null}
 
                     <div className="text-sm text-white/60">
-                      {fragrance.gender ? ` ${fragrance.gender}` : " • Gender: —"}
+                      {headerMeta.length ? headerMeta.join(" • ") : "—"}
                     </div>
                   </div>
                 </div>
-
-           
 
                 {/* Main accords (bars OR chips, never both) */}
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -570,8 +570,10 @@ export default function FragranceDetailPage() {
                             />
                           );
                         })}
+
                         <div className="mt-3 text-xs text-white/45">
-                          If the provider gives “Main Accords Percentage”, we visualize it. Otherwise we keep chips.
+                          Fragella’s accord strengths are derived from internal percentages, then
+                          returned as labels (Dominant/Prominent/Moderate) for readability.
                         </div>
                       </div>
                     ) : (
@@ -586,7 +588,7 @@ export default function FragranceDetailPage() {
                   </div>
                 </div>
 
-                {/* General notes (more colorful chips) */}
+                {/* General notes */}
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <div className="flex items-center justify-between">
                     <div className="text-xs font-medium text-white/80">General notes</div>
@@ -613,7 +615,9 @@ export default function FragranceDetailPage() {
                   <div className="space-y-4">
                     <div>
                       <div className="text-sm font-semibold">Perfume pyramid</div>
-                      <div className="mt-1 text-xs text-white/55">Top opens • Middle heart • Base lasts</div>
+                      <div className="mt-1 text-xs text-white/55">
+                        Top opens • Middle heart • Base lasts
+                      </div>
                     </div>
 
                     <div className="grid gap-4">
