@@ -2,6 +2,7 @@ package com.stacta.api.fragrance.dto;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public record FragranceSearchResult(
   String source,
@@ -30,5 +31,12 @@ public record FragranceSearchResult(
   List<String> mainAccords,
   List<String> generalNotes,
   NotesDto notes,
-  String purchaseUrl
+  String purchaseUrl,
+
+  //community-only (nullable for FRAGELLA)
+  String concentration,
+  Integer longevityScore,
+  Integer sillageScore,
+  String visibility,
+  UUID createdByUserId
 ) {}

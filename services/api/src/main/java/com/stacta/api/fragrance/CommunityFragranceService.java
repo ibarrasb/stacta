@@ -27,6 +27,9 @@ public class CommunityFragranceService {
   private final JdbcTemplate jdbc;
   private final ObjectMapper om;
 
+  private static String scoreLabel(Integer s) {
+    return s == null ? null : (s + "/5");
+  }
   public CommunityFragranceService(
     FragranceRepository fragrances,
     UserRepository users,
@@ -67,31 +70,40 @@ public class CommunityFragranceService {
     List<NoteEntity> middle = fetchNotesInOrder(req.middleNoteIds());
     List<NoteEntity> base   = fetchNotesInOrder(req.baseNoteIds());
 
-    // Build response snapshot (this is what frontend uses today)
+    // Build response snapshot 
     FragranceSearchResult snapshot = new FragranceSearchResult(
-      "community",
-      externalId,
-      name,
-      brand,
-      year.equals("0") ? null : year,
-      null, // imageUrl
-      null, // gender
-      null, // rating
-      null, // price
-      null, // priceValue
-      concentration, // oilType slot (FE shows as chip)
-      null, // longevity label
-      null, // sillage label
-      null, // confidence
-      null, // popularity
-      null, // mainAccordsPercentage
-      List.of(), // seasonRanking
-      List.of(), // occasionRanking
-      List.of(), // mainAccords
-      List.of(), // generalNotes
-      new NotesDto(toNoteDtos(top), toNoteDtos(middle), toNoteDtos(base)),
-      null // purchaseUrl
-    );
+        "community",
+        externalId,
+        name,
+        brand,
+        year.equals("0") ? null : year,
+        null, // imageUrl (later: allow upload)
+        null, // gender
+        null, // rating
+        null, // price
+        null, // priceValue
+      
+        // keep existing UI behavior (chip), BUT also include concentration explicitly below
+        concentration,                 // oilType slot (existing FE UI)
+        scoreLabel(req.longevityScore()),
+        scoreLabel(req.sillageScore()),
+        null, // confidence
+        null, // popularity
+        null, // mainAccordsPercentage
+        List.of(),
+        List.of(),
+        List.of(),
+        List.of(),
+        new NotesDto(toNoteDtos(top), toNoteDtos(middle), toNoteDtos(base)),
+        null, // purchaseUrl
+      
+        // new community fields
+        concentration,
+        req.longevityScore(),
+        req.sillageScore(),
+        visibility,
+        user.getId()
+      );
 
     // Persist fragrance row
     Fragrance f = new Fragrance();

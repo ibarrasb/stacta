@@ -35,12 +35,20 @@ export type FragranceSearchResult = {
   occasionRanking: RankingDto[];
 
   notes: NotesDto | null;
+
+  //community-only (nullable for FRAGELLA)
+  concentration?: string | null;
+  longevityScore?: number | null;
+  sillageScore?: number | null;
+  visibility?: "PRIVATE" | "PUBLIC" | string | null;
+  createdByUserId?: string | null; // UUID serialized as string in JSON
 };
+
 
 export function searchFragrances(params: { q: string; limit?: number; persist?: boolean }) {
   const q = encodeURIComponent(params.q);
   const limit = params.limit ?? 20;
-  const persist = params.persist ?? false;
+  const persist = params.persist ?? true;
   return authedFetch<FragranceSearchResult[]>(
     `/api/v1/fragrances/search?q=${q}&limit=${limit}&persist=${persist}`
   );

@@ -25,33 +25,31 @@ public class FragellaMapper {
       out.add(new FragranceSearchResult(
         "fragella",
         safeExternalId(f),
-
-
         f.name(),
         f.brand(),
         f.year(),
         f.imageUrl(),
         f.gender(),
-
         f.rating(),
         f.price(),
         f.priceValue(),
-
         f.oilType(),
         f.longevity(),
         f.sillage(),
         f.confidence(),
         f.popularity(),
-
         f.mainAccordsPercentage(),
         mapRanking(f.seasonRanking()),
         mapRanking(f.occasionRanking()),
-
         f.mainAccords(),
         f.generalNotes(),
         notesDto,
-        f.purchaseUrl()
+        f.purchaseUrl(),
+      
+        //new community fields (not applicable for fragella)
+        null, null, null, null, null
       ));
+      
     }
 
     return out;

@@ -1,7 +1,10 @@
+// apps/web/src/components/fragrances/AddCommunityFragranceDialog.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   createCommunityFragrance,
   searchNotes,
@@ -17,6 +20,8 @@ type Props = {
   initialName?: string;
   onCreated: (fragrance: FragranceSearchResult) => void;
 };
+
+type StageKey = "TOP" | "MIDDLE" | "BASE";
 
 function uniqById(arr: NoteDictionaryItem[]) {
   const map = new Map<string, NoteDictionaryItem>();
@@ -45,13 +50,21 @@ export default function AddCommunityFragranceDialog({
   const [name, setName] = useState(initialName ?? "");
   const [year, setYear] = useState("");
   const [concentration, setConcentration] = useState("");
-  const [visibility, setVisibility] = useState<"PRIVATE" | "PUBLIC">("PRIVATE");
+
+  // Switch: false => PRIVATE, true => PUBLIC
+  const [isPublic, setIsPublic] = useState(false);
+
+  const visibility = useMemo<"PRIVATE" | "PUBLIC">(() => (isPublic ? "PUBLIC" : "PRIVATE"), [isPublic]);
+
   const [longevity, setLongevity] = useState<number | null>(null);
   const [sillage, setSillage] = useState<number | null>(null);
 
   const [noteSearch, setNoteSearch] = useState("");
   const [noteResults, setNoteResults] = useState<NoteDictionaryItem[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
+
+  // NEW: one stage selector controls where the next note is added
+  const [stage, setStage] = useState<StageKey>("TOP");
 
   const [top, setTop] = useState<NoteDictionaryItem[]>([]);
   const [middle, setMiddle] = useState<NoteDictionaryItem[]>([]);
@@ -67,9 +80,10 @@ export default function AddCommunityFragranceDialog({
     setName(initialName ?? "");
     setYear("");
     setConcentration("");
-    setVisibility("PRIVATE");
+    setIsPublic(false);
     setLongevity(null);
     setSillage(null);
+    setStage("TOP");
     setTop([]);
     setMiddle([]);
     setBase([]);
@@ -109,22 +123,19 @@ export default function AddCommunityFragranceDialog({
     };
   }, [noteSearch, open]);
 
-  const canSave = useMemo(() => {
-    return brand.trim().length > 0 && name.trim().length > 0;
-  }, [brand, name]);
+  const canSave = useMemo(() => brand.trim().length > 0 && name.trim().length > 0, [brand, name]);
 
-  function addNote(stage: "TOP" | "MIDDLE" | "BASE", n: NoteDictionaryItem) {
+  function addNote(targetStage: StageKey, n: NoteDictionaryItem) {
     if (!n?.id) return;
-
-    if (stage === "TOP") setTop((prev) => uniqById([...prev, n]).slice(0, 20));
-    if (stage === "MIDDLE") setMiddle((prev) => uniqById([...prev, n]).slice(0, 20));
-    if (stage === "BASE") setBase((prev) => uniqById([...prev, n]).slice(0, 20));
+    if (targetStage === "TOP") setTop((prev) => uniqById([...prev, n]).slice(0, 20));
+    if (targetStage === "MIDDLE") setMiddle((prev) => uniqById([...prev, n]).slice(0, 20));
+    if (targetStage === "BASE") setBase((prev) => uniqById([...prev, n]).slice(0, 20));
   }
 
-  function removeNote(stage: "TOP" | "MIDDLE" | "BASE", id: string) {
-    if (stage === "TOP") setTop((prev) => prev.filter((x) => x.id !== id));
-    if (stage === "MIDDLE") setMiddle((prev) => prev.filter((x) => x.id !== id));
-    if (stage === "BASE") setBase((prev) => prev.filter((x) => x.id !== id));
+  function removeNote(targetStage: StageKey, id: string) {
+    if (targetStage === "TOP") setTop((prev) => prev.filter((x) => x.id !== id));
+    if (targetStage === "MIDDLE") setMiddle((prev) => prev.filter((x) => x.id !== id));
+    if (targetStage === "BASE") setBase((prev) => prev.filter((x) => x.id !== id));
   }
 
   async function onSave() {
@@ -212,30 +223,19 @@ export default function AddCommunityFragranceDialog({
             </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3">
-            <div>
+          {/* Visibility slider */}
+          <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+            <div className="min-w-0">
               <div className="text-sm font-medium">Visibility</div>
               <div className="text-xs text-white/60">
-                Private means only you can see it. Public lets others find it.
+                {isPublic ? "Public: others can find it." : "Private: only you can see it."}
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={visibility === "PRIVATE" ? "default" : "secondary"}
-                className="h-9 rounded-xl"
-                onClick={() => setVisibility("PRIVATE")}
-              >
-                Private
-              </Button>
-              <Button
-                type="button"
-                variant={visibility === "PUBLIC" ? "default" : "secondary"}
-                className="h-9 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
-                onClick={() => setVisibility("PUBLIC")}
-              >
-                Public
-              </Button>
+
+            <div className="flex items-center gap-3">
+              <span className={`text-xs ${!isPublic ? "text-white" : "text-white/60"}`}>Private</span>
+              <Switch checked={isPublic} onCheckedChange={setIsPublic} />
+              <span className={`text-xs ${isPublic ? "text-white" : "text-white/60"}`}>Public</span>
             </div>
           </div>
 
@@ -260,13 +260,38 @@ export default function AddCommunityFragranceDialog({
             </div>
           </div>
 
+          {/* Notes */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
                 <div className="text-sm font-medium">Notes</div>
-                <div className="text-xs text-white/60">Search and add notes to each stage.</div>
+                <div className="text-xs text-white/60">Search notes, then add them to Top/Middle/Base.</div>
               </div>
               <div className="text-xs text-white/50">{loadingNotes ? "Searching…" : ""}</div>
+            </div>
+
+            {/* Stage selector (fixes “Top always highlighted”) */}
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+              <div className="text-xs text-white/60">Add next note to:</div>
+              <ToggleGroup
+                type="single"
+                value={stage}
+                onValueChange={(v) => {
+                  if (!v) return;
+                  setStage(v as StageKey);
+                }}
+                className="gap-2"
+              >
+                <ToggleGroupItem value="TOP" className="h-8 rounded-xl px-3 text-xs">
+                  Top
+                </ToggleGroupItem>
+                <ToggleGroupItem value="MIDDLE" className="h-8 rounded-xl px-3 text-xs">
+                  Mid
+                </ToggleGroupItem>
+                <ToggleGroupItem value="BASE" className="h-8 rounded-xl px-3 text-xs">
+                  Base
+                </ToggleGroupItem>
+              </ToggleGroup>
             </div>
 
             <div className="mt-3">
@@ -283,37 +308,29 @@ export default function AddCommunityFragranceDialog({
                 {noteResults.slice(0, 10).map((n) => (
                   <div
                     key={n.id}
-                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-2"
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-3">
                       {n.imageUrl ? (
-                        <img src={n.imageUrl} className="h-8 w-8 rounded-lg object-cover" />
+                        <img src={n.imageUrl} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
                       ) : (
-                        <div className="h-8 w-8 rounded-lg bg-white/10" />
+                        <div className="h-9 w-9 shrink-0 rounded-xl bg-white/10" />
                       )}
-                      <div className="text-sm">{n.name}</div>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm">{n.name}</div>
+                        <div className="mt-0.5 text-[11px] text-white/50">
+                          {typeof n.usageCount === "number" ? `Used ${n.usageCount}` : ""}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button type="button" className="h-8 rounded-xl px-3" onClick={() => addNote("TOP", n)}>
-                        Top
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="h-8 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 px-3"
-                        onClick={() => addNote("MIDDLE", n)}
-                      >
-                        Mid
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="h-8 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 px-3"
-                        onClick={() => addNote("BASE", n)}
-                      >
-                        Base
-                      </Button>
-                    </div>
+
+                    <Button
+                      type="button"
+                      className="h-8 rounded-xl px-3 text-xs"
+                      onClick={() => addNote(stage, n)}
+                    >
+                      Add
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -360,22 +377,27 @@ function Stage({
         <div className="text-xs font-medium text-white/80">{title}</div>
         <div className="text-[10px] text-white/50">{items.length}</div>
       </div>
+
       <div className="space-y-2">
         {items.length ? (
           items.map((n) => (
-            <div key={n.id} className="flex items-center justify-between rounded-xl bg-white/5 px-2 py-1">
-              <div className="truncate text-xs text-white/80">{n.name}</div>
+            <div
+              key={n.id}
+              className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-2 py-2"
+            >
+              <div className="min-w-0 truncate text-xs text-white/85">{n.name}</div>
               <button
                 type="button"
-                className="text-xs text-white/50 hover:text-white"
+                className="shrink-0 rounded-lg px-2 py-1 text-xs text-white/60 hover:bg-white/10 hover:text-white"
                 onClick={() => onRemove(n.id)}
+                aria-label={`Remove ${n.name}`}
               >
                 ✕
               </button>
             </div>
           ))
         ) : (
-          <div className="text-xs text-white/40">—</div>
+          <div className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-xs text-white/40">—</div>
         )}
       </div>
     </div>

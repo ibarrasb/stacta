@@ -112,35 +112,43 @@ public class FragellaSearchService {
 
   private static FragranceSearchResult withIds(FragranceSearchResult in, String source, String externalId) {
     if (in == null) return null;
-
+  
     return new FragranceSearchResult(
       source,
       externalId,
-
+  
       in.name(),
       in.brand(),
       in.year(),
       in.imageUrl(),
       in.gender(),
-
+  
       in.rating(),
       in.price(),
       in.priceValue(),
-
+  
       in.oilType(),
       in.longevity(),
       in.sillage(),
       in.confidence(),
       in.popularity(),
-
+  
       in.mainAccordsPercentage(),
       in.seasonRanking(),
       in.occasionRanking(),
-
+  
       in.mainAccords(),
       in.generalNotes(),
       in.notes(),
-      in.purchaseUrl()
+      in.purchaseUrl(),
+  
+      // community-only passthrough (null for FRAGELLA)
+      in.concentration(),
+      in.longevityScore(),
+      in.sillageScore(),
+      in.visibility(),
+      in.createdByUserId()
     );
   }
+  
 }

@@ -6,10 +6,26 @@ import { Input } from "@/components/ui/input";
 import { searchFragrances, type FragranceSearchResult } from "@/lib/api/fragrances";
 import AddCommunityFragranceDialog from "@/components/fragrances/AddCommunityFragranceDialog";
 
+function pickExternalId(item: any): string | null {
+  const candidates = [
+    item?.externalId,
+    item?.external_id,
+    item?.id,
+    item?.slug,
+    item?.uuid,
+  ];
+
+  for (const c of candidates) {
+    const s = typeof c === "string" ? c.trim() : "";
+    if (s) return s;
+  }
+  return null;
+}
+
 function normalize(item: any): FragranceSearchResult {
   return {
     source: item?.source ?? "fragella",
-    externalId: item?.externalId ?? item?.id ?? item?.slug ?? null,
+    externalId: pickExternalId(item),
 
     name: item?.name ?? "",
     brand: item?.brand ?? "",
@@ -37,15 +53,21 @@ function normalize(item: any): FragranceSearchResult {
     occasionRanking: Array.isArray(item?.occasionRanking) ? item.occasionRanking : [],
 
     notes: item?.notes ?? null,
+
+    // community-only (safe to be missing for fragella)
+    concentration: item?.concentration ?? null,
+    longevityScore: item?.longevityScore ?? null,
+    sillageScore: item?.sillageScore ?? null,
+    visibility: item?.visibility ?? null,
+    createdByUserId: item?.createdByUserId ?? null,
   };
 }
 
 function makeRouteId(item: FragranceSearchResult, idx: number) {
-  // Prefer a stable backend id if you ever have one
   const ext = item.externalId?.trim();
   if (ext) return ext;
 
-  // Otherwise: opaque id (no source/brand/name leaks into URL)
+  // fallback: opaque id (keeps UI clickable even if API gave no id)
   const rand =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? (crypto as any).randomUUID()
@@ -106,7 +128,6 @@ export default function SearchPage() {
     const q = makeQuery(b, f);
     if (!q) return;
 
-    // keep inputs in sync if user hit browser back and state reset
     setBrand(b);
     setFragrance(f);
 
@@ -119,11 +140,8 @@ export default function SearchPage() {
 
       setResults(parsed.results);
       setVisibleCount(parsed.visibleCount ?? 10);
-
-      // When we restore results, assume they came from a search
       setDidSearch(true);
 
-      // restore scroll AFTER render
       requestAnimationFrame(() => {
         window.scrollTo({ top: parsed.scrollY ?? 0, behavior: "instant" as any });
       });
@@ -163,13 +181,14 @@ export default function SearchPage() {
     setVisibleCount(nextVisible);
 
     try {
-      const data = await searchFragrances({ q: query, limit: 20, persist: false });
-      const list = Array.isArray(data) ? data.map(normalize).slice(0, 20) : [];
+      // IMPORTANT: persist=true so results get ingested into Postgres
+      // (detail endpoint + note ingestion will work after docker down -v)
+      const data = await searchFragrances({ q: query, limit: 20, persist: true });
 
+      const list = Array.isArray(data) ? data.map(normalize).slice(0, 20) : [];
       setResults(list);
       if (list.length === 0) setError("No results found. Try a different spelling.");
 
-      // sync URL so back/refresh keeps inputs
       setParams(
         {
           brand: brand.trim(),
@@ -179,7 +198,6 @@ export default function SearchPage() {
         { replace: true }
       );
 
-      // cache results
       saveCache({
         brand: brand.trim(),
         fragrance: fragrance.trim(),
@@ -189,7 +207,6 @@ export default function SearchPage() {
         scrollY: 0,
       });
 
-      // after a new search, go to top
       requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" as any }));
     } catch (e: any) {
       setResults([]);
@@ -206,7 +223,6 @@ export default function SearchPage() {
 
   const canShowMore = results.length > 10 && visibleCount < 20;
 
-  // B) "Low confidence" heuristic: no strong match among returned results
   const hasStrongMatch = useMemo(() => {
     const b = brand.trim().toLowerCase();
     const f = fragrance.trim().toLowerCase();
@@ -278,7 +294,6 @@ export default function SearchPage() {
         </div>
 
         <div className="mt-6">
-          {/* Header row when we have results */}
           {visibleResults.length > 0 && (
             <div className="mb-3 flex items-center justify-between">
               <div className="text-sm text-white/70">
@@ -320,7 +335,6 @@ export default function SearchPage() {
             </div>
           )}
 
-          {/* B) Prominent CTA when returned results look like they're missing the exact match */}
           {showProminentCantFind && (
             <div className="mb-4 rounded-3xl border border-white/10 bg-white/5 p-6">
               <div className="text-sm font-semibold">Can’t find what you’re looking for?</div>
@@ -335,14 +349,14 @@ export default function SearchPage() {
             </div>
           )}
 
-          {/* Results grid */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleResults.map((item, idx) => {
               const routeId = encodeURIComponent(makeRouteId(item, idx));
+              const key = `${item.source ?? "x"}:${item.externalId ?? "noid"}:${idx}`;
 
               return (
                 <button
-                  key={routeId}
+                  key={key}
                   className="group overflow-hidden rounded-3xl border border-white/10 bg-white/5 text-left transition hover:bg-white/7"
                   onClick={() => {
                     saveCache({ scrollY: window.scrollY });
@@ -391,7 +405,6 @@ export default function SearchPage() {
             })}
           </div>
 
-          {/* A) Always show subtle link (works even when results exist) */}
           {didSearch && !loading && query.length >= 3 && (
             <div className="mt-6 flex items-center justify-center">
               <button
@@ -404,7 +417,6 @@ export default function SearchPage() {
           )}
         </div>
 
-        {/* Dialog */}
         <AddCommunityFragranceDialog
           open={addOpen}
           onOpenChange={setAddOpen}

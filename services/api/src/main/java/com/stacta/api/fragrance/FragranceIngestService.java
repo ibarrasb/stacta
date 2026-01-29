@@ -2,6 +2,7 @@ package com.stacta.api.fragrance;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stacta.api.integrations.fragella.FragellaDtos;
+import com.stacta.api.note.NoteService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,14 +16,20 @@ public class FragranceIngestService {
 
   private final FragranceRepository repo;
   private final ObjectMapper om;
+  private final NoteService noteService;
 
-  public FragranceIngestService(FragranceRepository repo, ObjectMapper om) {
+  public FragranceIngestService(FragranceRepository repo, ObjectMapper om, NoteService noteService) {
     this.repo = repo;
     this.om = om;
+    this.noteService = noteService;
   }
 
   @Transactional
   public void upsertAll(List<FragellaDtos.Fragrance> items) {
+    // 1) ingest notes first (fills note_dictionary)
+    noteService.ingestNotesFromFragella(items);
+
+    // 2) upsert fragrances + snapshot
     for (var item : items) {
       var extId = externalId(item);
 
@@ -43,10 +50,8 @@ public class FragranceIngestService {
       entity.setPrice(nullSafe(item.price()));
 
       try {
-        // per-item snapshot (better than storing the whole response)
         entity.setSnapshot(om.writeValueAsString(item));
       } catch (Exception e) {
-        // Never kill the request just because snapshot serialization failed
         entity.setSnapshot("{}");
       }
 
@@ -58,7 +63,6 @@ public class FragranceIngestService {
     return s == null ? "" : s.trim();
   }
 
-  // Stable key since docs don't show an id field on fragrance objects
   private static String externalId(FragellaDtos.Fragrance f) {
     var brand = nullSafe(f.brand());
     var name  = nullSafe(f.name());
@@ -66,12 +70,9 @@ public class FragranceIngestService {
 
     if (year.isBlank()) year = "0";
 
-    // normalize spacing + lower-case
-    var raw = (brand + "|" + name + "|" + year)
+    return (brand + "|" + name + "|" + year)
       .toLowerCase(Locale.ROOT)
       .replaceAll("\\s+", " ")
       .trim();
-
-    return raw;
   }
 }
