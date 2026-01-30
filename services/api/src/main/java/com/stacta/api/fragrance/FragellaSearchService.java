@@ -22,7 +22,7 @@ public class FragellaSearchService {
   private final FragellaSearchCacheService cacheService;
   private final ObjectMapper objectMapper;
 
-  // NEW: for persisted detail
+  // for persisted detail
   private final FragranceRepository fragranceRepository;
 
   public FragellaSearchService(
@@ -61,9 +61,15 @@ public class FragellaSearchService {
    * GET /api/v1/fragrances/{externalId}?source=FRAGELLA|COMMUNITY
    *
    * Reads from DB by (external_source, external_id), parses snapshot, returns FragranceSearchResult.
+   *
+   * NOTE:
+   * Search no longer persists FRAGELLA fragrances. So for FRAGELLA, if not found in DB,
+   * we fall back to a live Fragella lookup by externalId (brand|name|year) and return it
+   * WITHOUT persisting a fragrance row.
    */
   public FragranceSearchResult getPersistedDetail(String source, String externalId) {
     String src = (source == null ? "FRAGELLA" : source.trim()).toUpperCase(Locale.ROOT);
+    String ext = normalizeExternalId(externalId);
 
     // tolerate both styles in DB ("FRAGELLA"/"fragella", "COMMUNITY"/"community")
     List<String> candidates = switch (src) {
@@ -74,11 +80,27 @@ public class FragellaSearchService {
 
     Optional<Fragrance> found = Optional.empty();
     for (String c : candidates) {
-      found = fragranceRepository.findByExternalSourceAndExternalId(c, externalId);
+      found = fragranceRepository.findByExternalSourceAndExternalId(c, ext);
       if (found.isPresent()) break;
     }
 
+    // If not found in DB and this is FRAGELLA, fall back to live lookup
     if (found.isEmpty()) {
+      if ("FRAGELLA".equalsIgnoreCase(src)) {
+        FragellaDtos.Fragrance live = fetchLiveFragellaByExternalId(ext);
+        if (live == null) {
+          throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Fragrance not found");
+        }
+
+        List<FragranceSearchResult> mapped = mapper.mapRaw(List.of(live));
+        if (mapped != null && !mapped.isEmpty()) {
+          return withIds(mapped.get(0), "fragella", ext);
+        }
+
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Fragrance not found");
+      }
+
+      // COMMUNITY (or other sources) must exist in DB
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Fragrance not found");
     }
 
@@ -110,38 +132,126 @@ public class FragellaSearchService {
     }
   }
 
+  /**
+   * Best-effort live lookup from Fragella when a FRAGELLA fragrance is not persisted in our DB.
+   * externalId is expected to be: "brand|name|year" (lowercased, spaces normalized).
+   */
+  private FragellaDtos.Fragrance fetchLiveFragellaByExternalId(String externalId) {
+    if (externalId == null || externalId.isBlank()) return null;
+
+    String brand = "";
+    String name = "";
+    String year = "";
+
+    String[] parts = externalId.split("\\|", -1);
+    if (parts.length >= 2) {
+      brand = parts[0].trim();
+      name = parts[1].trim();
+      if (parts.length >= 3) year = parts[2].trim();
+    } else {
+      // if it doesn't match expected format, just try searching by the whole string
+      name = externalId.trim();
+    }
+
+    // Try "brand name" first for better precision
+    String q1 = (brand.isBlank() ? "" : brand + " ") + name;
+    FragellaDtos.Fragrance hit = findExactByExternalId(q1.trim(), externalId);
+    if (hit != null) return hit;
+
+    // Fallback: search by name only
+    if (!name.isBlank()) {
+      hit = findExactByExternalId(name, externalId);
+      if (hit != null) return hit;
+    }
+
+    return null;
+  }
+
+  private FragellaDtos.Fragrance findExactByExternalId(String query, String targetExternalId) {
+    if (query == null || query.isBlank()) return null;
+
+    List<FragellaDtos.Fragrance> results;
+    try {
+      results = client.search(query, 20);
+    } catch (Exception e) {
+      return null;
+    }
+    if (results == null || results.isEmpty()) return null;
+
+    for (var f : results) {
+      if (f == null) continue;
+      String computed = computeExternalId(f);
+      if (!computed.isBlank() && computed.equals(targetExternalId)) {
+        return f;
+      }
+    }
+    return null;
+  }
+
+  private static String normalizeExternalId(String externalId) {
+    if (externalId == null) return "";
+    return externalId
+      .trim()
+      .toLowerCase(Locale.ROOT)
+      .replaceAll("\\s+", " ")
+      .trim();
+  }
+
+  // Must match your FragranceIngestService externalId() logic
+  private static String computeExternalId(FragellaDtos.Fragrance f) {
+    if (f == null) return "";
+
+    String brand = nullSafe(f.brand());
+    String name  = nullSafe(f.name());
+    String year  = nullSafe(f.year());
+
+    if (year.isBlank()) year = "0";
+
+    String combined = (brand + "|" + name + "|" + year)
+      .toLowerCase(Locale.ROOT)
+      .replaceAll("\\s+", " ")
+      .trim();
+
+    if (combined.equals("||0") || combined.equals("||")) return "";
+    return combined;
+  }
+
+  private static String nullSafe(String s) {
+    return s == null ? "" : s.trim();
+  }
+
   private static FragranceSearchResult withIds(FragranceSearchResult in, String source, String externalId) {
     if (in == null) return null;
-  
+
     return new FragranceSearchResult(
       source,
       externalId,
-  
+
       in.name(),
       in.brand(),
       in.year(),
       in.imageUrl(),
       in.gender(),
-  
+
       in.rating(),
       in.price(),
       in.priceValue(),
-  
+
       in.oilType(),
       in.longevity(),
       in.sillage(),
       in.confidence(),
       in.popularity(),
-  
+
       in.mainAccordsPercentage(),
       in.seasonRanking(),
       in.occasionRanking(),
-  
+
       in.mainAccords(),
       in.generalNotes(),
       in.notes(),
       in.purchaseUrl(),
-  
+
       // community-only passthrough (null for FRAGELLA)
       in.concentration(),
       in.longevityScore(),
@@ -150,5 +260,5 @@ public class FragellaSearchService {
       in.createdByUserId()
     );
   }
-  
+
 }

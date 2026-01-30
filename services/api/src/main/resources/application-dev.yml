@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:15432/stacta
+    username: stacta
+    password: stacta
+
+  data:
+    redis:
+      host: localhost
+      port: 16379
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_ZZm35Q6rE

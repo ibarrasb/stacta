@@ -26,12 +26,17 @@ public class FragranceIngestService {
 
   @Transactional
   public void upsertAll(List<FragellaDtos.Fragrance> items) {
+    if (items == null || items.isEmpty()) return;
+
     // 1) ingest notes first (fills note_dictionary)
     noteService.ingestNotesFromFragella(items);
 
     // 2) upsert fragrances + snapshot
     for (var item : items) {
+      if (item == null) continue;
+
       var extId = externalId(item);
+      if (extId.isBlank()) continue;
 
       var entity = repo.findByExternalSourceAndExternalId(SOURCE, extId)
         .orElseGet(() -> {
@@ -64,15 +69,22 @@ public class FragranceIngestService {
   }
 
   private static String externalId(FragellaDtos.Fragrance f) {
+    if (f == null) return "";
+
     var brand = nullSafe(f.brand());
     var name  = nullSafe(f.name());
     var year  = nullSafe(f.year());
 
     if (year.isBlank()) year = "0";
 
-    return (brand + "|" + name + "|" + year)
+    var combined = (brand + "|" + name + "|" + year)
       .toLowerCase(Locale.ROOT)
       .replaceAll("\\s+", " ")
       .trim();
+
+    // if brand/name missing, don't generate useless ids like "||0"
+    if (combined.equals("||0") || combined.equals("||")) return "";
+
+    return combined;
   }
 }
