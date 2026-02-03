@@ -1,5 +1,5 @@
 // apps/web/src/pages/Search/index.tsx
-import { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,14 +7,7 @@ import { searchFragrances, type FragranceSearchResult } from "@/lib/api/fragranc
 import AddCommunityFragranceDialog from "@/components/fragrances/AddCommunityFragranceDialog";
 
 function pickExternalId(item: any): string | null {
-  const candidates = [
-    item?.externalId,
-    item?.external_id,
-    item?.id,
-    item?.slug,
-    item?.uuid,
-  ];
-
+  const candidates = [item?.externalId, item?.external_id, item?.id, item?.slug, item?.uuid];
   for (const c of candidates) {
     const s = typeof c === "string" ? c.trim() : "";
     if (s) return s;
@@ -67,7 +60,6 @@ function makeRouteId(item: FragranceSearchResult, idx: number) {
   const ext = item.externalId?.trim();
   if (ext) return ext;
 
-  // fallback: opaque id (keeps UI clickable even if API gave no id)
   const rand =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? (crypto as any).randomUUID()
@@ -97,21 +89,79 @@ type CachedSearch = {
   savedAt: number;
 };
 
+function clampVisible(v: number) {
+  if (!Number.isFinite(v)) return 10;
+  return Math.min(20, Math.max(10, v));
+}
+
+// Memoized card: reduces rerender cost when typing / toggling dialogs / etc.
+const ResultCard = React.memo(function ResultCard({
+  item,
+  idx,
+  onOpen,
+}: {
+  item: FragranceSearchResult;
+  idx: number;
+  onOpen: (item: FragranceSearchResult, idx: number) => void;
+}) {
+  //removed unused routeId + key memo (lint + perf): parent provides key already
+  return (
+    <button
+      className="group overflow-hidden rounded-3xl border border-white/10 bg-white/5 text-left transition hover:bg-white/7"
+      onClick={() => onOpen(item, idx)}
+    >
+      <div className="aspect-[4/3] w-full overflow-hidden bg-white/5">
+        {item.imageUrl ? (
+          <img
+            src={item.imageUrl}
+            alt={`${item.brand} ${item.name}`}
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs text-white/50">
+            No image
+          </div>
+        )}
+      </div>
+
+      <div className="p-4">
+        <div className="text-xs text-white/60">{item.brand || "—"}</div>
+        <div className="mt-1 line-clamp-2 text-sm font-semibold">{item.name || "—"}</div>
+
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(item.mainAccords ?? []).slice(0, 3).map((a, i) => (
+            <span
+              key={`${a}-${i}`}
+              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70"
+            >
+              {a}
+            </span>
+          ))}
+        </div>
+      </div>
+    </button>
+  );
+});
+
 export default function SearchPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
 
-  const [brand, setBrand] = useState(params.get("brand") ?? "");
-  const [fragrance, setFragrance] = useState(params.get("fragrance") ?? "");
+  // derive URL params (stable deps)
+  const urlBrand = params.get("brand") ?? "";
+  const urlFragrance = params.get("fragrance") ?? "";
+  const urlVisible = params.get("visible") ?? "10";
+
+  const [brand, setBrand] = useState(urlBrand);
+  const [fragrance, setFragrance] = useState(urlFragrance);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [results, setResults] = useState<FragranceSearchResult[]>([]);
-  const [visibleCount, setVisibleCount] = useState<number>(() => {
-    const v = Number(params.get("visible") ?? "10");
-    return Number.isFinite(v) ? Math.min(20, Math.max(10, v)) : 10;
-  });
+  const [visibleCount, setVisibleCount] = useState<number>(() => clampVisible(Number(urlVisible)));
 
   const query = useMemo(() => makeQuery(brand, fragrance), [brand, fragrance]);
   const canSearch = brand.trim().length > 0 && fragrance.trim().length > 0 && query.length >= 3;
@@ -119,10 +169,19 @@ export default function SearchPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [didSearch, setDidSearch] = useState(false);
 
-  // Restore from sessionStorage if URL has brand+fragrance
+  // prevent re-hydrating on every param update (e.g., visible changes)
+  const hydratedRef = useRef(false);
+
+  //Abort in-flight search when a new one starts or when unmounting
+  const searchAbortRef = useRef<AbortController | null>(null);
+
+  //Sequence guard (still useful even with abort, as extra safety)
+  const searchSeqRef = useRef(0);
+
+  // Restore from sessionStorage when URL brand/fragrance change
   useEffect(() => {
-    const b = params.get("brand") ?? "";
-    const f = params.get("fragrance") ?? "";
+    const b = urlBrand;
+    const f = urlFragrance;
     if (!b || !f) return;
 
     const q = makeQuery(b, f);
@@ -130,6 +189,13 @@ export default function SearchPage() {
 
     setBrand(b);
     setFragrance(f);
+
+    const hydrateKey = `${b}||${f}`;
+    const last = (hydratedRef as any).currentKey;
+    if (hydratedRef.current && last === hydrateKey) return;
+
+    hydratedRef.current = true;
+    (hydratedRef as any).currentKey = hydrateKey;
 
     const raw = sessionStorage.getItem(cacheKey(q));
     if (!raw) return;
@@ -139,7 +205,7 @@ export default function SearchPage() {
       if (!parsed?.results) return;
 
       setResults(parsed.results);
-      setVisibleCount(parsed.visibleCount ?? 10);
+      setVisibleCount(clampVisible(parsed.visibleCount ?? 10));
       setDidSearch(true);
 
       requestAnimationFrame(() => {
@@ -148,26 +214,38 @@ export default function SearchPage() {
     } catch {
       // ignore bad cache
     }
-  }, [params]);
+  }, [urlBrand, urlFragrance]);
 
-  function saveCache(next: Partial<CachedSearch>) {
-    const q = next.query ?? query;
-    if (!q) return;
-
-    const payload: CachedSearch = {
-      brand: next.brand ?? brand,
-      fragrance: next.fragrance ?? fragrance,
-      query: q,
-      results: next.results ?? results,
-      visibleCount: next.visibleCount ?? visibleCount,
-      scrollY: next.scrollY ?? window.scrollY,
-      savedAt: Date.now(),
+  // cleanup any in-flight request on unmount
+  useEffect(() => {
+    return () => {
+      searchAbortRef.current?.abort();
     };
+  }, []);
 
-    sessionStorage.setItem(cacheKey(q), JSON.stringify(payload));
-  }
+  const paramsString = useMemo(() => params.toString(), [params]);
 
-  async function onSearch() {
+  const saveCache = useCallback(
+    (next: Partial<CachedSearch>) => {
+      const q = next.query ?? query;
+      if (!q) return;
+
+      const payload: CachedSearch = {
+        brand: next.brand ?? brand,
+        fragrance: next.fragrance ?? fragrance,
+        query: q,
+        results: next.results ?? results,
+        visibleCount: next.visibleCount ?? visibleCount,
+        scrollY: next.scrollY ?? window.scrollY,
+        savedAt: Date.now(),
+      };
+
+      sessionStorage.setItem(cacheKey(q), JSON.stringify(payload));
+    },
+    [brand, fragrance, query, results, visibleCount]
+  );
+
+  const onSearch = useCallback(async () => {
     setError(null);
     setDidSearch(true);
 
@@ -176,17 +254,30 @@ export default function SearchPage() {
       return;
     }
 
+    // cancel previous request if any
+    searchAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    searchAbortRef.current = ctrl;
+
     setLoading(true);
     const nextVisible = 10;
     setVisibleCount(nextVisible);
 
+    const seq = ++searchSeqRef.current;
+
     try {
-      // IMPORTANT: persist=true so results get ingested into Postgres
-      // (detail endpoint + note ingestion will work after docker down -v)
-      const data = await searchFragrances({ q: query, limit: 20, persist: true });
+      //requires updated fragrances.ts: searchFragrances(params, { signal })
+      const data = await searchFragrances(
+        { q: query, limit: 20, persist: true },
+        { signal: ctrl.signal }
+      );
+
+      if (ctrl.signal.aborted) return;
+      if (seq !== searchSeqRef.current) return;
 
       const list = Array.isArray(data) ? data.map(normalize).slice(0, 20) : [];
       setResults(list);
+
       if (list.length === 0) setError("No results found. Try a different spelling.");
 
       setParams(
@@ -209,12 +300,18 @@ export default function SearchPage() {
 
       requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" as any }));
     } catch (e: any) {
+      if (ctrl.signal.aborted) return;
+      if (seq !== searchSeqRef.current) return;
+
       setResults([]);
       setError(e?.message || "Search failed.");
     } finally {
-      setLoading(false);
+      // only clear loading if this request is still the active one
+      if (!ctrl.signal.aborted && seq === searchSeqRef.current) {
+        setLoading(false);
+      }
     }
-  }
+  }, [brand, canSearch, fragrance, query, saveCache, setParams]);
 
   const visibleResults = useMemo(
     () => results.slice(0, Math.min(visibleCount, 20)),
@@ -237,6 +334,37 @@ export default function SearchPage() {
 
   const showProminentCantFind =
     didSearch && !loading && results.length > 0 && query.length >= 3 && !hasStrongMatch;
+
+  const onOpenResult = useCallback(
+    (item: FragranceSearchResult, idx: number) => {
+      saveCache({ scrollY: window.scrollY });
+
+      const routeId = encodeURIComponent(makeRouteId(item, idx));
+      navigate(`/fragrances/${routeId}`, {
+        state: {
+          fragrance: item,
+          from: { pathname: "/search", search: paramsString ? `?${paramsString}` : "" },
+        },
+      });
+    },
+    [navigate, paramsString, saveCache]
+  );
+
+  const onShowMore = useCallback(() => {
+    const next = Math.min(20, visibleCount + 10);
+    setVisibleCount(next);
+
+    setParams(
+      {
+        brand: brand.trim(),
+        fragrance: fragrance.trim(),
+        visible: String(next),
+      },
+      { replace: true }
+    );
+
+    saveCache({ visibleCount: next, scrollY: window.scrollY });
+  }, [brand, fragrance, saveCache, setParams, visibleCount]);
 
   return (
     <div className="min-h-screen text-white">
@@ -314,19 +442,7 @@ export default function SearchPage() {
                   <Button
                     variant="secondary"
                     className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
-                    onClick={() => {
-                      const next = Math.min(20, visibleCount + 10);
-                      setVisibleCount(next);
-                      setParams(
-                        {
-                          brand: brand.trim(),
-                          fragrance: fragrance.trim(),
-                          visible: String(next),
-                        },
-                        { replace: true }
-                      );
-                      saveCache({ visibleCount: next, scrollY: window.scrollY });
-                    }}
+                    onClick={onShowMore}
                   >
                     More results
                   </Button>
@@ -350,59 +466,14 @@ export default function SearchPage() {
           )}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {visibleResults.map((item, idx) => {
-              const routeId = encodeURIComponent(makeRouteId(item, idx));
-              const key = `${item.source ?? "x"}:${item.externalId ?? "noid"}:${idx}`;
-
-              return (
-                <button
-                  key={key}
-                  className="group overflow-hidden rounded-3xl border border-white/10 bg-white/5 text-left transition hover:bg-white/7"
-                  onClick={() => {
-                    saveCache({ scrollY: window.scrollY });
-
-                    const search = params.toString();
-                    navigate(`/fragrances/${routeId}`, {
-                      state: {
-                        fragrance: item,
-                        from: { pathname: "/search", search: search ? `?${search}` : "" },
-                      },
-                    });
-                  }}
-                >
-                  <div className="aspect-[4/3] w-full overflow-hidden bg-white/5">
-                    {item.imageUrl ? (
-                      <img
-                        src={item.imageUrl}
-                        alt={`${item.brand} ${item.name}`}
-                        className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs text-white/50">
-                        No image
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-4">
-                    <div className="text-xs text-white/60">{item.brand || "—"}</div>
-                    <div className="mt-1 line-clamp-2 text-sm font-semibold">{item.name || "—"}</div>
-
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {(item.mainAccords ?? []).slice(0, 3).map((a, i) => (
-                        <span
-                          key={`${a}-${i}`}
-                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70"
-                        >
-                          {a}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+            {visibleResults.map((item, idx) => (
+              <ResultCard
+                key={`${item.source ?? "x"}:${item.externalId ?? "noid"}:${idx}`}
+                item={item}
+                idx={idx}
+                onOpen={onOpenResult}
+              />
+            ))}
           </div>
 
           {didSearch && !loading && query.length >= 3 && (
@@ -427,7 +498,7 @@ export default function SearchPage() {
             navigate(`/fragrances/${encodeURIComponent(id)}`, {
               state: {
                 fragrance: created,
-                from: { pathname: "/search", search: params.toString() ? `?${params.toString()}` : "" },
+                from: { pathname: "/search", search: paramsString ? `?${paramsString}` : "" },
               },
             });
           }}

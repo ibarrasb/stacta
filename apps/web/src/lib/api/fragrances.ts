@@ -1,3 +1,4 @@
+// apps/web/src/lib/api/fragrances.ts
 import { authedFetch } from "@/lib/api/client";
 
 export type NoteDto = { name: string; imageUrl: string | null };
@@ -36,23 +37,12 @@ export type FragranceSearchResult = {
 
   notes: NotesDto | null;
 
-  //community-only (nullable for FRAGELLA)
   concentration?: string | null;
   longevityScore?: number | null;
   sillageScore?: number | null;
   visibility?: "PRIVATE" | "PUBLIC" | string | null;
-  createdByUserId?: string | null; // UUID serialized as string in JSON
+  createdByUserId?: string | null;
 };
-
-
-export function searchFragrances(params: { q: string; limit?: number; persist?: boolean }) {
-  const q = encodeURIComponent(params.q);
-  const limit = params.limit ?? 20;
-  const persist = params.persist ?? true;
-  return authedFetch<FragranceSearchResult[]>(
-    `/api/v1/fragrances/search?q=${q}&limit=${limit}&persist=${persist}`
-  );
-}
 
 export type NoteDictionaryItem = {
   id: string;
@@ -61,24 +51,128 @@ export type NoteDictionaryItem = {
   usageCount: number | null;
 };
 
-export function searchNotes(params: { search: string; limit?: number }) {
-  const q = encodeURIComponent(params.search);
-  const limit = params.limit ?? 30;
-  return authedFetch<NoteDictionaryItem[]>(`/api/v1/notes?search=${q}&limit=${limit}`);
-}
-
 export type CreateCommunityFragranceRequest = {
   name: string;
   brand: string;
   year?: string | null;
   concentration?: string | null;
   longevityScore?: number | null; // 1-5
-  sillageScore?: number | null;   // 1-5
+  sillageScore?: number | null; // 1-5
   visibility?: "PRIVATE" | "PUBLIC";
   topNoteIds?: string[];
   middleNoteIds?: string[];
   baseNoteIds?: string[];
 };
+
+/**
+ * -----------------------------
+ * Tiny in-memory request cache
+ * -----------------------------
+ */
+const TTL_SEARCH_MS = 20_000;
+const TTL_DETAIL_MS = 60_000;
+type CacheEntry<T> = { value: T; expiresAt: number };
+
+const valueCache = new Map<string, CacheEntry<any>>();
+const inflight = new Map<string, Promise<any>>();
+
+function now() {
+  return Date.now();
+}
+
+function getCached<T>(key: string): T | null {
+  const hit = valueCache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt < now()) {
+    valueCache.delete(key);
+    return null;
+  }
+  return hit.value as T;
+}
+
+function setCached<T>(key: string, value: T, ttlMs: number) {
+  valueCache.set(key, { value, expiresAt: now() + ttlMs });
+}
+
+async function deduped<T>(key: string, fn: () => Promise<T>, ttlMs?: number): Promise<T> {
+  const cached = ttlMs ? getCached<T>(key) : null;
+  if (cached) return cached;
+
+  const p0 = inflight.get(key) as Promise<T> | undefined;
+  if (p0) return p0;
+
+  const p = fn()
+    .then((res) => {
+      if (ttlMs) setCached(key, res, ttlMs);
+      return res;
+    })
+    .finally(() => {
+      inflight.delete(key);
+    });
+
+  inflight.set(key, p);
+  return p;
+}
+
+// cache helper that is safe with AbortSignal
+async function cachedButNotDedupedIfAborted<T>(
+  key: string,
+  fn: () => Promise<T>,
+  ttlMs: number,
+  signal?: AbortSignal
+): Promise<T> {
+  const cached = getCached<T>(key);
+  if (cached) return cached;
+
+  // If a signal is provided, DO NOT share inflight promise
+  // (otherwise one abort cancels shared request for all listeners)
+  if (signal) {
+    const res = await fn();
+    setCached(key, res, ttlMs);
+    return res;
+  }
+
+  // If no signal, safe to dedupe
+  return deduped<T>(key, fn, ttlMs);
+}
+
+const DEFAULT_PERSIST = true;
+
+export function searchFragrances(
+  params: { q: string; limit?: number; persist?: boolean },
+  opts?: { signal?: AbortSignal }
+) {
+  const q = encodeURIComponent(params.q);
+  const limit = params.limit ?? 20;
+  const persist = params.persist ?? DEFAULT_PERSIST;
+
+  const url = `/api/v1/fragrances/search?q=${q}&limit=${limit}&persist=${persist}`;
+  const key = `GET:${url}`;
+
+  return cachedButNotDedupedIfAborted(
+    key,
+    () => authedFetch<FragranceSearchResult[]>(url, { signal: opts?.signal }),
+    TTL_SEARCH_MS,
+    opts?.signal
+  );
+}
+
+export function searchNotes(
+  params: { search: string; limit?: number },
+  opts?: { signal?: AbortSignal }
+) {
+  const q = encodeURIComponent(params.search);
+  const limit = params.limit ?? 30;
+  const url = `/api/v1/notes?search=${q}&limit=${limit}`;
+  const key = `GET:${url}`;
+
+  return cachedButNotDedupedIfAborted(
+    key,
+    () => authedFetch<NoteDictionaryItem[]>(url, { signal: opts?.signal }),
+    TTL_SEARCH_MS,
+    opts?.signal
+  );
+}
 
 export function createCommunityFragrance(body: CreateCommunityFragranceRequest) {
   return authedFetch<FragranceSearchResult>(`/api/v1/community-fragrances`, {
@@ -87,16 +181,40 @@ export function createCommunityFragrance(body: CreateCommunityFragranceRequest) 
   });
 }
 
-export function searchCommunityFragrances(params: { q: string; limit?: number }) {
+export function searchCommunityFragrances(
+  params: { q: string; limit?: number },
+  opts?: { signal?: AbortSignal }
+) {
   const q = encodeURIComponent(params.q);
   const limit = params.limit ?? 20;
-  return authedFetch<FragranceSearchResult[]>(
-    `/api/v1/community-fragrances/search?q=${q}&limit=${limit}`
+  const url = `/api/v1/community-fragrances/search?q=${q}&limit=${limit}`;
+  const key = `GET:${url}`;
+
+  return cachedButNotDedupedIfAborted(
+    key,
+    () => authedFetch<FragranceSearchResult[]>(url, { signal: opts?.signal }),
+    TTL_SEARCH_MS,
+    opts?.signal
   );
 }
 
-export function getFragranceDetail(params: { source?: "FRAGELLA" | "COMMUNITY"; externalId: string }) {
+export function getFragranceDetail(
+  params: { source?: "FRAGELLA" | "COMMUNITY"; externalId: string },
+  opts?: { signal?: AbortSignal; bypassCache?: boolean }
+) {
   const source = params.source ?? "FRAGELLA";
   const externalId = encodeURIComponent(params.externalId);
-  return authedFetch<FragranceSearchResult>(`/api/v1/fragrances/${externalId}?source=${source}`);
+  const url = `/api/v1/fragrances/${externalId}?source=${source}`;
+  const key = `GET:${url}`;
+
+  if (opts?.bypassCache) {
+    return authedFetch<FragranceSearchResult>(url, { signal: opts?.signal });
+  }
+
+  return cachedButNotDedupedIfAborted(
+    key,
+    () => authedFetch<FragranceSearchResult>(url, { signal: opts?.signal }),
+    TTL_DETAIL_MS,
+    opts?.signal
+  );
 }

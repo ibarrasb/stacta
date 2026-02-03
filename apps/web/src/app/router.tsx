@@ -1,28 +1,24 @@
-// apps/web/src/app/router.tsx
 import { createBrowserRouter } from "react-router-dom";
+import { lazy } from "react";
 
 import AppLayout from "@/routes/AppLayout";
-
-import LandingPage from "@/pages/Landing";
-import SignInPage from "@/pages/Auth/SignIn";
-import SignUpPage from "@/pages/Auth/SignUp";
-import ForgotPasswordPage from "@/pages/Auth/ForgotPassword";
-import ConfirmSignUpPage from "@/pages/Auth/ConfirmSignUp";
-import NotFoundPage from "@/pages/NotFound";
-import ProfilePage from "@/pages/Profile";
-import SearchPage from "@/pages/Search/index";
-import FragranceDetailPage from "@/pages/Fragrances/FragranceDetail";
-
-// { path: "/search", element: <SearchPage /> },
-// { path: "/fragrances/:id", element: <FragranceDetailPage /> },
-
-
 
 import RequireAuth from "@/routes/RequireAuth";
 import RedirectIfAuthed from "@/routes/RedirectIfAuthed";
 
-// protected pages
-import HomePage from "@/pages/Home";
+// Lazy-load pages (code splitting)
+const LandingPage = lazy(() => import("@/pages/Landing"));
+const SignInPage = lazy(() => import("@/pages/Auth/SignIn"));
+const SignUpPage = lazy(() => import("@/pages/Auth/SignUp"));
+const ForgotPasswordPage = lazy(() => import("@/pages/Auth/ForgotPassword"));
+const ConfirmSignUpPage = lazy(() => import("@/pages/Auth/ConfirmSignUp"));
+const NotFoundPage = lazy(() => import("@/pages/NotFound"));
+
+const HomePage = lazy(() => import("@/pages/Home"));
+const ProfilePage = lazy(() => import("@/pages/Profile"));
+const SearchPage = lazy(() => import("@/pages/Search/index"));
+const FragranceDetailPage = lazy(() => import("@/pages/Fragrances/FragranceDetail"));
+const SettingsPage = lazy(() => import("@/pages/Settings"));
 
 export const router = createBrowserRouter([
   {
@@ -81,7 +77,7 @@ export const router = createBrowserRouter([
           </RequireAuth>
         ),
       },
-       {
+      {
         path: "/profile",
         element: (
           <RequireAuth>
@@ -105,8 +101,14 @@ export const router = createBrowserRouter([
           </RequireAuth>
         ),
       },
-      
-
+      {
+        path: "/settings",
+        element: (
+          <RequireAuth>
+            <SettingsPage />
+          </RequireAuth>
+        ),
+      },
 
       { path: "*", element: <NotFoundPage /> },
     ],

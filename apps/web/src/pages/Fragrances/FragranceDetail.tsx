@@ -1,5 +1,5 @@
 // apps/web/src/pages/Fragrances/FragranceDetail.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,10 @@ function pct(n01: number) {
 }
 
 // ---- Provider label -> percent mapping (robust) ----
-function labelToPercent(label: any, kind: "longevity" | "sillage" | "confidence" | "popularity") {
+function labelToPercent(
+  label: any,
+  kind: "longevity" | "sillage" | "confidence" | "popularity"
+) {
   const v = normalizeLabel(label);
 
   if (kind === "longevity") {
@@ -72,7 +75,6 @@ function labelToPercent(label: any, kind: "longevity" | "sillage" | "confidence"
     return map[v] ?? 0;
   }
 
-  // Confidence / Popularity (categorical)
   const map: Record<string, number> = {
     low: 0.25,
     medium: 0.55,
@@ -135,7 +137,9 @@ function Bar({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="text-xs text-white/70">{label}</div>
-        {rightText ? <div className="text-xs font-medium text-white/85">{rightText}</div> : null}
+        {rightText ? (
+          <div className="text-xs font-medium text-white/85">{rightText}</div>
+        ) : null}
       </div>
 
       <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
@@ -145,7 +149,6 @@ function Bar({
   );
 }
 
-// ---- Stars (relative within list) ----
 function Stars({ value01 }: { value01: number }) {
   const stars = Math.max(0, Math.min(5, Math.round(clamp01(value01) * 5)));
   return (
@@ -159,7 +162,6 @@ function Stars({ value01 }: { value01: number }) {
   );
 }
 
-// ---- Chips (more colorful) ----
 function VibeChip({ text }: { text: string }) {
   const idx = hashIdx(text.toLowerCase(), BAR_GRADIENTS.length);
   const dotG = BAR_GRADIENTS[idx];
@@ -182,6 +184,7 @@ function NoteTile({ note }: { note: Note }) {
             alt={note.name}
             className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04]"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="text-[10px] text-white/50">No image</div>
@@ -227,9 +230,7 @@ function RankingCard({ title, items }: { title: string; items: RankingItem[] }) 
       <div className="flex items-center justify-between">
         <div>
           <div className="text-xs font-medium text-white/80">{title}</div>
-          <div className="mt-1 text-[11px] text-white/45">
-            model score (compare within this fragrance)
-          </div>
+          <div className="mt-1 text-[11px] text-white/45">model score (compare within this fragrance)</div>
         </div>
         <div className="text-[10px] text-white/45">ranking</div>
       </div>
@@ -247,10 +248,7 @@ function RankingCard({ title, items }: { title: string; items: RankingItem[] }) 
                 <div className="text-xs text-white/80 capitalize">{it.name}</div>
 
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
-                  <div
-                    className={cx("h-full rounded-full bg-gradient-to-r", grad)}
-                    style={{ width: pct(v01) }}
-                  />
+                  <div className={cx("h-full rounded-full bg-gradient-to-r", grad)} style={{ width: pct(v01) }} />
                 </div>
 
                 <div className="flex items-center justify-end gap-2">
@@ -266,9 +264,8 @@ function RankingCard({ title, items }: { title: string; items: RankingItem[] }) 
       </div>
 
       <div className="mt-4 text-xs text-white/45">
-        These are algorithmic suitability scores (notes + accords). Use them to compare options
-        within this fragrance—not as an absolute 0–5 scale, and not as a global comparison across
-        different fragrances.
+        These are algorithmic suitability scores (notes + accords). Use them to compare options within this
+        fragrance—not as an absolute 0–5 scale, and not as a global comparison across different fragrances.
       </div>
     </div>
   );
@@ -293,14 +290,18 @@ export default function FragranceDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // retry nonce
+  const [retryTick, setRetryTick] = useState(0);
+
+  // consume-once "force refresh" (bypass API-layer TTL cache)
+  const forceRefreshRef = useRef(false);
+
   // Works because Search navigates with: { state: { fragrance: item, from: {...} } }
   const stateFragrance = (location?.state?.fragrance ?? null) as (FragranceSearchResult & any) | null;
   const fragrance = (stateFragrance ?? loaded) as (FragranceSearchResult & any) | null;
 
   const from = location?.state?.from as { pathname?: string; search?: string } | undefined;
 
-  // Prefer single fetch: use externalId prefix if you use one.
-  // If you don't, we still do FRAGELLA -> COMMUNITY fallback.
   function inferPreferredSource(id: string): "FRAGELLA" | "COMMUNITY" | null {
     const s = id.toLowerCase();
     if (s.startsWith("community_") || s.startsWith("comm_") || s.startsWith("c_")) return "COMMUNITY";
@@ -311,51 +312,60 @@ export default function FragranceDetailPage() {
     if (stateFragrance) return;
     if (!routeExternalId) return;
 
-    let cancelled = false;
+    const ctrl = new AbortController();
+
     setLoadError(null);
     setIsLoading(true);
 
-    (async () => {
-      const preferred = inferPreferredSource(routeExternalId);
+    const preferred = inferPreferredSource(routeExternalId);
 
+    // if user clicked Retry, bypass the in-memory TTL cache once
+    const bypassCache = forceRefreshRef.current;
+    forceRefreshRef.current = false;
+
+    (async () => {
       // Try preferred first
       try {
-        const first = await getFragranceDetail({ source: preferred ?? "FRAGELLA", externalId: routeExternalId });
-        if (cancelled) return;
+        const first = await getFragranceDetail(
+          { source: preferred ?? "FRAGELLA", externalId: routeExternalId },
+          { signal: ctrl.signal, bypassCache }
+        );
         setLoaded(first);
         return;
-      } catch {
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
         // ignore and try fallback
       }
 
-      // Fallback (only if preferred was FRAGELLA)
+      // Fallback to COMMUNITY (only if preferred wasn't community)
       if (preferred !== "COMMUNITY") {
         try {
-          const second = await getFragranceDetail({ source: "COMMUNITY", externalId: routeExternalId });
-          if (cancelled) return;
+          const second = await getFragranceDetail(
+            { source: "COMMUNITY", externalId: routeExternalId },
+            { signal: ctrl.signal, bypassCache }
+          );
           setLoaded(second);
           return;
-        } catch {
+        } catch (e: any) {
+          if (e?.name === "AbortError") return;
           // ignore
         }
       }
 
-      if (cancelled) return;
       setLoadError("Could not load fragrance details. Open it from Search, or try again.");
     })()
-      .catch(() => {
-        if (cancelled) return;
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
         setLoadError("Could not load fragrance details. Open it from Search, or try again.");
       })
       .finally(() => {
-        if (cancelled) return;
-        setIsLoading(false);
+        if (!ctrl.signal.aborted) setIsLoading(false);
       });
 
     return () => {
-      cancelled = true;
+      ctrl.abort();
     };
-  }, [routeExternalId, stateFragrance]);
+  }, [routeExternalId, stateFragrance, retryTick]);
 
   const accords = useMemo(() => {
     const a = fragrance?.mainAccords ?? [];
@@ -404,18 +414,17 @@ export default function FragranceDetailPage() {
       .filter((x: any) => x.name && Number.isFinite(x.score));
   }, [fragrance]);
 
-  async function addToCollection() {
+  const addToCollection = useCallback(async () => {
     alert("Add to collection (wire backend endpoint next).");
-  }
+  }, []);
 
-  async function writeReview() {
+  const writeReview = useCallback(async () => {
     alert("Review (wire review flow next).");
-  }
+  }, []);
 
   const buyDisabled = !fragrance?.purchaseUrl;
 
-  // Accord visualization: if provider gives "Main Accords Percentage" we show bars ONLY (no duplicate chips).
-  // Otherwise chips ONLY.
+  // Accord visualization: if provider gives "Main Accords Percentage" show bars ONLY; otherwise chips ONLY.
   const accordBars = useMemo(() => {
     if (!accordsPercent) return null;
 
@@ -485,7 +494,6 @@ export default function FragranceDetailPage() {
         </div>
 
         <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-          {/* Loading / Error / Empty */}
           {showSkeleton ? (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="text-sm font-semibold">Loading…</div>
@@ -501,10 +509,7 @@ export default function FragranceDetailPage() {
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  className="h-10 rounded-xl px-5"
-                  onClick={() => navigate("/search")}
-                >
+                <Button className="h-10 rounded-xl px-5" onClick={() => navigate("/search")}>
                   Go to Search
                 </Button>
 
@@ -513,16 +518,8 @@ export default function FragranceDetailPage() {
                     variant="secondary"
                     className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
                     onClick={() => {
-                      // retry fetch
-                      setLoaded(null);
-                      setLoadError(null);
-                      setIsLoading(false);
-                      // Effect will run again because stateFragrance is still null and routeExternalId unchanged,
-                      // but we can force by toggling isLoading quickly:
-                      setTimeout(() => setIsLoading(true), 0);
-                      setTimeout(() => setIsLoading(false), 0);
-                      // (pragmatic: simplest "retry" without adding extra state)
-                      // If you prefer, we can add a retryCounter state instead.
+                      forceRefreshRef.current = true; // bypass TTL cache once
+                      setRetryTick((x) => x + 1);
                     }}
                   >
                     Retry
@@ -542,11 +539,10 @@ export default function FragranceDetailPage() {
                         alt={`${fragrance.brand} ${fragrance.name}`}
                         className="w-full bg-white/5 object-contain"
                         loading="lazy"
+                        decoding="async"
                       />
                     ) : (
-                      <div className="grid min-h-[360px] place-items-center text-xs text-white/50">
-                        No image
-                      </div>
+                      <div className="grid min-h-[360px] place-items-center text-xs text-white/50">No image</div>
                     )}
                   </div>
                 </div>
@@ -592,14 +588,11 @@ export default function FragranceDetailPage() {
                     </div>
                   </div>
 
-                  {/* Performance (longevity + sillage + signals) */}
                   <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-xs font-medium text-white/80">Performance</div>
-                        <div className="mt-1 text-[11px] text-white/45">
-                          longevity • sillage • signals
-                        </div>
+                        <div className="mt-1 text-[11px] text-white/45">longevity • sillage • signals</div>
                       </div>
                       <div className="text-[10px] text-white/45">from provider</div>
                     </div>
@@ -642,12 +635,8 @@ export default function FragranceDetailPage() {
               <div className="space-y-5">
                 <div>
                   <div className="text-xs text-white/60">{fragrance.brand || "—"}</div>
+                  <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
 
-                  <div className="mt-1 text-2xl font-semibold tracking-tight">
-                    {fragrance.name || "—"}
-                  </div>
-
-                  {/* Oil Type + meta */}
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {oilType ? (
                       <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/85">
@@ -661,7 +650,6 @@ export default function FragranceDetailPage() {
                   </div>
                 </div>
 
-                {/* Main accords (bars OR chips, never both) */}
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -688,8 +676,8 @@ export default function FragranceDetailPage() {
                         })}
 
                         <div className="mt-3 text-xs text-white/45">
-                          Fragella’s accord strengths are derived from internal percentages, then
-                          returned as labels (Dominant/Prominent/Moderate) for readability.
+                          Fragella’s accord strengths are derived from internal percentages, then returned
+                          as labels (Dominant/Prominent/Moderate) for readability.
                         </div>
                       </div>
                     ) : (
@@ -704,7 +692,6 @@ export default function FragranceDetailPage() {
                   </div>
                 </div>
 
-                {/* General notes */}
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <div className="flex items-center justify-between">
                     <div className="text-xs font-medium text-white/80">General notes</div>
@@ -720,20 +707,16 @@ export default function FragranceDetailPage() {
                   </div>
                 </div>
 
-                {/* Rankings */}
                 <div className="grid gap-4 lg:grid-cols-2">
                   <RankingCard title="Season ranking" items={seasonRanking} />
                   <RankingCard title="Occasion ranking" items={occasionRanking} />
                 </div>
 
-                {/* Perfume pyramid */}
                 {hasStageNotes ? (
                   <div className="space-y-4">
                     <div>
                       <div className="text-sm font-semibold">Perfume pyramid</div>
-                      <div className="mt-1 text-xs text-white/55">
-                        Top opens • Middle heart • Base lasts
-                      </div>
+                      <div className="mt-1 text-xs text-white/55">Top opens • Middle heart • Base lasts</div>
                     </div>
 
                     <div className="grid gap-4">

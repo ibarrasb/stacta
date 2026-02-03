@@ -297,14 +297,11 @@ export default function ProfilePage() {
                 <Separator className="bg-white/10" />
 
                 <Button
-                  variant="secondary"
-                  className="h-10 w-full rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
-                  onClick={() => {
-                    // placeholder action; later can be "Change password", "Delete account", etc.
-                    alert("Settings coming soon.");
-                  }}
+                    variant="secondary"
+                    className="h-10 w-full rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                    onClick={() => navigate("/settings")}
                 >
-                  Profile settings (soon)
+                  Profile settings
                 </Button>
               </div>
             )}
