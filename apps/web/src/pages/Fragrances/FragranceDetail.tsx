@@ -5,6 +5,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { FragranceSearchResult } from "@/lib/api/fragrances";
 import { getFragranceDetail } from "@/lib/api/fragrances";
+const DEFAULT_NOTE_IMG = "/src/assets/notes/download.svg";
+
 
 type Note = { name: string; imageUrl: string | null };
 type RankingItem = { name: string; score: number };
@@ -175,25 +177,33 @@ function VibeChip({ text }: { text: string }) {
 }
 
 function NoteTile({ note }: { note: Note }) {
+  const [src, setSrc] = useState(note.imageUrl || DEFAULT_NOTE_IMG);
+
+  // If note changes, reset src
+  useEffect(() => {
+    setSrc(note.imageUrl || DEFAULT_NOTE_IMG);
+  }, [note.imageUrl]);
+
   return (
     <div className="group flex w-[104px] flex-col items-center gap-2">
       <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
-        {note.imageUrl ? (
-          <img
-            src={note.imageUrl}
-            alt={note.name}
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04]"
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <div className="text-[10px] text-white/50">No image</div>
-        )}
+        <img
+          src={src}
+          alt={note.name}
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04]"
+          loading="lazy"
+          decoding="async"
+          onError={() => {
+            // prevent infinite loop if default asset fails for some reason
+            if (src !== DEFAULT_NOTE_IMG) setSrc(DEFAULT_NOTE_IMG);
+          }}
+        />
       </div>
       <div className="w-full truncate text-center text-xs text-white/85">{note.name}</div>
     </div>
   );
 }
+
 
 function PyramidRow({ title, notes }: { title: string; notes: Note[] }) {
   return (
