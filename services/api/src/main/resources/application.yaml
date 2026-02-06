@@ -5,6 +5,11 @@ fragella:
   base-url: https://api.fragella.com/api/v1
   api-key: ${FRAGELLA_API_KEY:}
 
+http:
+  client:
+    connect-timeout-ms: 5000
+    read-timeout-ms: 20000
+
 spring:
   application:
     name: stacta-api
@@ -31,7 +36,6 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:16379}
-
 
   cache:
     type: redis

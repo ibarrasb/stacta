@@ -1,15 +1,20 @@
 package com.stacta.api.integrations.fragella;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
+import java.time.Instant;
 import java.util.List;
 
 @Component
 public class FragellaClient {
+
+  private static final Logger log = LoggerFactory.getLogger(FragellaClient.class);
 
   private final RestClient rest;
   private final ObjectMapper om;
@@ -34,14 +39,18 @@ public class FragellaClient {
 
   public List<FragellaDtos.Fragrance> search(String q, int limit) {
     int safeLimit = Math.min(Math.max(limit, 1), 20);
-    System.out.println("Calling Fragella API @ " + java.time.Instant.now() + " q=" + q + " limit=" + safeLimit);
+    String needle = (q == null) ? "" : q.trim();
+    if (needle.isBlank()) return List.of();
 
+    if (log.isDebugEnabled()) {
+      log.debug("Fragella search start ts={} q='{}' limit={}", Instant.now(), needle, safeLimit);
+    }
 
     try {
       String raw = rest.get()
         .uri(uriBuilder -> uriBuilder
           .path("/fragrances")
-          .queryParam("search", q)
+          .queryParam("search", needle)
           .queryParam("limit", safeLimit)
           .build()
         )
@@ -50,12 +59,11 @@ public class FragellaClient {
 
       if (raw == null || raw.isBlank()) return List.of();
       return om.readerForListOf(FragellaDtos.Fragrance.class).readValue(raw);
-        
+
     } catch (HttpClientErrorException.NotFound e) {
       return List.of();
     } catch (Exception e) {
       throw new RuntimeException("Fragella search failed", e);
     }
-    
   }
 }

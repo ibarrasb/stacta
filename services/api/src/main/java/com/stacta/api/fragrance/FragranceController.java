@@ -2,7 +2,7 @@ package com.stacta.api.fragrance;
 
 import com.stacta.api.fragrance.dto.FragranceSearchResult;
 import com.stacta.api.integrations.fragella.FragellaDtos;
-import com.stacta.api.note.NoteService;
+import com.stacta.api.note.NoteIngestAsyncService;
 import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -15,14 +15,17 @@ import java.util.List;
 public class FragranceController {
 
   private final FragellaSearchService searchService;
-  private final NoteService noteService;
+  private final NoteIngestAsyncService noteIngestAsyncService;
 
-  public FragranceController(FragellaSearchService searchService, NoteService noteService) {
+  public FragranceController(
+    FragellaSearchService searchService,
+    NoteIngestAsyncService noteIngestAsyncService
+  ) {
     this.searchService = searchService;
-    this.noteService = noteService;
+    this.noteIngestAsyncService = noteIngestAsyncService;
   }
 
-  @Operation(summary = "Search fragrances via Fragella. Cached when persist=false. When persist=true, does NOT cache and persists NOTES only.")
+  @Operation(summary = "Search fragrances via Fragella. Cached when persist=false. When persist=true, does NOT cache and persists NOTES only (async).")
   @GetMapping("/search")
   public List<FragranceSearchResult> search(
     @RequestParam("q") String q,
@@ -41,11 +44,12 @@ public class FragranceController {
       return searchService.searchCached(q, limit);
     }
 
-    // non-cached mode (persist=true): fetch raw, persist NOTES only, then map
+    // non-cached mode (persist=true): fetch raw, kick off NOTE ingestion async, then map + return immediately
     List<FragellaDtos.Fragrance> raw = searchService.searchRaw(q, limit);
 
     if (raw != null && !raw.isEmpty()) {
-      noteService.ingestNotesFromFragella(raw);
+      // copy to avoid any surprises if the underlying list is mutable
+      noteIngestAsyncService.ingestNotesFromFragellaAsync(List.copyOf(raw));
     }
 
     return searchService.mapRaw(raw);
