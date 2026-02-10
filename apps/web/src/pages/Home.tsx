@@ -30,9 +30,6 @@ export default function HomePage() {
             <Button className="h-11 rounded-xl px-6" onClick={() => navigate("/search")}>
               Go to search
             </Button>
-            <div className="text-xs text-white/50">
-  API: {import.meta.env.VITE_API_URL}
-</div>
 
             <Button
               variant="secondary"
