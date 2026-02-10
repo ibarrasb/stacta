@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { searchFragrances, type FragranceSearchResult } from "@/lib/api/fragrances";
 import AddCommunityFragranceDialog from "@/components/fragrances/AddCommunityFragranceDialog";
+import fragrancePlaceholder from "@/assets/illustrations/fragrance-placeholder-4x3.png";
+
+const FALLBACK_IMG = fragrancePlaceholder;
+
 
 function pickExternalId(item: any): string | null {
   const candidates = [item?.externalId, item?.external_id, item?.id, item?.slug, item?.uuid];
@@ -104,26 +108,31 @@ const ResultCard = React.memo(function ResultCard({
   idx: number;
   onOpen: (item: FragranceSearchResult, idx: number) => void;
 }) {
-  //removed unused routeId + key memo (lint + perf): parent provides key already
+  // ✅ put it HERE (normal JS, before return)
+  const src = item.imageUrl?.trim() ? item.imageUrl : FALLBACK_IMG;
+
   return (
     <button
       className="group overflow-hidden rounded-3xl border border-white/10 bg-white/5 text-left transition hover:bg-white/7"
       onClick={() => onOpen(item, idx)}
     >
       <div className="aspect-[4/3] w-full overflow-hidden bg-white/5">
-        {item.imageUrl ? (
-          <img
-            src={item.imageUrl}
-            alt={`${item.brand} ${item.name}`}
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs text-white/50">
-            No image
-          </div>
-        )}
+        <img
+          src={src}
+          alt={`${item.brand} ${item.name}`.trim()}
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+          loading="lazy"
+          decoding="async"
+          onError={(e) => {
+            const img = e.currentTarget;
+
+            // prevent infinite loop if fallback also fails
+            if (img.dataset.fallbackApplied === "1") return;
+
+            img.dataset.fallbackApplied = "1";
+            img.src = FALLBACK_IMG;
+          }}
+        />
       </div>
 
       <div className="p-4">
@@ -144,6 +153,7 @@ const ResultCard = React.memo(function ResultCard({
     </button>
   );
 });
+
 
 export default function SearchPage() {
   const navigate = useNavigate();

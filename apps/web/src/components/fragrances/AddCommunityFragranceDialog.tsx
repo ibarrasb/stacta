@@ -13,6 +13,7 @@ import {
   type FragranceSearchResult,
 } from "@/lib/api/fragrances";
 
+const DEFAULT_NOTE_IMG = "/src/assets/notes/download.svg";
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -169,7 +170,10 @@ export default function AddCommunityFragranceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl rounded-3xl border border-white/10 bg-[#0b0b10] text-white">
+      <DialogContent
+  className="max-h-[85dvh] w-[calc(100vw-24px)] max-w-2xl overflow-y-auto overscroll-contain rounded-3xl border border-white/10 bg-[#0b0b10] text-white [-webkit-overflow-scrolling:touch]"
+>
+
         <DialogHeader>
           <DialogTitle className="text-lg">Add a community fragrance</DialogTitle>
         </DialogHeader>
@@ -304,18 +308,23 @@ export default function AddCommunityFragranceDialog({
             </div>
 
             {noteResults.length ? (
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {noteResults.slice(0, 10).map((n) => (
+              <div className="mt-3 max-h-60 overflow-y-auto pr-1">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {noteResults.slice(0, 30).map((n) => (
                   <div
                     key={n.id}
                     className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      {n.imageUrl ? (
-                        <img src={n.imageUrl} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
-                      ) : (
-                        <div className="h-9 w-9 shrink-0 rounded-xl bg-white/10" />
-                      )}
+                    <img
+                          src={n.imageUrl || DEFAULT_NOTE_IMG}
+                          onError={(e) => {
+                            // handles broken/404 note images too
+                            e.currentTarget.src = DEFAULT_NOTE_IMG;
+                          }}
+                          alt={n.name}
+                          className="h-9 w-9 shrink-0 rounded-xl object-cover"
+                        />
                       <div className="min-w-0">
                         <div className="truncate text-sm">{n.name}</div>
                         <div className="mt-0.5 text-[11px] text-white/50">
@@ -333,6 +342,7 @@ export default function AddCommunityFragranceDialog({
                     </Button>
                   </div>
                 ))}
+                </div>
               </div>
             ) : null}
 

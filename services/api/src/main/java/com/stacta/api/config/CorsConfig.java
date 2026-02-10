@@ -17,7 +17,8 @@ public class CorsConfig {
 
     //Dev origin (add prod later)
     config.setAllowedOrigins(List.of(
-      "http://localhost:5173"
+      "http://localhost:5173",
+  "http://192.168.50.190:5173"
     ));
 
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

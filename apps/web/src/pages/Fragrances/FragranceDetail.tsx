@@ -5,7 +5,12 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { FragranceSearchResult } from "@/lib/api/fragrances";
 import { getFragranceDetail } from "@/lib/api/fragrances";
-const DEFAULT_NOTE_IMG = "/src/assets/notes/download.svg";
+
+import fragrancePlaceholder from "@/assets/illustrations/fragrance-placeholder-4x3.png";
+import defaultNoteImg from "@/assets/notes/download.svg";
+
+const DEFAULT_NOTE_IMG = defaultNoteImg;
+const FALLBACK_FRAGRANCE_IMG = fragrancePlaceholder;
 
 
 type Note = { name: string; imageUrl: string | null };
@@ -31,11 +36,7 @@ function pct(n01: number) {
   return `${Math.round(clamp01(n01) * 100)}%`;
 }
 
-// ---- Provider label -> percent mapping (robust) ----
-function labelToPercent(
-  label: any,
-  kind: "longevity" | "sillage" | "confidence" | "popularity"
-) {
+function labelToPercent(label: any, kind: "longevity" | "sillage" | "confidence" | "popularity") {
   const v = normalizeLabel(label);
 
   if (kind === "longevity") {
@@ -44,11 +45,9 @@ function labelToPercent(
       weak: 0.25,
       short: 0.28,
       "short lasting": 0.28,
-
       moderate: 0.5,
       medium: 0.5,
       average: 0.5,
-
       long: 0.75,
       "long lasting": 0.78,
       "very long": 0.9,
@@ -64,10 +63,8 @@ function labelToPercent(
       intimate: 0.22,
       soft: 0.28,
       close: 0.28,
-
       moderate: 0.5,
       medium: 0.5,
-
       strong: 0.78,
       heavy: 0.85,
       "very strong": 0.92,
@@ -88,7 +85,6 @@ function labelToPercent(
   return map[v] ?? 0;
 }
 
-// ---- Notes ----
 function normalizeNotes(input: any): { top: Note[]; middle: Note[]; base: Note[] } {
   const toList = (arr: any): Note[] => {
     if (!Array.isArray(arr)) return [];
@@ -107,7 +103,6 @@ function normalizeNotes(input: any): { top: Note[]; middle: Note[]; base: Note[]
   };
 }
 
-// ---- Color helpers ----
 const BAR_GRADIENTS = [
   "from-cyan-400 via-fuchsia-400 to-amber-400",
   "from-emerald-400 via-cyan-400 to-violet-400",
@@ -139,9 +134,7 @@ function Bar({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="text-xs text-white/70">{label}</div>
-        {rightText ? (
-          <div className="text-xs font-medium text-white/85">{rightText}</div>
-        ) : null}
+        {rightText ? <div className="text-xs font-medium text-white/85">{rightText}</div> : null}
       </div>
 
       <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
@@ -179,7 +172,6 @@ function VibeChip({ text }: { text: string }) {
 function NoteTile({ note }: { note: Note }) {
   const [src, setSrc] = useState(note.imageUrl || DEFAULT_NOTE_IMG);
 
-  // If note changes, reset src
   useEffect(() => {
     setSrc(note.imageUrl || DEFAULT_NOTE_IMG);
   }, [note.imageUrl]);
@@ -194,7 +186,6 @@ function NoteTile({ note }: { note: Note }) {
           loading="lazy"
           decoding="async"
           onError={() => {
-            // prevent infinite loop if default asset fails for some reason
             if (src !== DEFAULT_NOTE_IMG) setSrc(DEFAULT_NOTE_IMG);
           }}
         />
@@ -203,7 +194,6 @@ function NoteTile({ note }: { note: Note }) {
     </div>
   );
 }
-
 
 function PyramidRow({ title, notes }: { title: string; notes: Note[] }) {
   return (
@@ -229,9 +219,7 @@ function PyramidRow({ title, notes }: { title: string; notes: Note[] }) {
 }
 
 function RankingCard({ title, items }: { title: string; items: RankingItem[] }) {
-  const clean = (items ?? []).filter(
-    (x) => x && typeof x.name === "string" && Number.isFinite(x.score)
-  );
+  const clean = (items ?? []).filter((x) => x && typeof x.name === "string" && Number.isFinite(x.score));
   const sorted = clean.slice().sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const max = Math.max(1, ...sorted.map((x) => x.score || 0));
 
@@ -251,10 +239,7 @@ function RankingCard({ title, items }: { title: string; items: RankingItem[] }) 
             const v01 = clamp01((it.score || 0) / max);
             const grad = BAR_GRADIENTS[hashIdx(`${title}:${it.name}`, BAR_GRADIENTS.length)];
             return (
-              <div
-                key={`${it.name}-${it.score}`}
-                className="grid grid-cols-[90px_1fr_130px] items-center gap-3"
-              >
+              <div key={`${it.name}-${it.score}`} className="grid grid-cols-[90px_1fr_130px] items-center gap-3">
                 <div className="text-xs text-white/80 capitalize">{it.name}</div>
 
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
@@ -274,8 +259,8 @@ function RankingCard({ title, items }: { title: string; items: RankingItem[] }) 
       </div>
 
       <div className="mt-4 text-xs text-white/45">
-        These are algorithmic suitability scores (notes + accords). Use them to compare options within this
-        fragrance—not as an absolute 0–5 scale, and not as a global comparison across different fragrances.
+        These are algorithmic suitability scores (notes + accords). Use them to compare options within this fragrance—not as
+        an absolute 0–5 scale, and not as a global comparison across different fragrances.
       </div>
     </div>
   );
@@ -300,13 +285,9 @@ export default function FragranceDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // retry nonce
   const [retryTick, setRetryTick] = useState(0);
-
-  // consume-once "force refresh" (bypass API-layer TTL cache)
   const forceRefreshRef = useRef(false);
 
-  // Works because Search navigates with: { state: { fragrance: item, from: {...} } }
   const stateFragrance = (location?.state?.fragrance ?? null) as (FragranceSearchResult & any) | null;
   const fragrance = (stateFragrance ?? loaded) as (FragranceSearchResult & any) | null;
 
@@ -329,12 +310,10 @@ export default function FragranceDetailPage() {
 
     const preferred = inferPreferredSource(routeExternalId);
 
-    // if user clicked Retry, bypass the in-memory TTL cache once
     const bypassCache = forceRefreshRef.current;
     forceRefreshRef.current = false;
 
     (async () => {
-      // Try preferred first
       try {
         const first = await getFragranceDetail(
           { source: preferred ?? "FRAGELLA", externalId: routeExternalId },
@@ -344,10 +323,8 @@ export default function FragranceDetailPage() {
         return;
       } catch (e: any) {
         if (e?.name === "AbortError") return;
-        // ignore and try fallback
       }
 
-      // Fallback to COMMUNITY (only if preferred wasn't community)
       if (preferred !== "COMMUNITY") {
         try {
           const second = await getFragranceDetail(
@@ -358,7 +335,6 @@ export default function FragranceDetailPage() {
           return;
         } catch (e: any) {
           if (e?.name === "AbortError") return;
-          // ignore
         }
       }
 
@@ -394,8 +370,7 @@ export default function FragranceDetailPage() {
   }, [fragrance]);
 
   const noteGroups = useMemo(() => normalizeNotes(fragrance?.notes), [fragrance]);
-  const hasStageNotes =
-    noteGroups.top.length > 0 || noteGroups.middle.length > 0 || noteGroups.base.length > 0;
+  const hasStageNotes = noteGroups.top.length > 0 || noteGroups.middle.length > 0 || noteGroups.base.length > 0;
 
   const oilType = fragrance?.oilType ?? (fragrance as any)?.OilType ?? null;
   const longevityLabel = fragrance?.longevity ?? (fragrance as any)?.Longevity ?? null;
@@ -434,7 +409,6 @@ export default function FragranceDetailPage() {
 
   const buyDisabled = !fragrance?.purchaseUrl;
 
-  // Accord visualization: if provider gives "Main Accords Percentage" show bars ONLY; otherwise chips ONLY.
   const accordBars = useMemo(() => {
     if (!accordsPercent) return null;
 
@@ -443,24 +417,13 @@ export default function FragranceDetailPage() {
         const key = String(k).trim();
         if (!key) return null;
 
-        // numeric support (0..1 or 0..100)
         if (typeof v === "number" && Number.isFinite(v)) {
           const n = v > 1 ? v / 100 : v;
-          return {
-            name: key,
-            value01: clamp01(n),
-            labelRight: `${Math.round(clamp01(n) * 100)}%`,
-          };
+          return { name: key, value01: clamp01(n), labelRight: `${Math.round(clamp01(n) * 100)}%` };
         }
 
-        // categorical strings: Dominant/Prominent/Moderate
         const lv = normalizeLabel(v);
-        const map: Record<string, number> = {
-          dominant: 0.92,
-          prominent: 0.75,
-          moderate: 0.55,
-          low: 0.3,
-        };
+        const map: Record<string, number> = { dominant: 0.92, prominent: 0.75, moderate: 0.55, low: 0.3 };
         const n = map[lv] ?? 0;
         return { name: key, value01: n, labelRight: String(v) };
       })
@@ -471,13 +434,27 @@ export default function FragranceDetailPage() {
   }, [accordsPercent]);
 
   const headerMeta = useMemo(() => {
-    const parts: string[] = [];
-    if (fragrance?.year) parts.push(`Year ${fragrance.year}`);
-    if (fragrance?.gender) parts.push(String(fragrance.gender));
-    return parts;
+    const year = fragrance?.year ? String(fragrance.year) : null;
+    const gender = fragrance?.gender ? String(fragrance.gender) : null;
+    return { year, gender };
   }, [fragrance?.year, fragrance?.gender]);
+  
 
   const showSkeleton = !stateFragrance && isLoading && !loaded;
+
+  const ratingValue = useMemo(() => {
+    const candidates = [
+      (fragrance as any)?.rating,
+      (fragrance as any)?.ratingValue,
+      (fragrance as any)?.rating_score,
+      (fragrance as any)?.score,
+    ];
+    const raw = candidates.find((v) => v !== null && v !== undefined && String(v).trim() !== "");
+    const n = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [fragrance]);
+
+  const rating01 = ratingValue ? clamp01(ratingValue / 5) : 0;
 
   return (
     <div className="min-h-screen text-white">
@@ -528,7 +505,7 @@ export default function FragranceDetailPage() {
                     variant="secondary"
                     className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
                     onClick={() => {
-                      forceRefreshRef.current = true; // bypass TTL cache once
+                      forceRefreshRef.current = true;
                       setRetryTick((x) => x + 1);
                     }}
                   >
@@ -539,22 +516,53 @@ export default function FragranceDetailPage() {
             </div>
           ) : (
             <div className="grid gap-6 lg:grid-cols-[380px_1fr] lg:items-start">
-              {/* LEFT */}
               <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 lg:sticky lg:top-6">
                 <div className="p-4">
+                  <div className="mb-4 lg:hidden">
+                    <div className="text-xs text-white/60">{fragrance.brand || "—"}</div>
+                    <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {oilType ? (
+                        <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/85">
+                          {oilType}
+                        </span>
+                      ) : null}
+
+                        <div className="text-sm text-white/60">
+                          {headerMeta.year || headerMeta.gender ? (
+                            <span className="inline-flex items-center gap-2">
+                              {headerMeta.year ? (
+                                <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-white font-semibold tabular-nums">
+                                  {headerMeta.year}
+                                </span>
+                              ) : null}
+                              {headerMeta.gender ? <span>{headerMeta.gender}</span> : null}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </div>
+
+                    </div>
+                  </div>
+
                   <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-                    {fragrance.imageUrl ? (
                       <img
-                        src={fragrance.imageUrl}
-                        alt={`${fragrance.brand} ${fragrance.name}`}
+                        src={fragrance.imageUrl?.trim() ? fragrance.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                        alt={`${fragrance.brand} ${fragrance.name}`.trim()}
                         className="w-full bg-white/5 object-contain"
                         loading="lazy"
                         decoding="async"
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          if (img.dataset.fallbackApplied === "1") return;
+                          img.dataset.fallbackApplied = "1";
+                          img.src = FALLBACK_FRAGRANCE_IMG;
+                        }}
                       />
-                    ) : (
-                      <div className="grid min-h-[360px] place-items-center text-xs text-white/50">No image</div>
-                    )}
-                  </div>
+                    </div>
+
                 </div>
 
                 <div className="border-t border-white/10 bg-gradient-to-b from-white/5 to-black/10 p-4">
@@ -581,20 +589,24 @@ export default function FragranceDetailPage() {
                     </Button>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-3 gap-3">
+                  <div className="mt-4 grid grid-cols-2 gap-3">
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                       <div className="text-[11px] text-white/60">Rating</div>
-                      <div className="mt-1 text-sm font-semibold">{fragrance.rating ?? "—"}</div>
+                      {ratingValue ? (
+                        <div className="mt-2 flex flex-col items-center">
+                          <Stars value01={rating01} />
+                          <div className="mt-1 text-[12px] font-semibold tabular-nums text-white/85">
+                            {ratingValue.toFixed(2)}/5
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-sm font-semibold">—</div>
+                      )}
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                      <div className="text-[11px] text-white/60">Year</div>
-                      <div className="mt-1 text-sm font-semibold">{fragrance.year ?? "—"}</div>
-                    </div>
+
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                       <div className="text-[11px] text-white/60">Price</div>
-                      <div className="mt-1 text-sm font-semibold">
-                        {fragrance.priceValue ?? fragrance.price ?? "—"}
-                      </div>
+                      <div className="mt-1 text-sm font-semibold">{fragrance.priceValue ?? fragrance.price ?? "—"}</div>
                     </div>
                   </div>
 
@@ -641,9 +653,8 @@ export default function FragranceDetailPage() {
                 </div>
               </div>
 
-              {/* RIGHT */}
               <div className="space-y-5">
-                <div>
+                <div className="hidden lg:block">
                   <div className="text-xs text-white/60">{fragrance.brand || "—"}</div>
                   <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
 
@@ -654,9 +665,21 @@ export default function FragranceDetailPage() {
                       </span>
                     ) : null}
 
-                    <div className="text-sm text-white/60">
-                      {headerMeta.length ? headerMeta.join(" • ") : "—"}
-                    </div>
+                      <div className="text-sm text-white/60">
+                        {headerMeta.year || headerMeta.gender ? (
+                          <span className="inline-flex items-center gap-2">
+                            {headerMeta.year ? (
+                              <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-white font-semibold tabular-nums">
+                                {headerMeta.year}
+                              </span>
+                            ) : null}
+                            {headerMeta.gender ? <span>{headerMeta.gender}</span> : null}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </div>
+
                   </div>
                 </div>
 
@@ -675,26 +698,18 @@ export default function FragranceDetailPage() {
                         {accordBars.slice(0, 8).map((it) => {
                           const grad = BAR_GRADIENTS[hashIdx(it.name, BAR_GRADIENTS.length)];
                           return (
-                            <Bar
-                              key={it.name}
-                              label={it.name}
-                              value01={it.value01}
-                              rightText={it.labelRight}
-                              gradientClass={grad}
-                            />
+                            <Bar key={it.name} label={it.name} value01={it.value01} rightText={it.labelRight} gradientClass={grad} />
                           );
                         })}
 
                         <div className="mt-3 text-xs text-white/45">
-                          Fragella’s accord strengths are derived from internal percentages, then returned
-                          as labels (Dominant/Prominent/Moderate) for readability.
+                          Fragella’s accord strengths are derived from internal percentages, then returned as labels
+                          (Dominant/Prominent/Moderate) for readability.
                         </div>
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-2">
-                        {accords.length ? (
-                          accords.map((a, i) => <VibeChip key={`${a}-${i}`} text={a} />)
-                        ) : (
+                        {accords.length ? accords.map((a, i) => <VibeChip key={`${a}-${i}`} text={a} />) : (
                           <span className="text-xs text-white/50">—</span>
                         )}
                       </div>
@@ -709,9 +724,7 @@ export default function FragranceDetailPage() {
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {generalNotes.length ? (
-                      generalNotes.map((n, i) => <VibeChip key={`${n}-${i}`} text={n} />)
-                    ) : (
+                    {generalNotes.length ? generalNotes.map((n, i) => <VibeChip key={`${n}-${i}`} text={n} />) : (
                       <span className="text-xs text-white/50">—</span>
                     )}
                   </div>
@@ -738,9 +751,7 @@ export default function FragranceDetailPage() {
                 ) : (
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div className="text-xs font-medium text-white/60">Perfume pyramid</div>
-                    <div className="mt-2 text-sm text-white/70">
-                      This fragrance didn’t include staged notes in the response.
-                    </div>
+                    <div className="mt-2 text-sm text-white/70">This fragrance didn’t include staged notes in the response.</div>
                   </div>
                 )}
               </div>
