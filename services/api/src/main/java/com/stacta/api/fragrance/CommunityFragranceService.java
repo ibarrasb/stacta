@@ -8,6 +8,7 @@ import com.stacta.api.fragrance.dto.NotesDto;  // IMPORTANT: fragrance.dto.Notes
 import com.stacta.api.note.NoteEntity;
 import com.stacta.api.note.NoteRepository;
 import com.stacta.api.user.UserRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class CommunityFragranceService {
   private static String scoreLabel(Integer s) {
     return s == null ? null : (s + "/5");
   }
+
   public CommunityFragranceService(
     FragranceRepository fragrances,
     UserRepository users,
@@ -70,40 +72,44 @@ public class CommunityFragranceService {
     List<NoteEntity> middle = fetchNotesInOrder(req.middleNoteIds());
     List<NoteEntity> base   = fetchNotesInOrder(req.baseNoteIds());
 
-    // Build response snapshot 
+    // Build response snapshot
     FragranceSearchResult snapshot = new FragranceSearchResult(
-        "community",
-        externalId,
-        name,
-        brand,
-        year.equals("0") ? null : year,
-        null, // imageUrl (later: allow upload)
-        null, // gender
-        null, // rating
-        null, // price
-        null, // priceValue
-      
-        // keep existing UI behavior (chip), BUT also include concentration explicitly below
-        concentration,                 // oilType slot (existing FE UI)
-        scoreLabel(req.longevityScore()),
-        scoreLabel(req.sillageScore()),
-        null, // confidence
-        null, // popularity
-        null, // mainAccordsPercentage
-        List.of(),
-        List.of(),
-        List.of(),
-        List.of(),
-        new NotesDto(toNoteDtos(top), toNoteDtos(middle), toNoteDtos(base)),
-        null, // purchaseUrl
-      
-        // new community fields
-        concentration,
-        req.longevityScore(),
-        req.sillageScore(),
-        visibility,
-        user.getId()
-      );
+      "community",
+      externalId,
+
+      name,
+      brand,
+      year.equals("0") ? null : year,
+      null, // imageUrl (later: allow upload)
+      null, // gender
+
+      null, // rating
+      null, // price
+      null, // priceValue
+
+      // keep existing UI behavior (chip), BUT also include concentration explicitly below
+      concentration,                 // oilType slot (existing FE UI)
+      scoreLabel(req.longevityScore()),
+      scoreLabel(req.sillageScore()),
+      null, // confidence
+      null, // popularity
+
+      null, // mainAccordsPercentage
+      List.of(), // seasonRanking
+      List.of(), // occasionRanking
+
+      List.of(), // mainAccords
+      List.of(), // generalNotes
+      new NotesDto(toNoteDtos(top), toNoteDtos(middle), toNoteDtos(base)),
+      null, // purchaseUrl
+
+      // community-only
+      concentration,
+      req.longevityScore(),
+      req.sillageScore(),
+      visibility,
+      user.getId()
+    );
 
     // Persist fragrance row
     Fragrance f = new Fragrance();
@@ -130,7 +136,7 @@ public class CommunityFragranceService {
       f.setSnapshot("{}");
     }
 
-    Fragrance saved = fragrances.save(f);
+    Fragrance saved = fragrances.saveAndFlush(f);
 
     // Insert junction rows + bump usage_count
     insertFragranceNotes(saved.getId(), top, "TOP");
@@ -138,6 +144,104 @@ public class CommunityFragranceService {
     insertFragranceNotes(saved.getId(), base, "BASE");
 
     return snapshot;
+  }
+
+  // ✅ NEW: community search from DB (respects visibility via repository query)
+  @Transactional(readOnly = true)
+  public List<FragranceSearchResult> search(String q, String cognitoSub, int limit) {
+    var user = users.findByCognitoSub(cognitoSub)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "User not onboarded"));
+
+    String query = safe(q);
+    if (query.isBlank()) return List.of();
+
+    int capped = Math.min(20, Math.max(1, limit));
+    var pageable = PageRequest.of(0, capped);
+
+    var rows = fragrances.searchCommunity(query, user.getId(), pageable);
+
+    return rows.stream().map(f -> {
+      String snapshot = f.getSnapshot();
+      if (snapshot == null || snapshot.isBlank()) snapshot = "{}";
+
+      try {
+        FragranceSearchResult parsed = om.readValue(snapshot, FragranceSearchResult.class);
+
+        // Force consistent ids/source even if snapshot is stale
+        return new FragranceSearchResult(
+          "community",
+          f.getExternalId(),
+
+          parsed.name(),
+          parsed.brand(),
+          parsed.year(),
+          parsed.imageUrl(),
+          parsed.gender(),
+
+          parsed.rating(),
+          parsed.price(),
+          parsed.priceValue(),
+
+          parsed.oilType(),
+          parsed.longevity(),
+          parsed.sillage(),
+          parsed.confidence(),
+          parsed.popularity(),
+
+          parsed.mainAccordsPercentage(),
+          parsed.seasonRanking(),
+          parsed.occasionRanking(),
+
+          parsed.mainAccords(),
+          parsed.generalNotes(),
+          parsed.notes(),
+          parsed.purchaseUrl(),
+
+          parsed.concentration(),
+          parsed.longevityScore(),
+          parsed.sillageScore(),
+          parsed.visibility(),
+          parsed.createdByUserId()
+        );
+      } catch (Exception e) {
+        // Fallback minimal row (still shows up in Search)
+        return new FragranceSearchResult(
+          "community",
+          f.getExternalId(),
+
+          f.getName(),
+          f.getBrand(),
+          f.getYear(),
+          null,
+          null,
+
+          null,
+          null,
+          null,
+
+          f.getConcentration(),
+          scoreLabel(f.getLongevityScore()),
+          scoreLabel(f.getSillageScore()),
+          null,
+          null,
+
+          null,
+          List.of(),
+          List.of(),
+
+          List.of(),
+          List.of(),
+          null,
+          null,
+
+          f.getConcentration(),
+          f.getLongevityScore(),
+          f.getSillageScore(),
+          f.getVisibility(),
+          f.getCreatedByUserId()
+        );
+      }
+    }).toList();
   }
 
   private void insertFragranceNotes(UUID fragranceId, List<NoteEntity> list, String category) {

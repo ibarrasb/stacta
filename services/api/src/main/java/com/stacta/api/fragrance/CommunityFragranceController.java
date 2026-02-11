@@ -33,11 +33,13 @@ public class CommunityFragranceController {
    * We'll implement real community search next.
    */
   @GetMapping("/search")
-  public List<FragranceSearchResult> search(
-    @RequestParam("q") String q,
-    @RequestParam(value = "limit", defaultValue = "20") int limit,
-    @AuthenticationPrincipal Jwt jwt
-  ) {
-    return List.of();
-  }
+public List<FragranceSearchResult> search(
+  @RequestParam("q") String q,
+  @RequestParam(value = "limit", defaultValue = "20") int limit,
+  @AuthenticationPrincipal Jwt jwt
+) {
+  String sub = jwt.getSubject();
+  return community.search(q, sub, limit);
+}
+
 }

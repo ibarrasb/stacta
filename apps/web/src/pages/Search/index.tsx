@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { searchFragrances, type FragranceSearchResult } from "@/lib/api/fragrances";
+import { searchFragrances, searchCommunityFragrances, type FragranceSearchResult } from "@/lib/api/fragrances";
 import AddCommunityFragranceDialog from "@/components/fragrances/AddCommunityFragranceDialog";
 import fragrancePlaceholder from "@/assets/illustrations/fragrance-placeholder-4x3.png";
 
@@ -277,18 +277,36 @@ export default function SearchPage() {
 
     try {
       //requires updated fragrances.ts: searchFragrances(params, { signal })
-      const data = await searchFragrances(
-        { q: query, limit: 20, persist: true },
-        { signal: ctrl.signal }
-      );
-
+      const [fragellaData, communityData] = await Promise.all([
+        searchFragrances({ q: query, limit: 20, persist: true }, { signal: ctrl.signal }),
+        searchCommunityFragrances({ q: query, limit: 20 }, { signal: ctrl.signal }),
+      ]);
+      
       if (ctrl.signal.aborted) return;
       if (seq !== searchSeqRef.current) return;
-
-      const list = Array.isArray(data) ? data.map(normalize).slice(0, 20) : [];
+      
+      const mergedRaw = [
+        ...(Array.isArray(communityData) ? communityData : []),
+        ...(Array.isArray(fragellaData) ? fragellaData : []),
+      ];
+      
+      // de-dupe by source + externalId
+      const seen = new Set<string>();
+      const merged = mergedRaw.filter((item: any) => {
+        const src = String(item?.source ?? "fragella").toLowerCase();
+        const id = String(item?.externalId ?? item?.external_id ?? "").trim();
+        if (!id) return true;
+        const key = `${src}:${id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      
+      const list = merged.map(normalize).slice(0, 20);
       setResults(list);
-
+      
       if (list.length === 0) setError("No results found. Try a different spelling.");
+      
 
       setParams(
         {

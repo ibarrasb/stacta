@@ -177,9 +177,11 @@ export function searchNotes(
 export function createCommunityFragrance(body: CreateCommunityFragranceRequest) {
   return authedFetch<FragranceSearchResult>(`/api/v1/community-fragrances`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 }
+
 
 export function searchCommunityFragrances(
   params: { q: string; limit?: number },
