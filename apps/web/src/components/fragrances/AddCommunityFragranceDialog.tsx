@@ -14,6 +14,19 @@ import {
 } from "@/lib/api/fragrances";
 
 const DEFAULT_NOTE_IMG = "/src/assets/notes/download.svg";
+const CONCENTRATION_OPTIONS = [
+  "Eau Fraiche",
+  "Eau de Cologne (EdC)",
+  "Eau de Toilette (EdT)",
+  "Eau de Parfum (EdP)",
+  "Eau de Parfum Intense",
+  "Parfum",
+  "Extrait de Parfum",
+  "Elixir",
+  "Perfume Oil / Attar",
+  "Solid Perfume",
+] as const;
+
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -218,12 +231,18 @@ export default function AddCommunityFragranceDialog({
             </div>
             <div>
               <div className="mb-1 text-xs text-white/60">Concentration (optional)</div>
-              <Input
+              <select
                 value={concentration}
                 onChange={(e) => setConcentration(e.target.value)}
-                className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
-                placeholder="EDT / EDP / Parfum"
-              />
+                className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none focus-visible:border-white/20"
+              >
+                <option value="">Select concentration</option>
+                {CONCENTRATION_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
