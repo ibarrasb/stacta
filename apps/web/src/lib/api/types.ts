@@ -8,4 +8,9 @@ export type MeResponse = {
     createdAt: string;     // ISO-8601
     updatedAt: string;     // ISO-8601
   };
+
+export type UpdateMeRequest = {
+  displayName: string;
+  bio: string | null;
+};
   

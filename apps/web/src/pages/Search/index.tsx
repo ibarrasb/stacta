@@ -72,20 +72,11 @@ function makeRouteId(item: FragranceSearchResult, idx: number) {
   return `f_${rand}_${idx}`;
 }
 
-function makeQuery(brand: string, fragrance: string) {
-  const b = brand.trim();
-  const f = fragrance.trim();
-  if (!b || !f) return "";
-  return `${b} ${f}`.trim();
-}
-
 function cacheKey(q: string) {
   return `stacta:search:${encodeURIComponent(q)}`;
 }
 
 type CachedSearch = {
-  brand: string;
-  fragrance: string;
   query: string;
   results: FragranceSearchResult[];
   visibleCount: number;
@@ -160,12 +151,10 @@ export default function SearchPage() {
   const [params, setParams] = useSearchParams();
 
   // derive URL params (stable deps)
-  const urlBrand = params.get("brand") ?? "";
-  const urlFragrance = params.get("fragrance") ?? "";
+  const urlQuery = (params.get("q") ?? `${params.get("brand") ?? ""} ${params.get("fragrance") ?? ""}`).trim();
   const urlVisible = params.get("visible") ?? "10";
 
-  const [brand, setBrand] = useState(urlBrand);
-  const [fragrance, setFragrance] = useState(urlFragrance);
+  const [searchText, setSearchText] = useState(urlQuery);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -173,8 +162,8 @@ export default function SearchPage() {
   const [results, setResults] = useState<FragranceSearchResult[]>([]);
   const [visibleCount, setVisibleCount] = useState<number>(() => clampVisible(Number(urlVisible)));
 
-  const query = useMemo(() => makeQuery(brand, fragrance), [brand, fragrance]);
-  const canSearch = brand.trim().length > 0 && fragrance.trim().length > 0 && query.length >= 3;
+  const query = useMemo(() => searchText.trim(), [searchText]);
+  const canSearch = query.length >= 3;
 
   const [addOpen, setAddOpen] = useState(false);
   const [didSearch, setDidSearch] = useState(false);
@@ -188,19 +177,13 @@ export default function SearchPage() {
   //Sequence guard (still useful even with abort, as extra safety)
   const searchSeqRef = useRef(0);
 
-  // Restore from sessionStorage when URL brand/fragrance change
+  // Restore from sessionStorage when URL query changes
   useEffect(() => {
-    const b = urlBrand;
-    const f = urlFragrance;
-    if (!b || !f) return;
-
-    const q = makeQuery(b, f);
+    const q = urlQuery;
     if (!q) return;
+    setSearchText(q);
 
-    setBrand(b);
-    setFragrance(f);
-
-    const hydrateKey = `${b}||${f}`;
+    const hydrateKey = q.toLowerCase();
     const last = (hydratedRef as any).currentKey;
     if (hydratedRef.current && last === hydrateKey) return;
 
@@ -224,7 +207,7 @@ export default function SearchPage() {
     } catch {
       // ignore bad cache
     }
-  }, [urlBrand, urlFragrance]);
+  }, [urlQuery]);
 
   // cleanup any in-flight request on unmount
   useEffect(() => {
@@ -241,8 +224,6 @@ export default function SearchPage() {
       if (!q) return;
 
       const payload: CachedSearch = {
-        brand: next.brand ?? brand,
-        fragrance: next.fragrance ?? fragrance,
         query: q,
         results: next.results ?? results,
         visibleCount: next.visibleCount ?? visibleCount,
@@ -252,7 +233,7 @@ export default function SearchPage() {
 
       sessionStorage.setItem(cacheKey(q), JSON.stringify(payload));
     },
-    [brand, fragrance, query, results, visibleCount]
+    [query, results, visibleCount]
   );
 
   const onSearch = useCallback(async () => {
@@ -260,7 +241,7 @@ export default function SearchPage() {
     setDidSearch(true);
 
     if (!canSearch) {
-      setError('Enter brand first, then fragrance name. Example: "Dior" + "Sauvage".');
+      setError('Enter at least 3 characters. Example: "Dior Sauvage".');
       return;
     }
 
@@ -310,16 +291,13 @@ export default function SearchPage() {
 
       setParams(
         {
-          brand: brand.trim(),
-          fragrance: fragrance.trim(),
+          q: query,
           visible: String(nextVisible),
         },
         { replace: true }
       );
 
       saveCache({
-        brand: brand.trim(),
-        fragrance: fragrance.trim(),
         query,
         results: list,
         visibleCount: nextVisible,
@@ -339,7 +317,7 @@ export default function SearchPage() {
         setLoading(false);
       }
     }
-  }, [brand, canSearch, fragrance, query, saveCache, setParams]);
+  }, [canSearch, query, saveCache, setParams]);
 
   const visibleResults = useMemo(
     () => results.slice(0, Math.min(visibleCount, 20)),
@@ -349,16 +327,14 @@ export default function SearchPage() {
   const canShowMore = results.length > 10 && visibleCount < 20;
 
   const hasStrongMatch = useMemo(() => {
-    const b = brand.trim().toLowerCase();
-    const f = fragrance.trim().toLowerCase();
-    if (!b || !f) return false;
+    const q = query.toLowerCase();
+    if (!q) return false;
 
     return results.some((r) => {
-      const rb = (r.brand ?? "").toLowerCase();
-      const rn = (r.name ?? "").toLowerCase();
-      return rb.includes(b) && rn.includes(f);
+      const combined = `${r.brand ?? ""} ${r.name ?? ""}`.toLowerCase();
+      return combined.includes(q);
     });
-  }, [results, brand, fragrance]);
+  }, [results, query]);
 
   const showProminentCantFind =
     didSearch && !loading && results.length > 0 && query.length >= 3 && !hasStrongMatch;
@@ -384,15 +360,14 @@ export default function SearchPage() {
 
     setParams(
       {
-        brand: brand.trim(),
-        fragrance: fragrance.trim(),
+        q: query,
         visible: String(next),
       },
       { replace: true }
     );
 
     saveCache({ visibleCount: next, scrollY: window.scrollY });
-  }, [brand, fragrance, saveCache, setParams, visibleCount]);
+  }, [query, saveCache, setParams, visibleCount]);
 
   return (
     <div className="min-h-screen text-white">
@@ -400,7 +375,7 @@ export default function SearchPage() {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
-            <p className="mt-1 text-sm text-white/60">Enter the brand first, then the fragrance name.</p>
+            <p className="mt-1 text-sm text-white/60">Search by brand, fragrance, or both.</p>
           </div>
 
           <Button
@@ -413,24 +388,14 @@ export default function SearchPage() {
         </div>
 
         <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
-              <div className="mb-1 text-xs font-medium text-white/60">Brand</div>
+              <div className="mb-1 text-xs font-medium text-white/60">Search query</div>
               <Input
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
                 className="h-10 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-white/40"
-                placeholder="Dior"
-              />
-            </div>
-
-            <div>
-              <div className="mb-1 text-xs font-medium text-white/60">Fragrance</div>
-              <Input
-                value={fragrance}
-                onChange={(e) => setFragrance(e.target.value)}
-                className="h-10 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-white/40"
-                placeholder="Sauvage"
+                placeholder="Dior Sauvage"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") onSearch();
                 }}
@@ -519,8 +484,6 @@ export default function SearchPage() {
         <AddCommunityFragranceDialog
           open={addOpen}
           onOpenChange={setAddOpen}
-          initialBrand={brand}
-          initialName={fragrance}
           onCreated={(created) => {
             const id = created.externalId ?? "";
             navigate(`/fragrances/${encodeURIComponent(id)}`, {

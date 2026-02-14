@@ -14,6 +14,8 @@ public class ApiExceptionHandler {
     HttpStatus status = switch (ex.getCode()) {
       case "USERNAME_TAKEN" -> HttpStatus.CONFLICT;        // 409
       case "INVALID_USERNAME" -> HttpStatus.BAD_REQUEST;   // 400
+      case "INVALID_DISPLAY_NAME" -> HttpStatus.BAD_REQUEST;
+      case "NOT_ONBOARDED" -> HttpStatus.NOT_FOUND;
       default -> HttpStatus.BAD_REQUEST;
     };
 

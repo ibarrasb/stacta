@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.stacta.api.config.ApiException;
 import com.stacta.api.user.dto.MeResponse;
 import com.stacta.api.user.dto.OnboardingRequest;
+import com.stacta.api.user.dto.UpdateMeRequest;
 
 @Service
 public class UserService {
@@ -49,6 +50,27 @@ public class UserService {
     }
 
     User saved = repo.save(u);
+    return toMe(saved);
+  }
+
+  @Transactional
+  public MeResponse updateMe(String sub, UpdateMeRequest req) {
+    User user = repo.findByCognitoSub(sub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+
+    String displayName = req.displayName().trim();
+    if (displayName.isEmpty()) {
+      throw new ApiException("INVALID_DISPLAY_NAME");
+    }
+
+    String bio = req.bio() == null ? null : req.bio().trim();
+    if (bio != null && bio.isEmpty()) {
+      bio = null;
+    }
+
+    user.setDisplayName(displayName);
+    user.setBio(bio);
+
+    User saved = repo.save(user);
     return toMe(saved);
   }
 

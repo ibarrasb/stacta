@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import com.stacta.api.user.dto.MeResponse;
 import com.stacta.api.user.dto.OnboardingRequest;
+import com.stacta.api.user.dto.UpdateMeRequest;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -33,5 +34,10 @@ public class MeController {
   @PostMapping("/onboarding")
   public MeResponse onboarding(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody OnboardingRequest req) {
     return userService.upsertOnboarding(jwt.getSubject(), req);
+  }
+
+  @PatchMapping("/me")
+  public MeResponse updateMe(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody UpdateMeRequest req) {
+    return userService.updateMe(jwt.getSubject(), req);
   }
 }

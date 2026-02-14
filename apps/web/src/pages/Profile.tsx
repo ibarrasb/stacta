@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { getMe } from "@/lib/api/me";
+import { getMe, updateMe } from "@/lib/api/me";
 import type { MeResponse } from "@/lib/api/types";
 
 function formatDate(value?: string | null) {
@@ -31,6 +31,7 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
 
   const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [draftDisplayName, setDraftDisplayName] = useState("");
   const [draftBio, setDraftBio] = useState("");
 
@@ -69,6 +70,7 @@ export default function ProfilePage() {
   const canSave = useMemo(() => {
     if (!me) return false;
     const dn = draftDisplayName.trim();
+    if (isEditing && dn.length === 0) return false;
     // keep it simple: require at least 2 chars for display name when editing
     if (isEditing && dn.length > 0 && dn.length < 2) return false;
     return true;
@@ -80,18 +82,24 @@ export default function ProfilePage() {
     setDraftBio(me?.bio ?? "");
   }
 
-  function onSaveLocalOnly() {
-    // UI-only for now (no backend call)
-    setMe((prev) =>
-      prev
-        ? {
-            ...prev,
-            displayName: draftDisplayName.trim() || prev.displayName,
-            bio: draftBio,
-          }
-        : prev
-    );
-    setIsEditing(false);
+  async function onSave() {
+    if (!canSave || !me) return;
+    setError(null);
+    setSaving(true);
+    try {
+      const updated = await updateMe({
+        displayName: draftDisplayName.trim(),
+        bio: draftBio.trim() || null,
+      });
+      setMe(updated);
+      setDraftDisplayName(updated.displayName ?? "");
+      setDraftBio(updated.bio ?? "");
+      setIsEditing(false);
+    } catch (e: any) {
+      setError(e?.message || "Failed to update profile.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -102,7 +110,7 @@ export default function ProfilePage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">My profile</h1>
             <p className="mt-1 text-sm text-white/60">
-              This is your Stacta profile — editing is UI-only for now.
+              Manage your public profile details.
             </p>
           </div>
 
@@ -155,7 +163,7 @@ export default function ProfilePage() {
                             <div className="truncate text-xl font-semibold tracking-tight">
                               {me.displayName || "—"}
                             </div>
-                            <div className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-white/70">
+                            <div className="rounded-full border border-cyan-300/40 bg-cyan-400/15 px-2.5 py-0.5 text-xs font-semibold text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.25)]">
                               {usernameLabel}
                             </div>
                           </div>
@@ -179,10 +187,10 @@ export default function ProfilePage() {
                               onChange={(e) => setDraftDisplayName(e.target.value)}
                               className="h-10 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-white/40"
                               placeholder="Your display name"
-                              maxLength={50}
+                              maxLength={120}
                             />
                             <div className="mt-1 text-xs text-white/45">
-                              2–50 characters recommended.
+                              Up to 120 characters.
                             </div>
                           </div>
 
@@ -193,10 +201,10 @@ export default function ProfilePage() {
                               onChange={(e) => setDraftBio(e.target.value)}
                               className="min-h-[96px] rounded-xl border-white/10 bg-white/5 text-white placeholder:text-white/40"
                               placeholder="Tell people your vibe…"
-                              maxLength={180}
+                              maxLength={500}
                             />
                             <div className="mt-1 text-xs text-white/45">
-                              {draftBio.length}/180
+                              {draftBio.length}/500
                             </div>
                           </div>
                         </div>
@@ -224,10 +232,10 @@ export default function ProfilePage() {
                         </Button>
                         <Button
                           className="h-10 rounded-xl px-4"
-                          disabled={!canSave}
-                          onClick={onSaveLocalOnly}
+                          disabled={!canSave || saving}
+                          onClick={onSave}
                         >
-                          Save
+                          {saving ? "Saving..." : "Save"}
                         </Button>
                       </>
                     )}
