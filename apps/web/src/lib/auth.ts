@@ -104,8 +104,12 @@ export async function authConfirmForgotPassword(
 
 // TOKEN for calling your backend
 export async function getAccessToken(): Promise<string | null> {
-  const session = await fetchAuthSession({ forceRefresh: true });
-  return session.tokens?.accessToken?.toString() ?? null;
+  const session = await fetchAuthSession({ forceRefresh: false });
+  const token = session.tokens?.accessToken?.toString() ?? null;
+  if (token) return token;
+
+  const refreshed = await fetchAuthSession({ forceRefresh: true });
+  return refreshed.tokens?.accessToken?.toString() ?? null;
 }
 
 

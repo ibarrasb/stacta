@@ -11,4 +11,5 @@ public interface NoteRepository extends JpaRepository<NoteEntity, UUID> {
   Optional<NoteEntity> findByNormalizedName(String normalizedName);
 
   List<NoteEntity> findByNameContainingIgnoreCaseOrderByUsageCountDescNameAsc(String name, Pageable pageable);
+  List<NoteEntity> findAllByOrderByUsageCountDescNameAsc(Pageable pageable);
 }

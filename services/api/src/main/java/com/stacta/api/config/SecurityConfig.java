@@ -18,7 +18,7 @@ public class SecurityConfig {
       .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
       .authorizeHttpRequests(auth -> auth
         // public endpoints
-        .requestMatchers("/health").permitAll()
+        .requestMatchers("/health", "/api/v1/ping", "/actuator/health").permitAll()
 
         // swagger
         .requestMatchers(

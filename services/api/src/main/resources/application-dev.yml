@@ -1,3 +1,8 @@
+app:
+  cors:
+    allowed-origins: http://localhost:5173,http://192.168.50.190:5173
+    allow-credentials: false
+
 spring:
   datasource:
     url: jdbc:postgresql://localhost:15432/stacta
@@ -14,3 +19,19 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_ZZm35Q6rE
+
+  web:
+    error:
+      include-message: always
+      include-binding-errors: always
+      include-exception: true
+      include-stacktrace: on_param
+
+logging:
+  level:
+    "[org.springframework.web]": INFO
+    "[org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver]": DEBUG
+    "[org.springframework.jdbc.core]": DEBUG
+    "[org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator]": DEBUG
+    "[org.hibernate.SQL]": DEBUG
+    "[org.hibernate.type.descriptor.sql]": TRACE

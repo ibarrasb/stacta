@@ -34,9 +34,7 @@ public class NoteService {
 
   public List<NoteDto> popular(int limit) {
     int safe = Math.min(Math.max(limit, 1), 200);
-    return notes.findAll(PageRequest.of(0, safe)).stream()
-      .sorted(Comparator.comparing(NoteEntity::getUsageCount, Comparator.nullsLast(Comparator.reverseOrder()))
-        .thenComparing(NoteEntity::getName, Comparator.nullsLast(String::compareToIgnoreCase)))
+    return notes.findAllByOrderByUsageCountDescNameAsc(PageRequest.of(0, safe)).stream()
       .map(this::toDto)
       .toList();
   }

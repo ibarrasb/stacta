@@ -1,7 +1,9 @@
 package com.stacta.api.config;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -12,25 +14,26 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class CorsConfig {
 
   @Bean
-  public CorsConfigurationSource corsConfigurationSource() {
+  public CorsConfigurationSource corsConfigurationSource(
+    @Value("#{'${app.cors.allowed-origins:}'.split(',')}") List<String> allowedOriginsRaw,
+    @Value("${app.cors.allow-credentials:false}") boolean allowCredentials
+  ) {
     CorsConfiguration config = new CorsConfiguration();
 
-    //Dev origin (add prod later)
-    config.setAllowedOrigins(List.of(
-      "http://localhost:5173",
-  "http://192.168.50.190:5173"
-    ));
+    List<String> allowedOrigins = allowedOriginsRaw.stream()
+      .map(String::trim)
+      .filter(s -> !s.isEmpty())
+      .collect(Collectors.toList());
+
+    config.setAllowedOrigins(allowedOrigins);
 
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
-    //IMPORTANT: allow Authorization header for Bearer token
-    config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+    config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
 
-    // Optional: only needed if you read headers on client
     config.setExposedHeaders(List.of("WWW-Authenticate"));
 
-    // If you ever use cookies; safe to keep true, but you can set false if you want
-    config.setAllowCredentials(true);
+    config.setAllowCredentials(allowCredentials);
 
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
     source.registerCorsConfiguration("/**", config);
