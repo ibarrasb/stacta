@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import ProfilePhotoPicker from "@/components/profile/ProfilePhotoPicker";
 import { getMe, updateMe } from "@/lib/api/me";
 import type { MeResponse } from "@/lib/api/types";
 
@@ -23,6 +24,34 @@ function initials(name?: string | null) {
   return (first + second).toUpperCase() || "S";
 }
 
+function PrivacyToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={[
+        "relative h-7 w-12 rounded-full border transition",
+        checked ? "border-cyan-200/40 bg-cyan-300/30" : "border-white/15 bg-white/10",
+      ].join(" ")}
+      aria-pressed={checked}
+      aria-label="Private profile"
+    >
+      <span
+        className={[
+          "absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white transition",
+          checked ? "left-6" : "left-1",
+        ].join(" ")}
+      />
+    </button>
+  );
+}
+
 export default function ProfilePage() {
   const navigate = useNavigate();
 
@@ -34,6 +63,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [draftDisplayName, setDraftDisplayName] = useState("");
   const [draftBio, setDraftBio] = useState("");
+  const [draftIsPrivate, setDraftIsPrivate] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +79,7 @@ export default function ProfilePage() {
         setMe(data);
         setDraftDisplayName(data.displayName ?? "");
         setDraftBio(data.bio ?? "");
+        setDraftIsPrivate(Boolean(data.isPrivate));
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Failed to load profile.");
       } finally {
@@ -80,6 +111,7 @@ export default function ProfilePage() {
     setIsEditing(false);
     setDraftDisplayName(me?.displayName ?? "");
     setDraftBio(me?.bio ?? "");
+    setDraftIsPrivate(Boolean(me?.isPrivate));
   }
 
   async function onSave() {
@@ -90,10 +122,12 @@ export default function ProfilePage() {
       const updated = await updateMe({
         displayName: draftDisplayName.trim(),
         bio: draftBio.trim() || null,
+        isPrivate: draftIsPrivate,
       });
       setMe(updated);
       setDraftDisplayName(updated.displayName ?? "");
       setDraftBio(updated.bio ?? "");
+      setDraftIsPrivate(Boolean(updated.isPrivate));
       setIsEditing(false);
     } catch (e: any) {
       setError(e?.message || "Failed to update profile.");
@@ -104,13 +138,13 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen text-white">
-      <div className="mx-auto max-w-4xl px-4 py-10">
+      <div className="mx-auto max-w-5xl px-4 py-10">
         {/* Top bar */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-7 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">My profile</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">My profile</h1>
             <p className="mt-1 text-sm text-white/60">
-              Manage your public profile details.
+              Keep your identity polished and control who can see your profile.
             </p>
           </div>
 
@@ -125,9 +159,9 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
           {/* Main card */}
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur">
             {loading && <div className="text-sm text-white/70">Loading...</div>}
 
             {error && (
@@ -139,36 +173,31 @@ export default function ProfilePage() {
             {!loading && !error && me && (
               <div className="space-y-6">
                 {/* Profile header */}
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex items-start gap-4">
-                    {/* Avatar (placeholder) */}
-                    <div className="relative">
-                      <div className="h-16 w-16 overflow-hidden rounded-2xl border border-white/10 bg-white/10">
-                        <div className="flex h-full w-full items-center justify-center text-lg font-semibold text-white/90">
-                          {initials(me.displayName)}
-                        </div>
-                      </div>
-
-                      {/* “Change photo” placeholder */}
-                      <div className="mt-2 text-center text-[11px] text-white/50">
-                        Photo soon
-                      </div>
-                    </div>
+                <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start gap-5">
+                    <ProfilePhotoPicker
+                      fallbackText={initials(me.displayName)}
+                      initialUrl={me.avatarUrl}
+                      disabled={!isEditing}
+                    />
 
                     {/* Name + username + bio */}
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       {!isEditing ? (
                         <>
-                          <div className="flex items-center gap-2">
-                            <div className="truncate text-xl font-semibold tracking-tight">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="truncate text-2xl font-semibold tracking-tight">
                               {me.displayName || "—"}
                             </div>
-                            <div className="rounded-full border border-cyan-300/40 bg-cyan-400/15 px-2.5 py-0.5 text-xs font-semibold text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.25)]">
+                            <div className="rounded-full border border-cyan-300/35 bg-cyan-400/15 px-2.5 py-0.5 text-xs font-semibold text-cyan-100">
                               {usernameLabel}
+                            </div>
+                            <div className="rounded-full border border-white/15 bg-white/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/80">
+                              {me.isPrivate ? "Private" : "Public"}
                             </div>
                           </div>
 
-                          <div className="mt-2 max-w-xl whitespace-pre-wrap text-sm text-white/80">
+                          <div className="mt-3 max-w-xl whitespace-pre-wrap rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/85">
                             {me.bio?.trim() ? me.bio : (
                               <span className="text-white/50">
                                 Add a bio so people know what you’re into.
@@ -177,35 +206,45 @@ export default function ProfilePage() {
                           </div>
                         </>
                       ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-4 rounded-2xl border border-white/10 bg-black/20 p-4">
                           <div>
-                            <div className="mb-1 text-xs font-medium text-white/60">
+                            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/55">
                               Display name
                             </div>
                             <Input
                               value={draftDisplayName}
                               onChange={(e) => setDraftDisplayName(e.target.value)}
-                              className="h-10 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-white/40"
+                              className="h-11 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-white/40"
                               placeholder="Your display name"
                               maxLength={120}
                             />
-                            <div className="mt-1 text-xs text-white/45">
+                            <div className="mt-1.5 text-xs text-white/45">
                               Up to 120 characters.
                             </div>
                           </div>
 
                           <div>
-                            <div className="mb-1 text-xs font-medium text-white/60">Bio</div>
+                            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/55">Bio</div>
                             <Textarea
                               value={draftBio}
                               onChange={(e) => setDraftBio(e.target.value)}
-                              className="min-h-[96px] rounded-xl border-white/10 bg-white/5 text-white placeholder:text-white/40"
+                              className="min-h-[110px] rounded-xl border-white/10 bg-white/5 text-white placeholder:text-white/40"
                               placeholder="Tell people your vibe…"
                               maxLength={500}
                             />
-                            <div className="mt-1 text-xs text-white/45">
+                            <div className="mt-1.5 text-xs text-white/45">
                               {draftBio.length}/500
                             </div>
+                          </div>
+
+                          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+                            <div>
+                              <div className="text-xs font-semibold text-white/85">Private profile</div>
+                              <div className="mt-0.5 text-[11px] text-white/55">
+                                Only approved followers can see profile activity.
+                              </div>
+                            </div>
+                            <PrivacyToggle checked={draftIsPrivate} onChange={setDraftIsPrivate} />
                           </div>
                         </div>
                       )}
@@ -213,7 +252,7 @@ export default function ProfilePage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 flex-col gap-2 sm:min-w-[140px]">
                     {!isEditing ? (
                       <Button
                         className="h-10 rounded-xl px-4"
@@ -246,20 +285,20 @@ export default function ProfilePage() {
 
                 {/* “Stats” row (placeholder) */}
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-xs text-white/60">Collections</div>
-                    <div className="mt-1 text-lg font-semibold">—</div>
-                    <div className="mt-1 text-xs text-white/45">Coming soon</div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="text-xs text-white/60">Following</div>
+                    <div className="mt-1 text-lg font-semibold">{me.followingCount}</div>
+                    <div className="mt-1 text-xs text-white/45">Accounts you follow</div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-xs text-white/60">Reviews</div>
-                    <div className="mt-1 text-lg font-semibold">—</div>
-                    <div className="mt-1 text-xs text-white/45">Coming soon</div>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <div className="text-xs text-white/60">Followers</div>
-                    <div className="mt-1 text-lg font-semibold">—</div>
-                    <div className="mt-1 text-xs text-white/45">Coming soon</div>
+                    <div className="mt-1 text-lg font-semibold">{me.followersCount}</div>
+                    <div className="mt-1 text-xs text-white/45">People following you</div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="text-xs text-white/60">Visibility</div>
+                    <div className="mt-1 text-lg font-semibold">{me.isPrivate ? "Private" : "Public"}</div>
+                    <div className="mt-1 text-xs text-white/45">Who can access your profile</div>
                   </div>
                 </div>
               </div>
@@ -267,7 +306,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Side card: account details */}
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur">
             <div className="mb-4">
               <div className="text-sm font-semibold">Account</div>
               <div className="mt-1 text-xs text-white/60">

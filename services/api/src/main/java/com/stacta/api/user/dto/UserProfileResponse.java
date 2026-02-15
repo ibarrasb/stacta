@@ -1,18 +1,15 @@
 package com.stacta.api.user.dto;
 
-import java.time.Instant;
-import java.util.UUID;
-
-public record MeResponse(
-  UUID id,
-  String cognitoSub,
+public record UserProfileResponse(
   String username,
   String displayName,
-  String bio,
   String avatarUrl,
+  String bio,
   boolean isPrivate,
+  boolean isOwner,
+  boolean isVisible,
   long followersCount,
   long followingCount,
-  Instant createdAt,
-  Instant updatedAt
+  boolean isFollowing,
+  boolean followRequested
 ) {}

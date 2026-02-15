@@ -1,12 +1,35 @@
 // apps/web/src/pages/Home.tsx
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authSignOut } from "@/lib/auth";
+import { getUnreadNotificationsCount } from "@/lib/api/notifications";
 import { useNavigate } from "react-router-dom";
 
 const ONBOARDED_KEY = "stacta:onboardedSub";
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    getUnreadNotificationsCount()
+      .then((res) => {
+        if (!cancelled) setUnreadCount(Math.max(0, Number(res?.count ?? 0)));
+      })
+      .catch(() => {
+        if (!cancelled) setUnreadCount(0);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const unreadLabel = useMemo(() => {
+    if (unreadCount <= 0) return null;
+    return unreadCount > 99 ? "99+" : String(unreadCount);
+  }, [unreadCount]);
 
   async function onSignOut() {
     try {
@@ -29,6 +52,17 @@ export default function HomePage() {
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <Button className="h-11 rounded-xl px-6" onClick={() => navigate("/search")}>
               Go to search
+            </Button>
+            <Button className="h-11 rounded-xl px-6" onClick={() => navigate("/users")}>
+              Find users
+            </Button>
+            <Button className="relative h-11 rounded-xl px-6" onClick={() => navigate("/notifications")}>
+              Notifications
+              {unreadLabel && (
+                <span className="absolute -right-2 -top-2 inline-flex min-w-6 items-center justify-center rounded-full border border-white/25 bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                  {unreadLabel}
+                </span>
+              )}
             </Button>
 
             <Button

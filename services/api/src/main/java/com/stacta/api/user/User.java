@@ -28,6 +28,18 @@ public class User {
   @Column(name = "avatar_url")
   private String avatarUrl;
 
+  @Column(name = "is_private", nullable = false)
+  private boolean isPrivate = false;
+
+  @Column(name = "notifications_seen_at", nullable = false)
+  private Instant notificationsSeenAt = Instant.now();
+
+  @Column(name = "followers_count", nullable = false)
+  private long followersCount = 0;
+
+  @Column(name = "following_count", nullable = false)
+  private long followingCount = 0;
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt = Instant.now();
 
@@ -51,6 +63,14 @@ public class User {
   public void setBio(String bio) { this.bio = bio; }
   public String getAvatarUrl() { return avatarUrl; }
   public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+  public boolean isPrivate() { return isPrivate; }
+  public void setPrivate(boolean aPrivate) { isPrivate = aPrivate; }
+  public Instant getNotificationsSeenAt() { return notificationsSeenAt; }
+  public void setNotificationsSeenAt(Instant notificationsSeenAt) { this.notificationsSeenAt = notificationsSeenAt; }
+  public long getFollowersCount() { return followersCount; }
+  public void setFollowersCount(long followersCount) { this.followersCount = followersCount; }
+  public long getFollowingCount() { return followingCount; }
+  public void setFollowingCount(long followingCount) { this.followingCount = followingCount; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
 }
