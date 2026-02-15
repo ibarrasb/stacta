@@ -28,6 +28,9 @@ public class User {
   @Column(name = "avatar_url")
   private String avatarUrl;
 
+  @Column(name = "is_private", nullable = false)
+  private boolean isPrivate = false;
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt = Instant.now();
 
@@ -51,6 +54,8 @@ public class User {
   public void setBio(String bio) { this.bio = bio; }
   public String getAvatarUrl() { return avatarUrl; }
   public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+  public boolean isPrivate() { return isPrivate; }
+  public void setPrivate(boolean aPrivate) { isPrivate = aPrivate; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
 }

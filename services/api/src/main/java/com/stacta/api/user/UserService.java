@@ -1,7 +1,9 @@
 package com.stacta.api.user;
 
+import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -9,6 +11,8 @@ import com.stacta.api.config.ApiException;
 import com.stacta.api.user.dto.MeResponse;
 import com.stacta.api.user.dto.OnboardingRequest;
 import com.stacta.api.user.dto.UpdateMeRequest;
+import com.stacta.api.user.dto.UserProfileResponse;
+import com.stacta.api.user.dto.UserSearchItem;
 
 @Service
 public class UserService {
@@ -69,9 +73,54 @@ public class UserService {
 
     user.setDisplayName(displayName);
     user.setBio(bio);
+    if (req.isPrivate() != null) {
+      user.setPrivate(req.isPrivate());
+    }
 
     User saved = repo.save(user);
     return toMe(saved);
+  }
+
+  @Transactional(readOnly = true)
+  public List<UserSearchItem> searchUsers(String q, String viewerSub, int limit) {
+    String query = q == null ? "" : q.trim().toLowerCase();
+    if (query.isEmpty()) return List.of();
+
+    int safeLimit = Math.max(1, Math.min(limit, 20));
+    var users = repo.searchUsers(query, viewerSub, PageRequest.of(0, safeLimit));
+    return users.stream()
+      .map(u -> new UserSearchItem(
+        u.getUsername(),
+        u.getDisplayName(),
+        u.getAvatarUrl(),
+        u.isPrivate()
+      ))
+      .toList();
+  }
+
+  @Transactional(readOnly = true)
+  public UserProfileResponse getProfile(String viewerSub, String username) {
+    String normalized = normalizeUsername(username);
+    if (normalized.isEmpty()) {
+      throw new ApiException("USER_NOT_FOUND");
+    }
+
+    User target = repo.findByUsernameIgnoreCase(normalized)
+      .orElseThrow(() -> new ApiException("USER_NOT_FOUND"));
+
+    User viewer = viewerSub == null ? null : repo.findByCognitoSub(viewerSub).orElse(null);
+    boolean isOwner = viewer != null && viewer.getId().equals(target.getId());
+    boolean isVisible = !target.isPrivate() || isOwner;
+
+    return new UserProfileResponse(
+      target.getUsername(),
+      target.getDisplayName(),
+      target.getAvatarUrl(),
+      isVisible ? target.getBio() : null,
+      target.isPrivate(),
+      isOwner,
+      isVisible
+    );
   }
 
   private String normalizeUsername(String raw) {
@@ -92,6 +141,7 @@ public class UserService {
       u.getDisplayName(),
       u.getBio(),
       u.getAvatarUrl(),
+      u.isPrivate(),
       u.getCreatedAt(),
       u.getUpdatedAt()
     );

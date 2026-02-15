@@ -10,7 +10,7 @@ public record MeResponse(
   String displayName,
   String bio,
   String avatarUrl,
+  boolean isPrivate,
   Instant createdAt,
   Instant updatedAt
 ) {}
-

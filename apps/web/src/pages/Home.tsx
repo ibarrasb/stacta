@@ -30,6 +30,9 @@ export default function HomePage() {
             <Button className="h-11 rounded-xl px-6" onClick={() => navigate("/search")}>
               Go to search
             </Button>
+            <Button className="h-11 rounded-xl px-6" onClick={() => navigate("/users")}>
+              Find users
+            </Button>
 
             <Button
               variant="secondary"
