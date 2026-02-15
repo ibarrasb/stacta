@@ -36,9 +36,12 @@ public interface FollowRepository extends JpaRepository<FollowRelationship, UUID
     WHERE fr.following_user_id = :followingUserId
       AND fr.status = 'PENDING'
       AND (
-        :cursorCreatedAt IS NULL
-        OR fr.created_at < :cursorCreatedAt
-        OR (fr.created_at = :cursorCreatedAt AND fr.id < :cursorId)
+        CAST(:cursorCreatedAt AS timestamptz) IS NULL
+        OR fr.created_at < CAST(:cursorCreatedAt AS timestamptz)
+        OR (
+          fr.created_at = CAST(:cursorCreatedAt AS timestamptz)
+          AND fr.id < CAST(:cursorId AS uuid)
+        )
       )
     ORDER BY fr.created_at DESC, fr.id DESC
     """, nativeQuery = true)
@@ -68,9 +71,12 @@ public interface FollowRepository extends JpaRepository<FollowRelationship, UUID
     WHERE fr.following_user_id = :followingUserId
       AND fr.status = 'ACCEPTED'
       AND (
-        :cursorEventAt IS NULL
-        OR COALESCE(fr.responded_at, fr.created_at) < :cursorEventAt
-        OR (COALESCE(fr.responded_at, fr.created_at) = :cursorEventAt AND fr.id < :cursorId)
+        CAST(:cursorEventAt AS timestamptz) IS NULL
+        OR COALESCE(fr.responded_at, fr.created_at) < CAST(:cursorEventAt AS timestamptz)
+        OR (
+          COALESCE(fr.responded_at, fr.created_at) = CAST(:cursorEventAt AS timestamptz)
+          AND fr.id < CAST(:cursorId AS uuid)
+        )
       )
     ORDER BY COALESCE(fr.responded_at, fr.created_at) DESC, fr.id DESC
     """, nativeQuery = true)
