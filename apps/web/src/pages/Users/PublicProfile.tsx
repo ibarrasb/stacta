@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { followUser, unfollowUser } from "@/lib/api/follows";
 import { getUserProfile } from "@/lib/api/users";
 import type { UserProfileResponse } from "@/lib/api/types";
 
@@ -13,11 +14,19 @@ function getInitials(value: string) {
 
 export default function PublicProfilePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { username = "" } = useParams();
 
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const backTarget = useMemo(() => {
+    const stateFrom = (location.state as any)?.from?.pathname;
+    if (typeof stateFrom === "string" && stateFrom.trim()) return stateFrom;
+    return "/users";
+  }, [location.state]);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +58,25 @@ export default function PublicProfilePage() {
     };
   }, [username]);
 
+  async function onToggleFollow() {
+    if (!profile || profile.isOwner) return;
+    setActionLoading(true);
+    setError(null);
+    try {
+      if (profile.isFollowing || profile.followRequested) {
+        await unfollowUser(profile.username);
+      } else {
+        await followUser(profile.username);
+      }
+      const next = await getUserProfile(profile.username);
+      setProfile(next);
+    } catch (e: any) {
+      setError(e?.message || "Failed to update follow status.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen text-white">
       <div className="mx-auto max-w-5xl px-4 py-10">
@@ -60,9 +88,9 @@ export default function PublicProfilePage() {
           <Button
             variant="secondary"
             className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
-            onClick={() => navigate("/users")}
+            onClick={() => navigate(backTarget)}
           >
-            Back to users
+            {backTarget === "/notifications" ? "Back to notifications" : "Back to users"}
           </Button>
         </div>
 
@@ -128,9 +156,16 @@ export default function PublicProfilePage() {
                       <Button
                         variant="secondary"
                         className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
-                        disabled
+                        disabled={actionLoading}
+                        onClick={onToggleFollow}
                       >
-                        Follow soon
+                        {actionLoading
+                          ? "Working..."
+                          : profile.isFollowing
+                            ? "Following"
+                            : profile.followRequested
+                              ? "Requested"
+                              : "Follow"}
                       </Button>
                     )}
                   </div>
@@ -140,19 +175,27 @@ export default function PublicProfilePage() {
 
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <div className="text-xs text-white/60">Collections</div>
-                    <div className="mt-1 text-lg font-semibold">—</div>
-                    <div className="mt-1 text-xs text-white/45">Coming soon</div>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <div className="text-xs text-white/60">Reviews</div>
-                    <div className="mt-1 text-lg font-semibold">—</div>
-                    <div className="mt-1 text-xs text-white/45">Coming soon</div>
+                    <div className="text-xs text-white/60">Following</div>
+                    <div className="mt-1 text-lg font-semibold">{profile.followingCount}</div>
+                    <div className="mt-1 text-xs text-white/45">Accounts this user follows</div>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <div className="text-xs text-white/60">Followers</div>
-                    <div className="mt-1 text-lg font-semibold">—</div>
-                    <div className="mt-1 text-xs text-white/45">Coming soon</div>
+                    <div className="mt-1 text-lg font-semibold">{profile.followersCount}</div>
+                    <div className="mt-1 text-xs text-white/45">People following this user</div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="text-xs text-white/60">Relationship</div>
+                    <div className="mt-1 text-lg font-semibold">
+                      {profile.isOwner
+                        ? "You"
+                        : profile.isFollowing
+                          ? "Following"
+                          : profile.followRequested
+                            ? "Requested"
+                            : "Not following"}
+                    </div>
+                    <div className="mt-1 text-xs text-white/45">Your current state with this account</div>
                   </div>
                 </div>
               </div>

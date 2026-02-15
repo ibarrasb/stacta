@@ -7,5 +7,9 @@ public record UserProfileResponse(
   String bio,
   boolean isPrivate,
   boolean isOwner,
-  boolean isVisible
+  boolean isVisible,
+  long followersCount,
+  long followingCount,
+  boolean isFollowing,
+  boolean followRequested
 ) {}

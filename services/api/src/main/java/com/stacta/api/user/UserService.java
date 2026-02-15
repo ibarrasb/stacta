@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.stacta.api.config.ApiException;
+import com.stacta.api.social.FollowService;
 import com.stacta.api.user.dto.MeResponse;
 import com.stacta.api.user.dto.OnboardingRequest;
 import com.stacta.api.user.dto.UpdateMeRequest;
@@ -18,9 +19,11 @@ import com.stacta.api.user.dto.UserSearchItem;
 public class UserService {
 
   private final UserRepository repo;
+  private final FollowService followService;
 
-  public UserService(UserRepository repo) {
+  public UserService(UserRepository repo, FollowService followService) {
     this.repo = repo;
+    this.followService = followService;
   }
 
   @Transactional(readOnly = true)
@@ -110,7 +113,11 @@ public class UserService {
 
     User viewer = viewerSub == null ? null : repo.findByCognitoSub(viewerSub).orElse(null);
     boolean isOwner = viewer != null && viewer.getId().equals(target.getId());
-    boolean isVisible = !target.isPrivate() || isOwner;
+    boolean isFollowing = viewer != null && followService.isFollowing(viewer.getId(), target.getId());
+    boolean followRequested = viewer != null && followService.hasPendingRequest(viewer.getId(), target.getId());
+    boolean isVisible = !target.isPrivate() || isOwner || isFollowing;
+    long followersCount = target.getFollowersCount();
+    long followingCount = target.getFollowingCount();
 
     return new UserProfileResponse(
       target.getUsername(),
@@ -119,7 +126,11 @@ public class UserService {
       isVisible ? target.getBio() : null,
       target.isPrivate(),
       isOwner,
-      isVisible
+      isVisible,
+      followersCount,
+      followingCount,
+      isFollowing,
+      followRequested
     );
   }
 
@@ -142,6 +153,8 @@ public class UserService {
       u.getBio(),
       u.getAvatarUrl(),
       u.isPrivate(),
+      u.getFollowersCount(),
+      u.getFollowingCount(),
       u.getCreatedAt(),
       u.getUpdatedAt()
     );

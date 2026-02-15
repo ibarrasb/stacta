@@ -15,8 +15,11 @@ public class ApiExceptionHandler {
       case "USERNAME_TAKEN" -> HttpStatus.CONFLICT;        // 409
       case "INVALID_USERNAME" -> HttpStatus.BAD_REQUEST;   // 400
       case "INVALID_DISPLAY_NAME" -> HttpStatus.BAD_REQUEST;
+      case "INVALID_FOLLOW_TARGET" -> HttpStatus.BAD_REQUEST;
+      case "INVALID_CURSOR" -> HttpStatus.BAD_REQUEST;
       case "NOT_ONBOARDED" -> HttpStatus.NOT_FOUND;
       case "USER_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+      case "FOLLOW_REQUEST_NOT_FOUND" -> HttpStatus.NOT_FOUND;
       default -> HttpStatus.BAD_REQUEST;
     };
 

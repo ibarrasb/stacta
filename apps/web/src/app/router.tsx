@@ -21,6 +21,7 @@ const FragranceDetailPage = lazy(() => import("@/pages/Fragrances/FragranceDetai
 const SettingsPage = lazy(() => import("@/pages/Settings"));
 const UsersSearchPage = lazy(() => import("@/pages/Users/Search"));
 const PublicProfilePage = lazy(() => import("@/pages/Users/PublicProfile"));
+const NotificationsPage = lazy(() => import("@/pages/Notifications"));
 
 export const router = createBrowserRouter([
   {
@@ -124,6 +125,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth>
             <PublicProfilePage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "/notifications",
+        element: (
+          <RequireAuth>
+            <NotificationsPage />
           </RequireAuth>
         ),
       },

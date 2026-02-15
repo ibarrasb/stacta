@@ -6,6 +6,7 @@ import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -35,4 +36,20 @@ public interface UserRepository extends JpaRepository<User, UUID> {
       LOWER(u.username) ASC
   """)
   List<User> searchUsers(@Param("q") String q, @Param("viewerSub") String viewerSub, Pageable pageable);
+
+  @Modifying
+  @Query(value = """
+    UPDATE users
+    SET followers_count = GREATEST(0, followers_count + :delta)
+    WHERE id = :userId
+  """, nativeQuery = true)
+  int bumpFollowersCount(@Param("userId") UUID userId, @Param("delta") long delta);
+
+  @Modifying
+  @Query(value = """
+    UPDATE users
+    SET following_count = GREATEST(0, following_count + :delta)
+    WHERE id = :userId
+  """, nativeQuery = true)
+  int bumpFollowingCount(@Param("userId") UUID userId, @Param("delta") long delta);
 }

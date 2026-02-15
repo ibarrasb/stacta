@@ -11,6 +11,8 @@ public record MeResponse(
   String bio,
   String avatarUrl,
   boolean isPrivate,
+  long followersCount,
+  long followingCount,
   Instant createdAt,
   Instant updatedAt
 ) {}

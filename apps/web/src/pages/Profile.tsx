@@ -286,19 +286,19 @@ export default function ProfilePage() {
                 {/* “Stats” row (placeholder) */}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <div className="text-xs text-white/60">Collections</div>
-                    <div className="mt-1 text-lg font-semibold">—</div>
-                    <div className="mt-1 text-xs text-white/45">Coming soon</div>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <div className="text-xs text-white/60">Reviews</div>
-                    <div className="mt-1 text-lg font-semibold">—</div>
-                    <div className="mt-1 text-xs text-white/45">Coming soon</div>
+                    <div className="text-xs text-white/60">Following</div>
+                    <div className="mt-1 text-lg font-semibold">{me.followingCount}</div>
+                    <div className="mt-1 text-xs text-white/45">Accounts you follow</div>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <div className="text-xs text-white/60">Followers</div>
-                    <div className="mt-1 text-lg font-semibold">—</div>
-                    <div className="mt-1 text-xs text-white/45">Coming soon</div>
+                    <div className="mt-1 text-lg font-semibold">{me.followersCount}</div>
+                    <div className="mt-1 text-xs text-white/45">People following you</div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="text-xs text-white/60">Visibility</div>
+                    <div className="mt-1 text-lg font-semibold">{me.isPrivate ? "Private" : "Public"}</div>
+                    <div className="mt-1 text-xs text-white/45">Who can access your profile</div>
                   </div>
                 </div>
               </div>

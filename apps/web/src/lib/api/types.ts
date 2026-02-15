@@ -6,6 +6,8 @@ export type MeResponse = {
     bio: string | null;
     avatarUrl: string | null;
     isPrivate: boolean;
+    followersCount: number;
+    followingCount: number;
     createdAt: string;     // ISO-8601
     updatedAt: string;     // ISO-8601
   };
@@ -31,5 +33,41 @@ export type UserProfileResponse = {
   isPrivate: boolean;
   isOwner: boolean;
   isVisible: boolean;
+  followersCount: number;
+  followingCount: number;
+  isFollowing: boolean;
+  followRequested: boolean;
+};
+
+export type FollowActionResponse = {
+  status: "PENDING" | "ACCEPTED";
+};
+
+export type PendingFollowRequestItem = {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  requestedAt: string;
+};
+
+export type PendingFollowRequestsPage = {
+  items: PendingFollowRequestItem[];
+  nextCursor: string | null;
+};
+
+export type NotificationItem = {
+  id: string;
+  type: "FOLLOWED_YOU";
+  actorUsername: string;
+  actorDisplayName: string;
+  actorAvatarUrl: string | null;
+  createdAt: string;
+  followedBack: boolean;
+};
+
+export type NotificationsPage = {
+  items: NotificationItem[];
+  nextCursor: string | null;
 };
   
