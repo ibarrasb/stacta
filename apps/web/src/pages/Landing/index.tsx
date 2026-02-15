@@ -10,16 +10,16 @@ export default function LandingPage() {
     <div className="min-h-screen text-white">
       <AuraBackground />
       <Hero />
-      <main className="mx-auto max-w-6xl px-4">
+      <main className="mx-auto max-w-6xl px-4 pb-6">
         <Features />
         <HowItWorks />
         <FAQ />
         <CTA />
       </main>
-      <footer className="border-t border-white/10">
+      <footer className="border-t border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))]">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-10 md:flex-row md:items-center md:justify-between">
-          <div className="text-sm text-white/60">© {new Date().getFullYear()} Stacta</div>
-          <div className="text-sm text-white/60">Taste-first fragrance discovery.</div>
+          <div className="text-sm font-medium text-white/75">© {new Date().getFullYear()} Stacta</div>
+          <div className="text-sm text-cyan-100/70">Taste-first fragrance discovery.</div>
         </div>
       </footer>
     </div>

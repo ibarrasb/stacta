@@ -76,6 +76,89 @@ function cacheKey(q: string) {
   return `stacta:search:${encodeURIComponent(q)}`;
 }
 
+function normalizeSearchText(v: string) {
+  return v
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenize(v: string) {
+  const n = normalizeSearchText(v);
+  return n ? n.split(" ").filter(Boolean) : [];
+}
+
+function scoreSearchHit(item: FragranceSearchResult, rawQuery: string) {
+  const q = normalizeSearchText(rawQuery);
+  if (!q) return 0;
+
+  const name = normalizeSearchText(item.name ?? "");
+  const brand = normalizeSearchText(item.brand ?? "");
+  const combined = normalizeSearchText(`${brand} ${name}`);
+  const nameTokens = tokenize(name);
+  const combinedTokens = tokenize(combined);
+  const qTokens = tokenize(q);
+
+  let score = 0;
+
+  if (name === q) score += 10000;
+  if (combined === q) score += 9000;
+  if (`${name} ${brand}`.trim() === q) score += 8500;
+
+  if (name.startsWith(q)) score += 7000;
+  if (combined.startsWith(q)) score += 5500;
+  if (name.includes(q)) score += 4200;
+  if (combined.includes(q)) score += 3000;
+
+  if (qTokens.length && qTokens.every((t) => nameTokens.includes(t))) score += 2000;
+  if (qTokens.length && qTokens.every((t) => combinedTokens.includes(t))) score += 1400;
+
+  if (qTokens.length >= 2) {
+    const allInOrderInName = qTokens.join(" ") === name;
+    const allInOrderInCombined = qTokens.join(" ") === combined;
+    if (allInOrderInName) score += 1500;
+    if (allInOrderInCombined) score += 900;
+  }
+
+  score -= Math.abs(name.length - q.length);
+  return score;
+}
+
+function rankSearchResults(items: FragranceSearchResult[], rawQuery: string) {
+  return items
+    .slice()
+    .sort((a, b) => {
+      const diff = scoreSearchHit(b, rawQuery) - scoreSearchHit(a, rawQuery);
+      if (diff !== 0) return diff;
+
+      const aName = (a.name ?? "").length;
+      const bName = (b.name ?? "").length;
+      return aName - bName;
+    });
+}
+
+function isExactResult(item: FragranceSearchResult, rawQuery: string) {
+  const q = normalizeSearchText(rawQuery);
+  if (!q) return false;
+
+  const name = normalizeSearchText(item.name ?? "");
+  const brand = normalizeSearchText(item.brand ?? "");
+  const combined = normalizeSearchText(`${brand} ${name}`);
+  const reversed = normalizeSearchText(`${name} ${brand}`);
+  const nameWithoutBrandPrefix =
+    brand && name.startsWith(`${brand} `) ? name.slice(brand.length + 1).trim() : name;
+
+  return (
+    name === q ||
+    combined === q ||
+    reversed === q ||
+    nameWithoutBrandPrefix === q
+  );
+}
+
 type CachedSearch = {
   query: string;
   results: FragranceSearchResult[];
@@ -86,17 +169,19 @@ type CachedSearch = {
 
 function clampVisible(v: number) {
   if (!Number.isFinite(v)) return 10;
-  return Math.min(20, Math.max(10, v));
+  return Math.min(50, Math.max(10, v));
 }
 
 // Memoized card: reduces rerender cost when typing / toggling dialogs / etc.
 const ResultCard = React.memo(function ResultCard({
   item,
   idx,
+  exactMatch,
   onOpen,
 }: {
   item: FragranceSearchResult;
   idx: number;
+  exactMatch: boolean;
   onOpen: (item: FragranceSearchResult, idx: number) => void;
 }) {
   // ✅ put it HERE (normal JS, before return)
@@ -127,7 +212,14 @@ const ResultCard = React.memo(function ResultCard({
       </div>
 
       <div className="p-4">
-        <div className="text-xs text-white/60">{item.brand || "—"}</div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>
+          {exactMatch ? (
+            <span className="shrink-0 rounded-full border border-emerald-300/35 bg-emerald-300/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-100">
+              Exact match
+            </span>
+          ) : null}
+        </div>
         <div className="mt-1 line-clamp-2 text-sm font-semibold">{item.name || "—"}</div>
 
         <div className="mt-2 flex flex-wrap gap-2">
@@ -259,8 +351,8 @@ export default function SearchPage() {
     try {
       //requires updated fragrances.ts: searchFragrances(params, { signal })
       const [fragellaData, communityData] = await Promise.all([
-        searchFragrances({ q: query, limit: 20, persist: true }, { signal: ctrl.signal }),
-        searchCommunityFragrances({ q: query, limit: 20 }, { signal: ctrl.signal }),
+        searchFragrances({ q: query, limit: 50, persist: true }, { signal: ctrl.signal }),
+        searchCommunityFragrances({ q: query, limit: 50 }, { signal: ctrl.signal }),
       ]);
       
       if (ctrl.signal.aborted) return;
@@ -283,7 +375,8 @@ export default function SearchPage() {
         return true;
       });
       
-      const list = merged.map(normalize).slice(0, 20);
+      const ranked = rankSearchResults(merged.map(normalize), query);
+      const list = ranked.slice(0, 50);
       setResults(list);
       
       if (list.length === 0) setError("No results found. Try a different spelling.");
@@ -320,11 +413,11 @@ export default function SearchPage() {
   }, [canSearch, query, saveCache, setParams]);
 
   const visibleResults = useMemo(
-    () => results.slice(0, Math.min(visibleCount, 20)),
+    () => results.slice(0, Math.min(visibleCount, 50)),
     [results, visibleCount]
   );
 
-  const canShowMore = results.length > 10 && visibleCount < 20;
+  const canShowMore = results.length > visibleCount && visibleCount < Math.min(50, results.length);
 
   const hasStrongMatch = useMemo(() => {
     const q = query.toLowerCase();
@@ -355,7 +448,7 @@ export default function SearchPage() {
   );
 
   const onShowMore = useCallback(() => {
-    const next = Math.min(20, visibleCount + 10);
+    const next = Math.min(50, results.length, visibleCount + 10);
     setVisibleCount(next);
 
     setParams(
@@ -367,7 +460,7 @@ export default function SearchPage() {
     );
 
     saveCache({ visibleCount: next, scrollY: window.scrollY });
-  }, [query, saveCache, setParams, visibleCount]);
+  }, [query, results.length, saveCache, setParams, visibleCount]);
 
   return (
     <div className="min-h-screen text-white">
@@ -419,7 +512,7 @@ export default function SearchPage() {
             <div className="mb-3 flex items-center justify-between">
               <div className="text-sm text-white/70">
                 Showing <span className="font-semibold text-white">{visibleResults.length}</span> of{" "}
-                <span className="font-semibold text-white">{Math.min(results.length, 20)}</span>
+                <span className="font-semibold text-white">{Math.min(results.length, 50)}</span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -464,6 +557,7 @@ export default function SearchPage() {
                 key={`${item.source ?? "x"}:${item.externalId ?? "noid"}:${idx}`}
                 item={item}
                 idx={idx}
+                exactMatch={isExactResult(item, query)}
                 onOpen={onOpenResult}
               />
             ))}

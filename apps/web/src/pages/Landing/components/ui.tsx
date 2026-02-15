@@ -84,6 +84,9 @@ export function AuraBackground() {
       {/* subtle vignette + lift */}
       <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(7,7,11,0.35),rgba(7,7,11,1))]" />
 
+      {/* faint grid for depth */}
+      <div className="absolute inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(255,255,255,0.18)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.18)_1px,transparent_1px)] [background-size:44px_44px]" />
+
       {/* noise */}
       <div className="absolute inset-0 opacity-[0.08] [background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22%3E%3Cfilter id=%22n%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22120%22 height=%22120%22 filter=%22url(%23n)%22 opacity=%220.22%22/%3E%3C/svg%3E')]" />
     </div>
@@ -128,7 +131,7 @@ export function PeekTabs({
     <button
       onClick={() => setTab(id)}
       className={cx(
-        "rounded-full px-3 py-1.5 text-xs transition",
+        "min-h-11 rounded-full px-3 py-2 text-xs transition md:min-h-9 md:py-1.5",
         tab === id ? "bg-white/14 text-white" : "text-white/60 hover:bg-white/6 hover:text-white"
       )}
     >
@@ -137,7 +140,7 @@ export function PeekTabs({
   );
 
   return (
-    <div className="flex items-center gap-1 rounded-full border border-white/12 bg-white/6 p-1">
+    <div className="grid w-full grid-cols-3 items-center gap-1 rounded-full border border-white/12 bg-white/6 p-1 sm:w-auto">
       {btn("taste", "Taste")}
       {btn("review", "Review")}
       {btn("notes", "Notes")}

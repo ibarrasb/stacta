@@ -5,9 +5,9 @@ import { GlassCard, cx } from "../components/ui";
 
 export default function FAQ() {
   return (
-    <section className="pb-12">
+    <section className="pb-14">
       <GlassCard className="p-6 md:p-10">
-        <div className="text-xs font-semibold uppercase tracking-wider text-white/60">FAQ</div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-pink-100/80">FAQ</div>
         <div className="mt-2 text-2xl font-semibold md:text-3xl">Quick answers.</div>
         <div className="mt-6 space-y-2">
           {landingCopy.faqs.map((f) => (
@@ -24,13 +24,13 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   return (
     <button
       onClick={() => setOpen((v) => !v)}
-      className="w-full rounded-2xl border border-white/12 bg-white/6 p-4 text-left hover:bg-white/10"
+      className="w-full rounded-2xl border border-white/12 bg-[linear-gradient(145deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))] p-4 text-left transition duration-300 hover:border-pink-200/35 hover:bg-white/10"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold">{q}</div>
         <span
           className={cx(
-            "grid h-7 w-7 place-items-center rounded-full border border-white/12 bg-white/8 text-xs text-white/70 transition",
+            "grid h-7 w-7 place-items-center rounded-full border border-pink-200/30 bg-pink-300/10 text-xs text-pink-50 transition",
             open && "rotate-45"
           )}
         >

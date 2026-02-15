@@ -37,7 +37,7 @@ public class FragranceController {
     }
 
     if (limit < 1) limit = 1;
-    if (limit > 20) limit = 20;
+    if (limit > 50) limit = 50;
 
     // cached mode (persist=false)
     if (!persist) {

@@ -140,3 +140,16 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes stacta-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.stacta-marquee {
+  animation: stacta-marquee 34s linear infinite;
+}

@@ -38,7 +38,7 @@ public class FragellaClient {
   }
 
   public List<FragellaDtos.Fragrance> search(String q, int limit) {
-    int safeLimit = Math.min(Math.max(limit, 1), 20);
+    int safeLimit = Math.min(Math.max(limit, 1), 50);
     String needle = (q == null) ? "" : q.trim();
     if (needle.isBlank()) return List.of();
 

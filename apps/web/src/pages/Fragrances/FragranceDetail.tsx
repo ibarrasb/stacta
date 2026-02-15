@@ -403,6 +403,10 @@ export default function FragranceDetailPage() {
     alert("Add to collection (wire backend endpoint next).");
   }, []);
 
+  const addToWishlist = useCallback(async () => {
+    alert("Add to wishlist (wire backend endpoint next).");
+  }, []);
+
   const writeReview = useCallback(async () => {
     alert("Review (wire review flow next).");
   }, []);
@@ -569,6 +573,13 @@ export default function FragranceDetailPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <Button className="h-10 rounded-xl px-5" onClick={addToCollection}>
                       Add to collection
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                      onClick={addToWishlist}
+                    >
+                      Add to wishlist
                     </Button>
                     <Button
                       variant="secondary"
