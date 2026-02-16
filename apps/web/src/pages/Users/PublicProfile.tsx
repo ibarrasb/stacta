@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { followUser, unfollowUser } from "@/lib/api/follows";
 import { getUserProfile } from "@/lib/api/users";
 import type { UserProfileResponse } from "@/lib/api/types";
@@ -21,6 +22,7 @@ export default function PublicProfilePage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{ title: string; message: string } | null>(null);
 
   const backTarget = useMemo(() => {
     const stateFrom = (location.state as any)?.from?.pathname;
@@ -60,10 +62,27 @@ export default function PublicProfilePage() {
 
   async function onToggleFollow() {
     if (!profile || profile.isOwner) return;
+    const isUnfollowAction = profile.isFollowing || profile.followRequested;
+    if (isUnfollowAction) {
+      setPendingConfirm({
+        title: profile.isFollowing ? "Unfollow User?" : "Cancel Follow Request?",
+        message: profile.isFollowing
+          ? `Are you sure you want to unfollow @${profile.username}?`
+          : `Are you sure you want to cancel your follow request to @${profile.username}?`,
+      });
+      return;
+    }
+
+    await runToggleFollow();
+  }
+
+  async function runToggleFollow() {
+    if (!profile || profile.isOwner) return;
+    const isUnfollowAction = profile.isFollowing || profile.followRequested;
     setActionLoading(true);
     setError(null);
     try {
-      if (profile.isFollowing || profile.followRequested) {
+      if (isUnfollowAction) {
         await unfollowUser(profile.username);
       } else {
         await followUser(profile.username);
@@ -74,20 +93,22 @@ export default function PublicProfilePage() {
       setError(e?.message || "Failed to update follow status.");
     } finally {
       setActionLoading(false);
+      setPendingConfirm(null);
     }
   }
 
   return (
-    <div className="min-h-screen text-white">
-      <div className="mx-auto max-w-5xl px-4 py-10">
-        <div className="mb-7 flex items-center justify-between gap-3">
+    <div className="min-h-screen text-white stacta-fade-rise">
+      <div className="mx-auto max-w-5xl px-4 pb-10">
+        <div className="mb-7 flex items-center justify-between gap-3 rounded-3xl border border-white/15 bg-black/30 p-5">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
-            <p className="mt-1 text-sm text-white/60">Viewing @{username}</p>
+            <div className="text-xs uppercase tracking-[0.15em] text-amber-200/80">Community profile</div>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Profile</h1>
+            <p className="mt-1 text-sm text-white/65">Viewing @{username}</p>
           </div>
           <Button
             variant="secondary"
-            className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+            className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
             onClick={() => navigate(backTarget)}
           >
             {backTarget === "/notifications" ? "Back to notifications" : "Back to users"}
@@ -95,7 +116,7 @@ export default function PublicProfilePage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur">
+          <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
             {loading && <div className="text-sm text-white/65">Loading...</div>}
 
             {error && (
@@ -202,7 +223,7 @@ export default function PublicProfilePage() {
             )}
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur">
+          <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
             <div className="mb-4">
               <div className="text-sm font-semibold">Profile details</div>
               <div className="mt-1 text-xs text-white/60">Visibility and account context.</div>
@@ -242,6 +263,17 @@ export default function PublicProfilePage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingConfirm)}
+        title={pendingConfirm?.title ?? "Confirm"}
+        description={pendingConfirm?.message ?? ""}
+        confirmLabel="Confirm"
+        cancelLabel="Keep Following"
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={runToggleFollow}
+        loading={actionLoading}
+      />
     </div>
   );
 }

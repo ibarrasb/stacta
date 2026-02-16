@@ -17,6 +17,8 @@ public class ApiExceptionHandler {
       case "INVALID_DISPLAY_NAME" -> HttpStatus.BAD_REQUEST;
       case "INVALID_FOLLOW_TARGET" -> HttpStatus.BAD_REQUEST;
       case "INVALID_CURSOR" -> HttpStatus.BAD_REQUEST;
+      case "INVALID_FEED_TAB" -> HttpStatus.BAD_REQUEST;
+      case "INVALID_FEED_FILTER" -> HttpStatus.BAD_REQUEST;
       case "NOT_ONBOARDED" -> HttpStatus.NOT_FOUND;
       case "USER_NOT_FOUND" -> HttpStatus.NOT_FOUND;
       case "FOLLOW_REQUEST_NOT_FOUND" -> HttpStatus.NOT_FOUND;

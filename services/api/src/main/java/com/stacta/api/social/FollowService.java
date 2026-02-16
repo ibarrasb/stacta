@@ -25,14 +25,22 @@ public class FollowService {
   private static final String ACCEPTED = "ACCEPTED";
   private static final String FOLLOWED_YOU = "FOLLOWED_YOU";
   private static final String FOLLOWED_YOU_BACK = "FOLLOWED_YOU_BACK";
+  private static final String USER_FOLLOWED_USER = "USER_FOLLOWED_USER";
 
   private final FollowRepository follows;
   private final NotificationEventRepository notifications;
+  private final ActivityEventRepository activities;
   private final UserRepository users;
 
-  public FollowService(FollowRepository follows, NotificationEventRepository notifications, UserRepository users) {
+  public FollowService(
+    FollowRepository follows,
+    NotificationEventRepository notifications,
+    ActivityEventRepository activities,
+    UserRepository users
+  ) {
     this.follows = follows;
     this.notifications = notifications;
+    this.activities = activities;
     this.users = users;
   }
 
@@ -63,6 +71,7 @@ public class FollowService {
       users.bumpFollowingCount(me.getId(), 1);
       users.bumpFollowersCount(target.getId(), 1);
       appendFollowNotification(fr);
+      appendFollowActivity(fr);
     }
     return new FollowActionResponse(fr.getStatus());
   }
@@ -75,10 +84,13 @@ public class FollowService {
 
     follows.findByFollowerUserIdAndFollowingUserId(me.getId(), target.getId())
       .ifPresent(rel -> {
-        follows.delete(rel);
         if (ACCEPTED.equals(rel.getStatus())) {
+          activities.deleteBySourceFollowId(rel.getId());
+          follows.delete(rel);
           users.bumpFollowingCount(me.getId(), -1);
           users.bumpFollowersCount(target.getId(), -1);
+        } else {
+          follows.delete(rel);
         }
       });
   }
@@ -126,6 +138,7 @@ public class FollowService {
     users.bumpFollowingCount(request.getFollowerUserId(), 1);
     users.bumpFollowersCount(request.getFollowingUserId(), 1);
     appendFollowNotification(request);
+    appendFollowActivity(request);
   }
 
   @Transactional
@@ -247,5 +260,15 @@ public class FollowService {
     event.setType(followedBack ? FOLLOWED_YOU_BACK : FOLLOWED_YOU);
     event.setCreatedAt(follow.getRespondedAt() != null ? follow.getRespondedAt() : follow.getCreatedAt());
     notifications.save(event);
+  }
+
+  private void appendFollowActivity(FollowRelationship follow) {
+    ActivityEvent event = new ActivityEvent();
+    event.setActorUserId(follow.getFollowerUserId());
+    event.setTargetUserId(follow.getFollowingUserId());
+    event.setType(USER_FOLLOWED_USER);
+    event.setSourceFollowId(follow.getId());
+    event.setCreatedAt(follow.getRespondedAt() != null ? follow.getRespondedAt() : follow.getCreatedAt());
+    activities.save(event);
   }
 }

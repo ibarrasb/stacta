@@ -189,10 +189,10 @@ const ResultCard = React.memo(function ResultCard({
 
   return (
     <button
-      className="group overflow-hidden rounded-3xl border border-white/10 bg-white/5 text-left transition hover:bg-white/7"
+      className="group overflow-hidden rounded-3xl border border-white/15 bg-black/25 text-left transition duration-300 hover:-translate-y-0.5 hover:bg-white/10"
       onClick={() => onOpen(item, idx)}
     >
-      <div className="aspect-[4/3] w-full overflow-hidden bg-white/5">
+      <div className="aspect-[4/3] w-full overflow-hidden bg-black/20">
         <img
           src={src}
           alt={`${item.brand} ${item.name}`.trim()}
@@ -463,31 +463,32 @@ export default function SearchPage() {
   }, [query, results.length, saveCache, setParams, visibleCount]);
 
   return (
-    <div className="min-h-screen text-white">
-      <div className="mx-auto max-w-5xl px-4 py-10">
-        <div className="mb-6 flex items-center justify-between">
+    <div className="min-h-screen text-white stacta-fade-rise">
+      <div className="mx-auto max-w-6xl px-4 pb-10">
+        <div className="mb-6 flex items-center justify-between rounded-3xl border border-white/15 bg-black/30 p-5">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
-            <p className="mt-1 text-sm text-white/60">Search by brand, fragrance, or both.</p>
+            <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Explorer</div>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Search</h1>
+            <p className="mt-1 text-sm text-white/65">Find by brand, fragrance, or both.</p>
           </div>
 
           <Button
             variant="secondary"
-            className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+            className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
             onClick={() => navigate("/home")}
           >
             Back
           </Button>
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+        <div className="rounded-3xl border border-white/15 bg-white/6 p-6">
           <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
-              <div className="mb-1 text-xs font-medium text-white/60">Search query</div>
+              <div className="mb-1 text-xs font-medium uppercase tracking-[0.12em] text-white/60">Search query</div>
               <Input
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
-                className="h-10 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-white/40"
+                className="h-11 rounded-xl border-white/10 bg-black/20 text-white placeholder:text-white/40"
                 placeholder="Dior Sauvage"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") onSearch();
@@ -495,7 +496,7 @@ export default function SearchPage() {
               />
             </div>
 
-            <Button className="h-10 rounded-xl px-5" onClick={onSearch} disabled={loading || !canSearch}>
+            <Button className="h-11 rounded-xl bg-white text-black hover:bg-white/90 px-5" onClick={onSearch} disabled={loading || !canSearch}>
               {loading ? "Searching..." : "Search"}
             </Button>
           </div>
@@ -509,7 +510,7 @@ export default function SearchPage() {
 
         <div className="mt-6">
           {visibleResults.length > 0 && (
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex items-center justify-between rounded-2xl border border-white/12 bg-black/25 px-4 py-3">
               <div className="text-sm text-white/70">
                 Showing <span className="font-semibold text-white">{visibleResults.length}</span> of{" "}
                 <span className="font-semibold text-white">{Math.min(results.length, 50)}</span>
@@ -518,7 +519,7 @@ export default function SearchPage() {
               <div className="flex items-center gap-2">
                 <Button
                   variant="secondary"
-                  className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                  className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
                   onClick={() => setAddOpen(true)}
                 >
                   Not seeing it?
@@ -527,7 +528,7 @@ export default function SearchPage() {
                 {canShowMore && (
                   <Button
                     variant="secondary"
-                    className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                    className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
                     onClick={onShowMore}
                   >
                     More results
@@ -538,13 +539,13 @@ export default function SearchPage() {
           )}
 
           {showProminentCantFind && (
-            <div className="mb-4 rounded-3xl border border-white/10 bg-white/5 p-6">
+            <div className="mb-4 rounded-3xl border border-amber-200/25 bg-[linear-gradient(135deg,rgba(255,194,94,0.16),rgba(255,255,255,0.05))] p-6">
               <div className="text-sm font-semibold">Can’t find what you’re looking for?</div>
-              <div className="mt-1 text-sm text-white/60">
+              <div className="mt-1 text-sm text-white/70">
                 Add it as a community fragrance (private by default).
               </div>
               <div className="mt-4">
-                <Button className="h-10 rounded-xl px-5" onClick={() => setAddOpen(true)}>
+                <Button className="h-10 rounded-xl bg-white text-black hover:bg-white/90 px-5" onClick={() => setAddOpen(true)}>
                   Add community fragrance
                 </Button>
               </div>
@@ -553,13 +554,14 @@ export default function SearchPage() {
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleResults.map((item, idx) => (
-              <ResultCard
-                key={`${item.source ?? "x"}:${item.externalId ?? "noid"}:${idx}`}
-                item={item}
-                idx={idx}
-                exactMatch={isExactResult(item, query)}
-                onOpen={onOpenResult}
-              />
+              <div key={`${item.source ?? "x"}:${item.externalId ?? "noid"}:${idx}`} style={{ animationDelay: `${Math.min(idx * 30, 300)}ms` }} className="stacta-fade-rise">
+                <ResultCard
+                  item={item}
+                  idx={idx}
+                  exactMatch={isExactResult(item, query)}
+                  onOpen={onOpenResult}
+                />
+              </div>
             ))}
           </div>
 

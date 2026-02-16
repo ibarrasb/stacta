@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import NoticeDialog from "@/components/ui/notice-dialog";
 import type { FragranceSearchResult } from "@/lib/api/fragrances";
 import { getFragranceDetail } from "@/lib/api/fragrances";
 
@@ -162,7 +163,7 @@ function VibeChip({ text }: { text: string }) {
   const dotG = BAR_GRADIENTS[idx];
 
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs text-white/85 shadow-[0_1px_0_rgba(255,255,255,0.05)]">
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/25 px-3 py-1 text-xs text-white/85 shadow-[0_1px_0_rgba(255,255,255,0.05)]">
       <span className={cx("h-2 w-2 rounded-full bg-gradient-to-r", dotG)} />
       <span className="capitalize">{text}</span>
     </span>
@@ -197,7 +198,7 @@ function NoteTile({ note }: { note: Note }) {
 
 function PyramidRow({ title, notes }: { title: string; notes: Note[] }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+    <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-xs font-medium tracking-wide text-white/60">{title.toUpperCase()}</div>
         <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/50">
@@ -224,7 +225,7 @@ function RankingCard({ title, items }: { title: string; items: RankingItem[] }) 
   const max = Math.max(1, ...sorted.map((x) => x.score || 0));
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+    <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
       <div className="flex items-center justify-between">
         <div>
           <div className="text-xs font-medium text-white/80">{title}</div>
@@ -287,6 +288,7 @@ export default function FragranceDetailPage() {
 
   const [retryTick, setRetryTick] = useState(0);
   const forceRefreshRef = useRef(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const stateFragrance = (location?.state?.fragrance ?? null) as (FragranceSearchResult & any) | null;
   const fragrance = (stateFragrance ?? loaded) as (FragranceSearchResult & any) | null;
@@ -400,15 +402,15 @@ export default function FragranceDetailPage() {
   }, [fragrance]);
 
   const addToCollection = useCallback(async () => {
-    alert("Add to collection (wire backend endpoint next).");
+    setNotice("Add to collection (wire backend endpoint next).");
   }, []);
 
   const addToWishlist = useCallback(async () => {
-    alert("Add to wishlist (wire backend endpoint next).");
+    setNotice("Add to wishlist (wire backend endpoint next).");
   }, []);
 
   const writeReview = useCallback(async () => {
-    alert("Review (wire review flow next).");
+    setNotice("Review flow (wire backend endpoint next).");
   }, []);
 
   const buyDisabled = !fragrance?.purchaseUrl;
@@ -461,17 +463,18 @@ export default function FragranceDetailPage() {
   const rating01 = ratingValue ? clamp01(ratingValue / 5) : 0;
 
   return (
-    <div className="min-h-screen text-white">
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <div className="mb-6 flex items-center justify-between">
+    <div className="min-h-screen text-white stacta-fade-rise">
+      <div className="mx-auto max-w-6xl px-4 pb-10">
+        <div className="mb-6 flex items-center justify-between rounded-3xl border border-white/15 bg-black/30 p-5">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Fragrance</h1>
-            <p className="mt-1 text-sm text-white/60">Details + add to your collection.</p>
+            <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Fragrance Intelligence</div>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Fragrance</h1>
+            <p className="mt-1 text-sm text-white/65">Details + add to your collection.</p>
           </div>
 
           <Button
             variant="secondary"
-            className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+            className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
             onClick={() => {
               if (from?.pathname) {
                 navigate(`${from.pathname}${from.search ?? ""}`);
@@ -484,14 +487,14 @@ export default function FragranceDetailPage() {
           </Button>
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+        <div className="rounded-3xl border border-white/15 bg-white/6 p-6">
           {showSkeleton ? (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-white/15 bg-black/25 p-4">
               <div className="text-sm font-semibold">Loading…</div>
               <div className="mt-2 text-sm text-white/70">Fetching fragrance details.</div>
             </div>
           ) : !fragrance ? (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-white/15 bg-black/25 p-4">
               <div className="text-sm font-semibold">{loadError ? "Couldn’t load" : "Open from Search"}</div>
               <div className="mt-2 text-sm text-white/70">
                 {loadError
@@ -507,7 +510,7 @@ export default function FragranceDetailPage() {
                 {routeExternalId ? (
                   <Button
                     variant="secondary"
-                    className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                    className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
                     onClick={() => {
                       forceRefreshRef.current = true;
                       setRetryTick((x) => x + 1);
@@ -520,7 +523,7 @@ export default function FragranceDetailPage() {
             </div>
           ) : (
             <div className="grid gap-6 lg:grid-cols-[380px_1fr] lg:items-start">
-              <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 lg:sticky lg:top-6">
+              <div className="overflow-hidden rounded-3xl border border-white/15 bg-black/25 lg:sticky lg:top-24">
                 <div className="p-4">
                   <div className="mb-4 lg:hidden">
                     <div className="text-xs text-white/60">{fragrance.brand || "—"}</div>
@@ -551,7 +554,7 @@ export default function FragranceDetailPage() {
                     </div>
                   </div>
 
-                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                  <div className="overflow-hidden rounded-2xl border border-white/15 bg-black/20">
                       <img
                         src={fragrance.imageUrl?.trim() ? fragrance.imageUrl : FALLBACK_FRAGRANCE_IMG}
                         alt={`${fragrance.brand} ${fragrance.name}`.trim()}
@@ -569,28 +572,28 @@ export default function FragranceDetailPage() {
 
                 </div>
 
-                <div className="border-t border-white/10 bg-gradient-to-b from-white/5 to-black/10 p-4">
+                <div className="border-t border-white/15 bg-gradient-to-b from-white/8 to-black/10 p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Button className="h-10 rounded-xl px-5" onClick={addToCollection}>
                       Add to collection
                     </Button>
                     <Button
                       variant="secondary"
-                      className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                      className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
                       onClick={addToWishlist}
                     >
                       Add to wishlist
                     </Button>
                     <Button
                       variant="secondary"
-                      className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                      className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
                       onClick={writeReview}
                     >
                       Review
                     </Button>
                     <Button
                       variant="secondary"
-                      className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                      className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
                       disabled={buyDisabled}
                       onClick={() => {
                         if (fragrance.purchaseUrl) window.open(fragrance.purchaseUrl, "_blank");
@@ -601,7 +604,7 @@ export default function FragranceDetailPage() {
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <div className="rounded-2xl border border-white/15 bg-black/20 p-3">
                       <div className="text-[11px] text-white/60">Rating</div>
                       {ratingValue ? (
                         <div className="mt-2 flex flex-col items-center">
@@ -615,13 +618,13 @@ export default function FragranceDetailPage() {
                       )}
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <div className="rounded-2xl border border-white/15 bg-black/20 p-3">
                       <div className="text-[11px] text-white/60">Price</div>
                       <div className="mt-1 text-sm font-semibold">{fragrance.priceValue ?? fragrance.price ?? "—"}</div>
                     </div>
                   </div>
 
-                  <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="mt-6 rounded-2xl border border-white/15 bg-black/20 p-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-xs font-medium text-white/80">Performance</div>
@@ -694,7 +697,7 @@ export default function FragranceDetailPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-xs font-medium text-white/80">Main accords</div>
@@ -728,7 +731,7 @@ export default function FragranceDetailPage() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
                   <div className="flex items-center justify-between">
                     <div className="text-xs font-medium text-white/80">General notes</div>
                     <div className="text-[10px] text-white/45">ingredients</div>
@@ -760,7 +763,7 @@ export default function FragranceDetailPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
                     <div className="text-xs font-medium text-white/60">Perfume pyramid</div>
                     <div className="mt-2 text-sm text-white/70">This fragrance didn’t include staged notes in the response.</div>
                   </div>
@@ -770,6 +773,13 @@ export default function FragranceDetailPage() {
           )}
         </div>
       </div>
+
+      <NoticeDialog
+        open={Boolean(notice)}
+        title="Coming Soon"
+        message={notice ?? ""}
+        onClose={() => setNotice(null)}
+      />
     </div>
   );
 }

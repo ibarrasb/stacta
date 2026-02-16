@@ -1,6 +1,7 @@
 import { Suspense } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import GlobalBackground from "@/components/GlobalBackground";
+import Navbar from "@/components/layout/Navbar";
 
 function RouteFallback() {
   return (
@@ -11,11 +12,26 @@ function RouteFallback() {
 }
 
 export default function AppLayout() {
+  const { pathname } = useLocation();
+  const isAuthedRoute =
+    pathname === "/home" ||
+    pathname === "/collection" ||
+    pathname === "/profile" ||
+    pathname === "/search" ||
+    pathname === "/users" ||
+    pathname === "/notifications" ||
+    pathname === "/settings" ||
+    pathname.startsWith("/u/") ||
+    pathname.startsWith("/fragrances/");
+
   return (
     <div className="min-h-screen text-white">
       <GlobalBackground />
+      {isAuthedRoute ? <Navbar /> : null}
       <Suspense fallback={<RouteFallback />}>
-        <Outlet />
+        <div className={isAuthedRoute ? "pt-28 sm:pt-24" : ""}>
+          <Outlet />
+        </div>
       </Suspense>
     </div>
   );

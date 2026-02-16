@@ -137,13 +137,14 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen text-white">
-      <div className="mx-auto max-w-5xl px-4 py-10">
+    <div className="min-h-screen text-white stacta-fade-rise">
+      <div className="mx-auto max-w-5xl px-4 pb-10">
         {/* Top bar */}
-        <div className="mb-7 flex items-center justify-between">
+        <div className="mb-7 flex items-center justify-between rounded-3xl border border-white/15 bg-black/30 p-5">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">My profile</h1>
-            <p className="mt-1 text-sm text-white/60">
+            <div className="text-xs uppercase tracking-[0.15em] text-amber-200/80">Identity</div>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">My profile</h1>
+            <p className="mt-1 text-sm text-white/65">
               Keep your identity polished and control who can see your profile.
             </p>
           </div>
@@ -151,7 +152,14 @@ export default function ProfilePage() {
           <div className="flex items-center gap-2">
             <Button
               variant="secondary"
-              className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+              className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+              onClick={() => navigate("/settings")}
+            >
+              Settings
+            </Button>
+            <Button
+              variant="secondary"
+              className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
               onClick={() => navigate("/home")}
             >
               Back
@@ -161,7 +169,7 @@ export default function ProfilePage() {
 
         <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
           {/* Main card */}
-          <div className="rounded-3xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur">
+          <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
             {loading && <div className="text-sm text-white/70">Loading...</div>}
 
             {error && (
@@ -306,7 +314,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Side card: account details */}
-          <div className="rounded-3xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur">
+          <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
             <div className="mb-4">
               <div className="text-sm font-semibold">Account</div>
               <div className="mt-1 text-xs text-white/60">

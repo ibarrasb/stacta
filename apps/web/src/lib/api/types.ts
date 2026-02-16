@@ -70,4 +70,25 @@ export type NotificationsPage = {
   items: NotificationItem[];
   nextCursor: string | null;
 };
+
+export type FeedItem = {
+  id: string;
+  type: "USER_FOLLOWED_USER" | "REVIEW_POSTED" | "COLLECTION_ITEM_ADDED" | "WISHLIST_ITEM_ADDED" | "REVIEW_REPOSTED";
+  actorUsername: string;
+  actorDisplayName: string;
+  actorAvatarUrl: string | null;
+  targetUsername: string | null;
+  targetDisplayName: string | null;
+  fragranceName: string | null;
+  reviewExcerpt: string | null;
+  likesCount: number;
+  commentsCount: number;
+  repostsCount: number;
+  createdAt: string;
+};
+
+export type FeedPage = {
+  items: FeedItem[];
+  nextCursor: string | null;
+};
   
