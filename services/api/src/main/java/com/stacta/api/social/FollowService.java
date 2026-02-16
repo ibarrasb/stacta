@@ -23,12 +23,16 @@ public class FollowService {
 
   private static final String PENDING = "PENDING";
   private static final String ACCEPTED = "ACCEPTED";
+  private static final String FOLLOWED_YOU = "FOLLOWED_YOU";
+  private static final String FOLLOWED_YOU_BACK = "FOLLOWED_YOU_BACK";
 
   private final FollowRepository follows;
+  private final NotificationEventRepository notifications;
   private final UserRepository users;
 
-  public FollowService(FollowRepository follows, UserRepository users) {
+  public FollowService(FollowRepository follows, NotificationEventRepository notifications, UserRepository users) {
     this.follows = follows;
+    this.notifications = notifications;
     this.users = users;
   }
 
@@ -58,6 +62,7 @@ public class FollowService {
     if (ACCEPTED.equals(fr.getStatus())) {
       users.bumpFollowingCount(me.getId(), 1);
       users.bumpFollowersCount(target.getId(), 1);
+      appendFollowNotification(fr);
     }
     return new FollowActionResponse(fr.getStatus());
   }
@@ -120,6 +125,7 @@ public class FollowService {
     follows.save(request);
     users.bumpFollowingCount(request.getFollowerUserId(), 1);
     users.bumpFollowersCount(request.getFollowingUserId(), 1);
+    appendFollowNotification(request);
   }
 
   @Transactional
@@ -141,7 +147,7 @@ public class FollowService {
     int safeLimit = Math.max(1, Math.min(limit, 50));
     CursorToken token = parseCursor(cursor);
 
-    var rows = follows.listFollowNotifications(
+    var rows = notifications.listNotificationEvents(
       me.getId(),
       token == null ? null : token.at(),
       token == null ? null : token.id(),
@@ -153,12 +159,12 @@ public class FollowService {
     var items = pageRows.stream()
       .map(v -> new NotificationItem(
         v.getId(),
-        "FOLLOWED_YOU",
+        v.getType(),
         v.getActorUsername(),
         v.getActorDisplayName(),
         v.getActorAvatarUrl(),
         v.getCreatedAt(),
-        v.getFollowedBack()
+        FOLLOWED_YOU_BACK.equals(v.getType())
       ))
       .toList();
 
@@ -180,9 +186,8 @@ public class FollowService {
   @Transactional(readOnly = true)
   public UnreadNotificationsResponse unreadCount(String viewerSub) {
     User me = getViewer(viewerSub);
-    long pendingCount = follows.countByFollowingUserIdAndStatus(me.getId(), PENDING);
-    long acceptedSinceSeen = follows.countAcceptedAfter(me.getId(), me.getNotificationsSeenAt());
-    return new UnreadNotificationsResponse(pendingCount + acceptedSinceSeen);
+    long unread = notifications.countAfter(me.getId(), me.getNotificationsSeenAt());
+    return new UnreadNotificationsResponse(unread);
   }
 
   @Transactional(readOnly = true)
@@ -227,5 +232,20 @@ public class FollowService {
   private String encodeCursor(Instant at, UUID id) {
     String raw = at.toString() + "|" + id;
     return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private void appendFollowNotification(FollowRelationship follow) {
+    NotificationEvent event = new NotificationEvent();
+    event.setRecipientUserId(follow.getFollowingUserId());
+    event.setActorUserId(follow.getFollowerUserId());
+    event.setSourceFollowId(follow.getId());
+    boolean followedBack = follows.existsByFollowerUserIdAndFollowingUserIdAndStatus(
+      follow.getFollowingUserId(),
+      follow.getFollowerUserId(),
+      ACCEPTED
+    );
+    event.setType(followedBack ? FOLLOWED_YOU_BACK : FOLLOWED_YOU);
+    event.setCreatedAt(follow.getRespondedAt() != null ? follow.getRespondedAt() : follow.getCreatedAt());
+    notifications.save(event);
   }
 }

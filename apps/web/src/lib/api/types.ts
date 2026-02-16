@@ -58,7 +58,7 @@ export type PendingFollowRequestsPage = {
 
 export type NotificationItem = {
   id: string;
-  type: "FOLLOWED_YOU";
+  type: "FOLLOWED_YOU" | "FOLLOWED_YOU_BACK";
   actorUsername: string;
   actorDisplayName: string;
   actorAvatarUrl: string | null;

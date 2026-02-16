@@ -31,6 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class FollowServiceTest {
 
   @Mock private FollowRepository follows;
+  @Mock private NotificationEventRepository notifications;
   @Mock private UserRepository users;
 
   @InjectMocks private FollowService service;
@@ -56,6 +57,8 @@ class FollowServiceTest {
   void followPublicUserShouldCreateAcceptedAndBumpCounters() {
     when(follows.findByFollowerUserIdAndFollowingUserId(viewer.getId(), targetPublic.getId()))
       .thenReturn(Optional.empty());
+    when(follows.existsByFollowerUserIdAndFollowingUserIdAndStatus(targetPublic.getId(), viewer.getId(), "ACCEPTED"))
+      .thenReturn(false);
 
     FollowActionResponse response = service.followByUsername(VIEWER_SUB, "public_user");
 
@@ -65,6 +68,7 @@ class FollowServiceTest {
     assertEquals("ACCEPTED", rel.getValue().getStatus());
     verify(users).bumpFollowingCount(viewer.getId(), 1);
     verify(users).bumpFollowersCount(targetPublic.getId(), 1);
+    verify(notifications).save(any(NotificationEvent.class));
   }
 
   @Test
@@ -80,6 +84,7 @@ class FollowServiceTest {
     assertEquals("PENDING", rel.getValue().getStatus());
     verify(users, never()).bumpFollowingCount(any(), anyLong());
     verify(users, never()).bumpFollowersCount(any(), anyLong());
+    verify(notifications, never()).save(any(NotificationEvent.class));
   }
 
   @Test
@@ -93,6 +98,7 @@ class FollowServiceTest {
     assertEquals("ACCEPTED", rel.getStatus());
     verify(users).bumpFollowingCount(targetPrivate.getId(), 1);
     verify(users).bumpFollowersCount(viewer.getId(), 1);
+    verify(notifications).save(any(NotificationEvent.class));
   }
 
   @Test
@@ -129,15 +135,13 @@ class FollowServiceTest {
   }
 
   @Test
-  void unreadCountShouldAddPendingAndAcceptedSinceSeen() {
-    when(follows.countByFollowingUserIdAndStatus(viewer.getId(), "PENDING")).thenReturn(2L);
-    when(follows.countAcceptedAfter(eq(viewer.getId()), any())).thenReturn(3L);
+  void unreadCountShouldUseNotificationEventsSinceSeen() {
+    when(notifications.countAfter(eq(viewer.getId()), any())).thenReturn(3L);
 
     UnreadNotificationsResponse response = service.unreadCount(VIEWER_SUB);
 
-    assertEquals(5L, response.count());
-    verify(follows, times(1)).countByFollowingUserIdAndStatus(viewer.getId(), "PENDING");
-    verify(follows, times(1)).countAcceptedAfter(eq(viewer.getId()), any());
+    assertEquals(3L, response.count());
+    verify(notifications, times(1)).countAfter(eq(viewer.getId()), any());
   }
 
   private static User user(UUID id, String sub, String username, boolean isPrivate, Instant seenAt) {
