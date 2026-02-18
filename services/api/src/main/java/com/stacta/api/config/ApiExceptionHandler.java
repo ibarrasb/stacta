@@ -19,6 +19,9 @@ public class ApiExceptionHandler {
       case "INVALID_CURSOR" -> HttpStatus.BAD_REQUEST;
       case "INVALID_FEED_TAB" -> HttpStatus.BAD_REQUEST;
       case "INVALID_FEED_FILTER" -> HttpStatus.BAD_REQUEST;
+      case "INVALID_COLLECTION_ITEM" -> HttpStatus.BAD_REQUEST;
+      case "TOP_FRAGRANCES_LIMIT_REACHED" -> HttpStatus.BAD_REQUEST;
+      case "COLLECTION_ITEM_NOT_FOUND" -> HttpStatus.NOT_FOUND;
       case "NOT_ONBOARDED" -> HttpStatus.NOT_FOUND;
       case "USER_NOT_FOUND" -> HttpStatus.NOT_FOUND;
       case "FOLLOW_REQUEST_NOT_FOUND" -> HttpStatus.NOT_FOUND;

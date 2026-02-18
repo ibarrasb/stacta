@@ -62,15 +62,16 @@ export default function ProfilePhotoPicker({ fallbackText, initialUrl, disabled 
         onChange={onFileChange}
       />
 
-      <Button
-        type="button"
-        variant="secondary"
-        disabled={disabled}
-        className="mt-3 h-8 w-full rounded-xl border border-white/12 bg-white/10 px-2 text-[11px] text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
-        onClick={onPickClick}
-      >
-        {disabled ? "Edit to change" : "Change photo"}
-      </Button>
+      {!disabled ? (
+        <Button
+          type="button"
+          variant="secondary"
+          className="mt-3 h-8 w-full rounded-xl border border-white/12 bg-white/10 px-2 text-[11px] text-white hover:bg-white/15"
+          onClick={onPickClick}
+        >
+          Change photo
+        </Button>
+      ) : null}
     </div>
   );
 }

@@ -31,6 +31,9 @@ public class User {
   @Column(name = "is_private", nullable = false)
   private boolean isPrivate = false;
 
+  @Column(name = "is_verified", nullable = false)
+  private boolean isVerified = false;
+
   @Column(name = "notifications_seen_at", nullable = false)
   private Instant notificationsSeenAt = Instant.now();
 
@@ -65,6 +68,8 @@ public class User {
   public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
   public boolean isPrivate() { return isPrivate; }
   public void setPrivate(boolean aPrivate) { isPrivate = aPrivate; }
+  public boolean isVerified() { return isVerified; }
+  public void setVerified(boolean verified) { isVerified = verified; }
   public Instant getNotificationsSeenAt() { return notificationsSeenAt; }
   public void setNotificationsSeenAt(Instant notificationsSeenAt) { this.notificationsSeenAt = notificationsSeenAt; }
   public long getFollowersCount() { return followersCount; }

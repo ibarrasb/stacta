@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import NoticeDialog from "@/components/ui/notice-dialog";
 import type { FragranceSearchResult } from "@/lib/api/fragrances";
 import { getFragranceDetail } from "@/lib/api/fragrances";
+import { addToCollection as addCollectionItem } from "@/lib/api/collection";
 
 import fragrancePlaceholder from "@/assets/illustrations/fragrance-placeholder-4x3.png";
 import defaultNoteImg from "@/assets/notes/download.svg";
@@ -289,6 +290,8 @@ export default function FragranceDetailPage() {
   const [retryTick, setRetryTick] = useState(0);
   const forceRefreshRef = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeTitle, setNoticeTitle] = useState("Notice");
+  const [addingToCollection, setAddingToCollection] = useState(false);
 
   const stateFragrance = (location?.state?.fragrance ?? null) as (FragranceSearchResult & any) | null;
   const fragrance = (stateFragrance ?? loaded) as (FragranceSearchResult & any) | null;
@@ -402,14 +405,45 @@ export default function FragranceDetailPage() {
   }, [fragrance]);
 
   const addToCollection = useCallback(async () => {
-    setNotice("Add to collection (wire backend endpoint next).");
-  }, []);
+    const normalizedSource = String(fragrance?.source ?? inferPreferredSource(routeExternalId || "") ?? "FRAGELLA")
+      .trim()
+      .toUpperCase();
+    const source = normalizedSource === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const external = String(fragrance?.externalId ?? routeExternalId ?? "").trim();
+    const name = String(fragrance?.name ?? "").trim();
+
+    if (!external || !name) {
+      setNoticeTitle("Collection");
+      setNotice("Missing fragrance data. Refresh and try again.");
+      return;
+    }
+
+    setAddingToCollection(true);
+    try {
+      await addCollectionItem({
+        source,
+        externalId: external,
+        name,
+        brand: fragrance?.brand ?? null,
+        imageUrl: fragrance?.imageUrl ?? null,
+      });
+      setNoticeTitle("Collection");
+      setNotice("Added to collection.");
+    } catch (e: any) {
+      setNoticeTitle("Collection");
+      setNotice(e?.message || "Failed to add fragrance to collection.");
+    } finally {
+      setAddingToCollection(false);
+    }
+  }, [fragrance, routeExternalId]);
 
   const addToWishlist = useCallback(async () => {
+    setNoticeTitle("Wishlist");
     setNotice("Add to wishlist (wire backend endpoint next).");
   }, []);
 
   const writeReview = useCallback(async () => {
+    setNoticeTitle("Review");
     setNotice("Review flow (wire backend endpoint next).");
   }, []);
 
@@ -574,8 +608,8 @@ export default function FragranceDetailPage() {
 
                 <div className="border-t border-white/15 bg-gradient-to-b from-white/8 to-black/10 p-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button className="h-10 rounded-xl px-5" onClick={addToCollection}>
-                      Add to collection
+                    <Button className="h-10 rounded-xl px-5" onClick={addToCollection} disabled={addingToCollection}>
+                      {addingToCollection ? "Adding..." : "Add to collection"}
                     </Button>
                     <Button
                       variant="secondary"
@@ -776,7 +810,7 @@ export default function FragranceDetailPage() {
 
       <NoticeDialog
         open={Boolean(notice)}
-        title="Coming Soon"
+        title={noticeTitle}
         message={notice ?? ""}
         onClose={() => setNotice(null)}
       />
