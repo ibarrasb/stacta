@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { acceptFollowRequest, declineFollowRequest, listPendingFollowRequests } from "@/lib/api/follows";
 import { listNotifications } from "@/lib/api/notifications";
 import type { NotificationItem, PendingFollowRequestItem } from "@/lib/api/types";
@@ -47,6 +46,11 @@ export default function NotificationsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const unreadLabel = useMemo(() => {
+    if (items.length <= 0) return "No new follows yet";
+    return `${items.length} recent activity event${items.length === 1 ? "" : "s"}`;
+  }, [items.length]);
 
   async function onAccept(requestId: string) {
     setActingId(requestId);
@@ -109,49 +113,53 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="min-h-screen text-white">
-      <div className="mx-auto max-w-5xl px-4 py-10">
-        <div className="mb-7 flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Notifications</h1>
-            <p className="mt-1 text-sm text-white/60">
-              Follow requests and recent activity.
-            </p>
+    <div className="min-h-screen text-white stacta-fade-rise">
+      <div className="mx-auto max-w-7xl px-4 pb-10">
+        <div className="mb-5 rounded-3xl border border-white/15 bg-black/30 p-5 backdrop-blur-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Notification center</div>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">Your activity pulse</h1>
+              <p className="mt-1 text-sm text-white/70">{unreadLabel}</p>
+            </div>
+            <Button
+              variant="secondary"
+              className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+              onClick={() => navigate("/home")}
+            >
+              Back home
+            </Button>
           </div>
-          <Button
-            variant="secondary"
-            className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
-            onClick={() => navigate("/home")}
-          >
-            Back
-          </Button>
         </div>
 
-        {error && (
+        {error ? (
           <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
           </div>
-        )}
+        ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur">
-            <div className="mb-4">
-              <div className="text-lg font-semibold">Pending requests</div>
-              <div className="mt-1 text-xs text-white/60">Approve people who want to follow you.</div>
+        <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+          <section className="rounded-3xl border border-white/15 bg-white/6 p-5">
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Pending requests</h2>
+                <p className="text-xs text-white/60">Approve collectors who want access.</p>
+              </div>
+              <div className="rounded-full border border-white/20 bg-white/10 px-2 py-1 text-xs text-white/80">{pending.length}</div>
             </div>
 
             {loading ? (
-              <div className="text-sm text-white/60">Loading...</div>
+              <div className="text-sm text-white/60">Loading requests...</div>
             ) : pending.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/70">
-                No pending follow requests.
+              <div className="rounded-2xl border border-white/12 bg-black/25 px-4 py-3 text-sm text-white/65">
+                You have no pending follow requests.
               </div>
             ) : (
               <div className="space-y-2">
                 {pending.map((req) => (
                   <div
                     key={req.id}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3"
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/12 bg-black/25 px-3 py-3"
                   >
                     <button
                       className="min-w-0 text-left"
@@ -161,93 +169,94 @@ export default function NotificationsPage() {
                         })
                       }
                     >
-                      <div className="truncate text-sm font-semibold text-white">
-                        {req.displayName || req.username}
-                      </div>
-                      <div className="truncate text-xs text-white/60">@{req.username}</div>
-                      <div className="mt-0.5 text-[11px] text-white/45">{when(req.requestedAt)}</div>
+                      <div className="truncate text-sm font-semibold text-white">{req.displayName || req.username}</div>
+                      <div className="truncate text-xs text-white/65">@{req.username}</div>
+                      <div className="mt-0.5 text-[11px] text-white/45">Requested {when(req.requestedAt)}</div>
                     </button>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="secondary"
-                        className="h-9 rounded-xl border border-white/12 bg-white/10 px-3 text-white hover:bg-white/15"
+                        className="h-9 rounded-xl border border-white/20 bg-white/10 px-3 text-white hover:bg-white/18"
                         disabled={actingId === req.id}
                         onClick={() => onDecline(req.id)}
                       >
                         {actingId === req.id && actingType === "decline" ? "Declining..." : "Decline"}
                       </Button>
-                      <Button
-                        className="h-9 rounded-xl px-3"
-                        disabled={actingId === req.id}
-                        onClick={() => onAccept(req.id)}
-                      >
+                      <Button className="h-9 rounded-xl bg-white text-black hover:bg-white/90" disabled={actingId === req.id} onClick={() => onAccept(req.id)}>
                         {actingId === req.id && actingType === "accept" ? "Accepting..." : "Accept"}
                       </Button>
                     </div>
                   </div>
                 ))}
-                {pendingCursor && (
+                {pendingCursor ? (
                   <Button
                     variant="secondary"
-                    className="mt-2 h-9 w-full rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                    className="mt-2 h-9 w-full rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
                     disabled={loadingMorePending}
                     onClick={loadMorePending}
                   >
-                    {loadingMorePending ? "Loading..." : "Load more"}
+                    {loadingMorePending ? "Loading..." : "Load more requests"}
                   </Button>
-                )}
+                ) : null}
               </div>
             )}
-          </div>
+          </section>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.05] p-6 backdrop-blur">
-            <div className="mb-4">
-              <div className="text-lg font-semibold">Activity</div>
-              <div className="mt-1 text-xs text-white/60">People who recently followed you.</div>
+          <section className="rounded-3xl border border-white/15 bg-white/6 p-5">
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Activity feed</h2>
+                <p className="text-xs text-white/60">Recent follows and follow-backs.</p>
+              </div>
             </div>
 
             {loading ? (
-              <div className="text-sm text-white/60">Loading...</div>
+              <div className="text-sm text-white/60">Loading activity...</div>
             ) : items.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/70">
-                No notifications yet.
+              <div className="rounded-2xl border border-white/12 bg-black/25 px-4 py-3 text-sm text-white/65">
+                No activity yet.
               </div>
             ) : (
               <div className="space-y-2">
                 {items.map((item, idx) => (
-                  <div key={`${item.id}-${idx}`} className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3">
-                    <button
-                      className="text-left"
-                      onClick={() =>
-                        navigate(`/u/${item.actorUsername}`, {
-                          state: { from: { pathname: "/notifications" } },
-                        })
-                      }
-                    >
-                      <div className="text-sm text-white/85">
-                        <span className="font-semibold">{item.actorDisplayName || item.actorUsername}</span>{" "}
-                        {item.followedBack ? "followed you back" : "followed you"}
+                  <button
+                    key={`${item.id}-${idx}`}
+                    className="w-full rounded-2xl border border-white/12 bg-black/25 px-4 py-3 text-left transition hover:bg-white/10"
+                    onClick={() =>
+                      navigate(`/u/${item.actorUsername}`, {
+                        state: { from: { pathname: "/notifications" } },
+                      })
+                    }
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm text-white/90">
+                          <span className="font-semibold">{item.actorDisplayName || item.actorUsername}</span>{" "}
+                          {item.followedBack ? "followed you back" : "followed you"}
+                        </div>
+                        <div className="mt-1 text-xs text-white/55">
+                          @{item.actorUsername} • {when(item.createdAt)}
+                        </div>
                       </div>
-                      <div className="text-xs text-white/55">
-                        @{item.actorUsername} • {when(item.createdAt)}
-                      </div>
-                    </button>
-                    {idx < items.length - 1 && <Separator className="mt-3 bg-white/10" />}
-                  </div>
+                      <span className="rounded-full border border-amber-200/35 bg-amber-300/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-100">
+                        {item.type === "FOLLOWED_YOU_BACK" ? "Followed back" : "Follow"}
+                      </span>
+                    </div>
+                  </button>
                 ))}
-                {notificationsCursor && (
+                {notificationsCursor ? (
                   <Button
                     variant="secondary"
-                    className="mt-2 h-9 w-full rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                    className="mt-2 h-9 w-full rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
                     disabled={loadingMoreNotifications}
                     onClick={loadMoreNotifications}
                   >
-                    {loadingMoreNotifications ? "Loading..." : "Load more"}
+                    {loadingMoreNotifications ? "Loading..." : "Load more activity"}
                   </Button>
-                )}
+                ) : null}
               </div>
             )}
-          </div>
+          </section>
         </div>
       </div>
     </div>

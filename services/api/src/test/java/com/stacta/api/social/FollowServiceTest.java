@@ -32,6 +32,7 @@ class FollowServiceTest {
 
   @Mock private FollowRepository follows;
   @Mock private NotificationEventRepository notifications;
+  @Mock private ActivityEventRepository activities;
   @Mock private UserRepository users;
 
   @InjectMocks private FollowService service;
@@ -69,6 +70,7 @@ class FollowServiceTest {
     verify(users).bumpFollowingCount(viewer.getId(), 1);
     verify(users).bumpFollowersCount(targetPublic.getId(), 1);
     verify(notifications).save(any(NotificationEvent.class));
+    verify(activities).save(any(ActivityEvent.class));
   }
 
   @Test
@@ -85,6 +87,7 @@ class FollowServiceTest {
     verify(users, never()).bumpFollowingCount(any(), anyLong());
     verify(users, never()).bumpFollowersCount(any(), anyLong());
     verify(notifications, never()).save(any(NotificationEvent.class));
+    verify(activities, never()).save(any(ActivityEvent.class));
   }
 
   @Test
@@ -99,6 +102,7 @@ class FollowServiceTest {
     verify(users).bumpFollowingCount(targetPrivate.getId(), 1);
     verify(users).bumpFollowersCount(viewer.getId(), 1);
     verify(notifications).save(any(NotificationEvent.class));
+    verify(activities).save(any(ActivityEvent.class));
   }
 
   @Test
@@ -109,6 +113,7 @@ class FollowServiceTest {
 
     service.unfollowByUsername(VIEWER_SUB, "public_user");
 
+    verify(activities).deleteBySourceFollowId(rel.getId());
     verify(follows).delete(rel);
     verify(users).bumpFollowingCount(viewer.getId(), -1);
     verify(users).bumpFollowersCount(targetPublic.getId(), -1);
@@ -122,6 +127,7 @@ class FollowServiceTest {
 
     service.unfollowByUsername(VIEWER_SUB, "private_user");
 
+    verify(activities, never()).deleteBySourceFollowId(any());
     verify(follows).delete(rel);
     verify(users, never()).bumpFollowingCount(any(), anyLong());
     verify(users, never()).bumpFollowersCount(any(), anyLong());

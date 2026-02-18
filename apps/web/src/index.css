@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -77,6 +78,11 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+  --stacta-accent: #f6b251;
+  --stacta-accent-strong: #ef7a43;
+  --stacta-teal: #41d1c0;
+  --stacta-panel: rgba(255, 255, 255, 0.06);
+  --stacta-panel-border: rgba(255, 255, 255, 0.14);
 }
 
 .dark {
@@ -136,9 +142,21 @@ body {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
+body {
+  @apply bg-background text-foreground;
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: 0.01em;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "Sora", sans-serif;
+  letter-spacing: 0.01em;
+}
 }
 
 @keyframes stacta-marquee {
@@ -152,4 +170,48 @@ body {
 
 .stacta-marquee {
   animation: stacta-marquee 34s linear infinite;
+}
+
+@keyframes stacta-float-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(18px, -20px, 0);
+  }
+}
+
+@keyframes stacta-float-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-22px, 16px, 0);
+  }
+}
+
+@keyframes stacta-fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stacta-fade-rise {
+  animation: stacta-fade-rise 380ms ease-out;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

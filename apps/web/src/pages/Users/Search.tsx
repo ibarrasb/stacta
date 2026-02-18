@@ -56,25 +56,26 @@ export default function UsersSearchPage() {
   }, [query]);
 
   return (
-    <div className="min-h-screen text-white">
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <div className="mb-6 flex items-center justify-between gap-3">
+    <div className="min-h-screen text-white stacta-fade-rise">
+      <div className="mx-auto max-w-3xl px-4 pb-10">
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-3xl border border-white/15 bg-black/30 p-5">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Find users</h1>
-            <p className="mt-1 text-sm text-white/60">
-              Search by username or name.
+            <div className="text-xs uppercase tracking-[0.15em] text-amber-200/80">Community</div>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight">Find users</h1>
+            <p className="mt-1 text-sm text-white/65">
+              Search by username or display name.
             </p>
           </div>
           <Button
             variant="secondary"
-            className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+            className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
             onClick={() => navigate("/home")}
           >
             Back
           </Button>
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+        <div className="rounded-3xl border border-white/15 bg-white/6 p-4">
           <Input
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
