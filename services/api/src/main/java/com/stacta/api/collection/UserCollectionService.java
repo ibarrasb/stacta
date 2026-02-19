@@ -36,7 +36,7 @@ public class UserCollectionService {
     String source = normalizeSource(req.source());
     String externalId = normalizeExternalId(req.externalId());
     String name = safeTrim(req.name());
-    if (externalId.isEmpty() || name.isEmpty()) {
+    if (externalId.isEmpty() || isSyntheticRouteId(externalId) || name.isEmpty()) {
       throw new ApiException("INVALID_COLLECTION_ITEM");
     }
 
@@ -152,6 +152,10 @@ public class UserCollectionService {
 
   private String normalizeExternalId(String raw) {
     return safeTrim(raw).toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+  }
+
+  private boolean isSyntheticRouteId(String externalId) {
+    return externalId.matches("^f_[0-9a-f-]+_[0-9]+$");
   }
 
   private String safeTrim(String raw) {

@@ -24,13 +24,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
       AND (
         :q = ''
         OR LOWER(u.username) LIKE LOWER(CONCAT(:q, '%'))
-        OR LOWER(u.displayName) LIKE LOWER(CONCAT('%', :q, '%'))
+        OR u.displayName ILIKE CONCAT('%', :q, '%')
       )
     ORDER BY
       CASE
         WHEN LOWER(u.username) = LOWER(:q) THEN 0
         WHEN LOWER(u.username) LIKE LOWER(CONCAT(:q, '%')) THEN 1
-        WHEN LOWER(u.displayName) LIKE LOWER(CONCAT(:q, '%')) THEN 2
+        WHEN u.displayName ILIKE CONCAT(:q, '%') THEN 2
         ELSE 3
       END,
       LOWER(u.username) ASC

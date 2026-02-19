@@ -3,6 +3,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
+import LoadingSpinner from "@/components/ui/loading-spinner";
+import InlineSpinner from "@/components/ui/inline-spinner";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { followUser, unfollowUser } from "@/lib/api/follows";
 import { getUserProfile } from "@/lib/api/users";
@@ -114,6 +116,31 @@ export default function PublicProfilePage() {
     }
   }
 
+  function openFragranceDetail(source: string, externalId: string) {
+    const normalizedSource = source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const encodedExternalId = encodeURIComponent(externalId);
+    const item = profile?.collectionItems.find(
+      (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
+    ) ?? profile?.topFragrances.find(
+      (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
+    );
+
+    navigate(`/fragrances/${encodedExternalId}?source=${normalizedSource}`, {
+      state: item
+        ? {
+            fragrance: {
+              source: normalizedSource,
+              externalId: item.externalId,
+              name: item.name,
+              brand: item.brand,
+              imageUrl: item.imageUrl,
+            },
+            from: { pathname: location.pathname, search: location.search ?? "" },
+          }
+        : undefined,
+    });
+  }
+
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
       <div className="mx-auto max-w-5xl px-4 pb-10">
@@ -134,7 +161,11 @@ export default function PublicProfilePage() {
 
         <div>
           <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
-            {loading && <div className="text-sm text-white/65">Loading...</div>}
+            {loading && (
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-6">
+                <LoadingSpinner label="Loading profile..." />
+              </div>
+            )}
 
             {error && (
               <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
@@ -207,7 +238,12 @@ export default function PublicProfilePage() {
                         onClick={onToggleFollow}
                       >
                         {actionLoading
-                          ? "Working..."
+                          ? (
+                            <span className="inline-flex items-center gap-2">
+                              <InlineSpinner />
+                              <span>Working</span>
+                            </span>
+                          )
                           : profile.isFollowing
                             ? "Following"
                             : profile.followRequested
@@ -254,11 +290,13 @@ export default function PublicProfilePage() {
                       No top fragrances selected yet.
                     </div>
                   ) : (
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <div className="mt-3 flex flex-wrap justify-center gap-3">
                       {profile.topFragrances.map((item, idx) => (
-                        <div
+                        <button
+                          type="button"
                           key={`${item.source}:${item.externalId}`}
-                          className="rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-300/15 via-white/5 to-black/20 p-3 shadow-[0_12px_30px_rgba(251,191,36,0.18)]"
+                          onClick={() => openFragranceDetail(item.source, item.externalId)}
+                          className="w-full rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-300/15 via-white/5 to-black/20 p-3 shadow-[0_12px_30px_rgba(251,191,36,0.18)] sm:w-[220px]"
                         >
                           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/90">Top {idx + 1}</div>
                           {item.imageUrl ? (
@@ -268,7 +306,7 @@ export default function PublicProfilePage() {
                           )}
                           <div className="mt-2 truncate text-sm font-semibold text-white/95">{item.name}</div>
                           <div className="truncate text-xs text-white/70">{item.brand || "—"}</div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -292,7 +330,12 @@ export default function PublicProfilePage() {
                   ) : (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       {profile.collectionItems.map((item) => (
-                        <div key={`${item.source}:${item.externalId}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                        <button
+                          type="button"
+                          key={`${item.source}:${item.externalId}`}
+                          onClick={() => openFragranceDetail(item.source, item.externalId)}
+                          className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left"
+                        >
                           <div className="flex items-center gap-3">
                             {item.imageUrl ? (
                               <img
@@ -309,7 +352,7 @@ export default function PublicProfilePage() {
                               <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>
                             </div>
                           </div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}

@@ -24,7 +24,7 @@ public class NoteService {
     String needle = q == null ? "" : q.trim();
     if (needle.isBlank()) return List.of();
 
-    return notes.findByNameContainingIgnoreCaseOrderByUsageCountDescNameAsc(
+    return notes.searchByNameContains(
         needle, PageRequest.of(0, safe)
       )
       .stream()

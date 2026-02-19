@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import LoadingSpinner from "@/components/ui/loading-spinner";
 import { searchUsers } from "@/lib/api/users";
 import type { UserSearchItem } from "@/lib/api/types";
 
@@ -97,7 +98,11 @@ export default function UsersSearchPage() {
             <div className="mt-4 text-sm text-white/55">No users found.</div>
           )}
 
-          {loading && <div className="mt-4 text-sm text-white/60">Searching...</div>}
+          {loading && (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-5">
+              <LoadingSpinner label="Searching users..." />
+            </div>
+          )}
 
           {results.length > 0 && (
             <div className="mt-4 space-y-2">

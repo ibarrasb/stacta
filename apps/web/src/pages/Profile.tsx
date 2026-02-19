@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import LoadingSpinner from "@/components/ui/loading-spinner";
+import InlineSpinner from "@/components/ui/inline-spinner";
 import ProfilePhotoPicker from "@/components/profile/ProfilePhotoPicker";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { getMe, updateMe } from "@/lib/api/me";
@@ -215,6 +217,31 @@ export default function ProfilePage() {
     }
   }
 
+  function openFragranceDetail(source: string, externalId: string) {
+    const normalizedSource = source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const encodedExternalId = encodeURIComponent(externalId);
+    const item = me?.collectionItems.find(
+      (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
+    ) ?? me?.topFragrances.find(
+      (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
+    );
+
+    navigate(`/fragrances/${encodedExternalId}?source=${normalizedSource}`, {
+      state: item
+        ? {
+            fragrance: {
+              source: normalizedSource,
+              externalId: item.externalId,
+              name: item.name,
+              brand: item.brand,
+              imageUrl: item.imageUrl,
+            },
+            from: { pathname: "/profile", search: "" },
+          }
+        : undefined,
+    });
+  }
+
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
       <div className="mx-auto max-w-5xl px-4 pb-10">
@@ -247,7 +274,11 @@ export default function ProfilePage() {
         </div>
 
         <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
-            {loading && <div className="text-sm text-white/70">Loading...</div>}
+            {loading && (
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-6">
+                <LoadingSpinner label="Loading profile..." />
+              </div>
+            )}
 
             {error && (
               <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
@@ -403,11 +434,13 @@ export default function ProfilePage() {
                       Pick up to 3 from your collection using “Set Top 3”.
                     </div>
                   ) : (
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <div className="mt-3 flex flex-wrap justify-center gap-3">
                       {me.topFragrances.map((item, idx) => (
-                        <div
+                        <button
+                          type="button"
                           key={`${item.source}:${item.externalId}`}
-                          className="rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-300/15 via-white/5 to-black/20 p-3 shadow-[0_12px_30px_rgba(251,191,36,0.18)]"
+                          onClick={() => openFragranceDetail(item.source, item.externalId)}
+                          className="w-full rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-300/15 via-white/5 to-black/20 p-3 shadow-[0_12px_30px_rgba(251,191,36,0.18)] sm:w-[220px]"
                         >
                           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/90">Top {idx + 1}</div>
                           {item.imageUrl ? (
@@ -417,7 +450,7 @@ export default function ProfilePage() {
                           )}
                           <div className="mt-2 truncate text-sm font-semibold text-white/95">{item.name}</div>
                           <div className="truncate text-xs text-white/70">{item.brand || "—"}</div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -462,10 +495,22 @@ export default function ProfilePage() {
                               <Button
                                 variant="secondary"
                                 className="h-8 flex-1 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white hover:bg-white/15 sm:flex-none"
+                                onClick={() => openFragranceDetail(item.source, item.externalId)}
+                              >
+                                View
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                className="h-8 flex-1 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white hover:bg-white/15 sm:flex-none"
                                 disabled={removingCollectionKey === `${item.source}:${item.externalId}`}
                                 onClick={() => onRemoveCollectionItem(item.source, item.externalId)}
                               >
-                                {removingCollectionKey === `${item.source}:${item.externalId}` ? "Removing..." : "Remove"}
+                                {removingCollectionKey === `${item.source}:${item.externalId}` ? (
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <InlineSpinner className="h-3 w-3" />
+                                    <span>Removing</span>
+                                  </span>
+                                ) : "Remove"}
                               </Button>
                               <Button
                                 variant="secondary"
@@ -482,8 +527,18 @@ export default function ProfilePage() {
                                 {me.topFragrances.some(
                                   (x) => x.source.toUpperCase() === item.source.toUpperCase() && x.externalId === item.externalId
                                 )
-                                  ? (togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ? "Updating..." : "Remove Top 3")
-                                  : (togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ? "Updating..." : "Set Top 3")}
+                                  ? (togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ? (
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <InlineSpinner className="h-3 w-3" />
+                                      <span>Updating</span>
+                                    </span>
+                                  ) : "Remove Top 3")
+                                  : (togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ? (
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <InlineSpinner className="h-3 w-3" />
+                                      <span>Updating</span>
+                                    </span>
+                                  ) : "Set Top 3")}
                               </Button>
                             </div>
                           </div>

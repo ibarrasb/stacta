@@ -4,8 +4,10 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import NoticeDialog from "@/components/ui/notice-dialog";
+import LoadingSpinner from "@/components/ui/loading-spinner";
+import InlineSpinner from "@/components/ui/inline-spinner";
 import type { FragranceSearchResult } from "@/lib/api/fragrances";
-import { getFragranceDetail } from "@/lib/api/fragrances";
+import { getFragranceDetail, searchCommunityFragrances, searchFragrances } from "@/lib/api/fragrances";
 import { addToCollection as addCollectionItem } from "@/lib/api/collection";
 
 import fragrancePlaceholder from "@/assets/illustrations/fragrance-placeholder-4x3.png";
@@ -276,6 +278,34 @@ function safeDecodeURIComponent(v: string) {
   }
 }
 
+function isSyntheticRouteId(v: string) {
+  return /^f_[0-9a-f-]+_\d+$/i.test(v.trim());
+}
+
+function normalizeForMatch(v: string | null | undefined) {
+  return String(v ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function hasUsableExternalId(v: string | null | undefined) {
+  const id = String(v ?? "").trim();
+  return Boolean(id) && !isSyntheticRouteId(id);
+}
+
+function computeFragellaExternalId(
+  brand: string | null | undefined,
+  name: string | null | undefined,
+  year: string | number | null | undefined
+) {
+  const b = normalizeForMatch(brand);
+  const n = normalizeForMatch(name);
+  const y = normalizeForMatch(year == null ? "" : String(year));
+  if (!b && !n) return "";
+  return `${b}|${n}|${y || "0"}`.trim();
+}
+
 export default function FragranceDetailPage() {
   const navigate = useNavigate();
   const location = useLocation() as any;
@@ -294,7 +324,13 @@ export default function FragranceDetailPage() {
   const [addingToCollection, setAddingToCollection] = useState(false);
 
   const stateFragrance = (location?.state?.fragrance ?? null) as (FragranceSearchResult & any) | null;
-  const fragrance = (stateFragrance ?? loaded) as (FragranceSearchResult & any) | null;
+  const fragrance = (loaded ?? stateFragrance) as (FragranceSearchResult & any) | null;
+  const sourceParam = useMemo(() => {
+    const value = new URLSearchParams(location.search).get("source");
+    if (!value) return null;
+    const normalized = value.trim().toUpperCase();
+    return normalized === "COMMUNITY" ? "COMMUNITY" : normalized === "FRAGELLA" ? "FRAGELLA" : null;
+  }, [location.search]);
 
   const from = location?.state?.from as { pathname?: string; search?: string } | undefined;
 
@@ -305,7 +341,6 @@ export default function FragranceDetailPage() {
   }
 
   useEffect(() => {
-    if (stateFragrance) return;
     if (!routeExternalId) return;
 
     const ctrl = new AbortController();
@@ -313,15 +348,51 @@ export default function FragranceDetailPage() {
     setLoadError(null);
     setIsLoading(true);
 
-    const preferred = inferPreferredSource(routeExternalId);
+    const preferred = sourceParam ?? inferPreferredSource(routeExternalId);
 
     const bypassCache = forceRefreshRef.current;
     forceRefreshRef.current = false;
 
     (async () => {
+      let externalIdToLoad = routeExternalId;
+      if (isSyntheticRouteId(externalIdToLoad)) {
+        const fallbackName = String(stateFragrance?.name ?? "").trim();
+        const fallbackBrand = String(stateFragrance?.brand ?? "").trim();
+
+        if (fallbackName) {
+          const query = [fallbackBrand, fallbackName].filter(Boolean).join(" ").trim() || fallbackName;
+          const candidates = preferred === "COMMUNITY"
+            ? await searchCommunityFragrances({ q: query, limit: 30 }, { signal: ctrl.signal })
+            : await searchFragrances({ q: query, limit: 30, persist: true }, { signal: ctrl.signal });
+
+          const targetName = normalizeForMatch(fallbackName);
+          const targetBrand = normalizeForMatch(fallbackBrand);
+
+          const exact = candidates.find((c) =>
+            normalizeForMatch(c.name) === targetName &&
+            normalizeForMatch(c.brand) === targetBrand &&
+            hasUsableExternalId(c.externalId)
+          );
+          const byName = candidates.find((c) =>
+            normalizeForMatch(c.name) === targetName && hasUsableExternalId(c.externalId)
+          );
+
+          externalIdToLoad = String((exact ?? byName)?.externalId ?? "").trim();
+        } else {
+          externalIdToLoad = "";
+        }
+      }
+
+      if (!externalIdToLoad || isSyntheticRouteId(externalIdToLoad)) {
+        if (!stateFragrance) {
+          setLoadError("Could not load fragrance details. Open it from Search, or try again.");
+        }
+        return;
+      }
+
       try {
         const first = await getFragranceDetail(
-          { source: preferred ?? "FRAGELLA", externalId: routeExternalId },
+          { source: preferred ?? "FRAGELLA", externalId: externalIdToLoad },
           { signal: ctrl.signal, bypassCache }
         );
         setLoaded(first);
@@ -333,7 +404,7 @@ export default function FragranceDetailPage() {
       if (preferred !== "COMMUNITY") {
         try {
           const second = await getFragranceDetail(
-            { source: "COMMUNITY", externalId: routeExternalId },
+            { source: "COMMUNITY", externalId: externalIdToLoad },
             { signal: ctrl.signal, bypassCache }
           );
           setLoaded(second);
@@ -356,7 +427,7 @@ export default function FragranceDetailPage() {
     return () => {
       ctrl.abort();
     };
-  }, [routeExternalId, stateFragrance, retryTick]);
+  }, [routeExternalId, sourceParam, stateFragrance, retryTick]);
 
   const accords = useMemo(() => {
     const a = fragrance?.mainAccords ?? [];
@@ -409,12 +480,48 @@ export default function FragranceDetailPage() {
       .trim()
       .toUpperCase();
     const source = normalizedSource === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
-    const external = String(fragrance?.externalId ?? routeExternalId ?? "").trim();
+    const externalFromFragrance = String(fragrance?.externalId ?? "").trim();
+    const externalFromRoute = String(routeExternalId ?? "").trim();
+    let external = externalFromFragrance || (!isSyntheticRouteId(externalFromRoute) ? externalFromRoute : "");
     const name = String(fragrance?.name ?? "").trim();
+    const brand = String(fragrance?.brand ?? "").trim();
 
-    if (!external || !name) {
+    if ((!external || isSyntheticRouteId(external)) && source === "FRAGELLA") {
+      const computed = computeFragellaExternalId(brand, name, (fragrance as any)?.year ?? null);
+      if (hasUsableExternalId(computed)) {
+        external = computed;
+      }
+    }
+
+    if ((!external || isSyntheticRouteId(external)) && name) {
+      try {
+        const query = [brand, name].filter(Boolean).join(" ").trim() || name;
+        const candidates = source === "COMMUNITY"
+          ? await searchCommunityFragrances({ q: query, limit: 30 })
+          : await searchFragrances({ q: query, limit: 30, persist: true });
+
+        const targetName = normalizeForMatch(name);
+        const targetBrand = normalizeForMatch(brand);
+
+        const exact = candidates.find((c) =>
+          normalizeForMatch(c.name) === targetName &&
+          normalizeForMatch(c.brand) === targetBrand &&
+          hasUsableExternalId(c.externalId)
+        );
+
+        const byName = candidates.find((c) =>
+          normalizeForMatch(c.name) === targetName && hasUsableExternalId(c.externalId)
+        );
+
+        external = String((exact ?? byName)?.externalId ?? "").trim();
+      } catch {
+        // keep fallback path below
+      }
+    }
+
+    if (!external || isSyntheticRouteId(external) || !name) {
       setNoticeTitle("Collection");
-      setNotice("Missing fragrance data. Refresh and try again.");
+      setNotice("Could not resolve a stable fragrance ID for this item yet.");
       return;
     }
 
@@ -480,7 +587,27 @@ export default function FragranceDetailPage() {
   }, [fragrance?.year, fragrance?.gender]);
   
 
-  const showSkeleton = !stateFragrance && isLoading && !loaded;
+  const stateHasRichDetails = useMemo(() => {
+    if (!stateFragrance) return false;
+    const notes = normalizeNotes((stateFragrance as any).notes);
+    const hasAccordBars =
+      stateFragrance.mainAccordsPercentage &&
+      typeof stateFragrance.mainAccordsPercentage === "object" &&
+      Object.keys(stateFragrance.mainAccordsPercentage).length > 0;
+
+    return (
+      notes.top.length > 0 ||
+      notes.middle.length > 0 ||
+      notes.base.length > 0 ||
+      (stateFragrance.mainAccords?.length ?? 0) > 0 ||
+      (stateFragrance.generalNotes?.length ?? 0) > 0 ||
+      (stateFragrance.seasonRanking?.length ?? 0) > 0 ||
+      (stateFragrance.occasionRanking?.length ?? 0) > 0 ||
+      Boolean(hasAccordBars)
+    );
+  }, [stateFragrance]);
+
+  const showSkeleton = isLoading && !loaded && (!stateFragrance || !stateHasRichDetails);
 
   const ratingValue = useMemo(() => {
     const candidates = [
@@ -523,9 +650,8 @@ export default function FragranceDetailPage() {
 
         <div className="rounded-3xl border border-white/15 bg-white/6 p-6">
           {showSkeleton ? (
-            <div className="rounded-2xl border border-white/15 bg-black/25 p-4">
-              <div className="text-sm font-semibold">Loading…</div>
-              <div className="mt-2 text-sm text-white/70">Fetching fragrance details.</div>
+            <div className="rounded-2xl border border-white/15 bg-black/25 p-8">
+              <LoadingSpinner label="Fetching fragrance details..." />
             </div>
           ) : !fragrance ? (
             <div className="rounded-2xl border border-white/15 bg-black/25 p-4">
@@ -609,7 +735,12 @@ export default function FragranceDetailPage() {
                 <div className="border-t border-white/15 bg-gradient-to-b from-white/8 to-black/10 p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Button className="h-10 rounded-xl px-5" onClick={addToCollection} disabled={addingToCollection}>
-                      {addingToCollection ? "Adding..." : "Add to collection"}
+                      {addingToCollection ? (
+                        <span className="inline-flex items-center gap-2">
+                          <InlineSpinner />
+                          <span>Adding</span>
+                        </span>
+                      ) : "Add to collection"}
                     </Button>
                     <Button
                       variant="secondary"

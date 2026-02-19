@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import LoadingSpinner from "@/components/ui/loading-spinner";
+import InlineSpinner from "@/components/ui/inline-spinner";
 import { acceptFollowRequest, declineFollowRequest, listPendingFollowRequests } from "@/lib/api/follows";
 import { listNotifications } from "@/lib/api/notifications";
 import type { NotificationItem, PendingFollowRequestItem } from "@/lib/api/types";
@@ -149,7 +151,9 @@ export default function NotificationsPage() {
             </div>
 
             {loading ? (
-              <div className="text-sm text-white/60">Loading requests...</div>
+              <div className="rounded-2xl border border-white/12 bg-black/25 p-6">
+                <LoadingSpinner label="Loading requests..." />
+              </div>
             ) : pending.length === 0 ? (
               <div className="rounded-2xl border border-white/12 bg-black/25 px-4 py-3 text-sm text-white/65">
                 You have no pending follow requests.
@@ -180,10 +184,20 @@ export default function NotificationsPage() {
                         disabled={actingId === req.id}
                         onClick={() => onDecline(req.id)}
                       >
-                        {actingId === req.id && actingType === "decline" ? "Declining..." : "Decline"}
+                        {actingId === req.id && actingType === "decline" ? (
+                          <span className="inline-flex items-center gap-2">
+                            <InlineSpinner />
+                            <span>Declining</span>
+                          </span>
+                        ) : "Decline"}
                       </Button>
                       <Button className="h-9 rounded-xl bg-white text-black hover:bg-white/90" disabled={actingId === req.id} onClick={() => onAccept(req.id)}>
-                        {actingId === req.id && actingType === "accept" ? "Accepting..." : "Accept"}
+                        {actingId === req.id && actingType === "accept" ? (
+                          <span className="inline-flex items-center gap-2">
+                            <InlineSpinner />
+                            <span>Accepting</span>
+                          </span>
+                        ) : "Accept"}
                       </Button>
                     </div>
                   </div>
@@ -195,7 +209,12 @@ export default function NotificationsPage() {
                     disabled={loadingMorePending}
                     onClick={loadMorePending}
                   >
-                    {loadingMorePending ? "Loading..." : "Load more requests"}
+                    {loadingMorePending ? (
+                      <span className="inline-flex items-center gap-2">
+                        <InlineSpinner />
+                        <span>Loading</span>
+                      </span>
+                    ) : "Load more requests"}
                   </Button>
                 ) : null}
               </div>
@@ -211,7 +230,9 @@ export default function NotificationsPage() {
             </div>
 
             {loading ? (
-              <div className="text-sm text-white/60">Loading activity...</div>
+              <div className="rounded-2xl border border-white/12 bg-black/25 p-6">
+                <LoadingSpinner label="Loading activity..." />
+              </div>
             ) : items.length === 0 ? (
               <div className="rounded-2xl border border-white/12 bg-black/25 px-4 py-3 text-sm text-white/65">
                 No activity yet.
@@ -251,7 +272,12 @@ export default function NotificationsPage() {
                     disabled={loadingMoreNotifications}
                     onClick={loadMoreNotifications}
                   >
-                    {loadingMoreNotifications ? "Loading..." : "Load more activity"}
+                    {loadingMoreNotifications ? (
+                      <span className="inline-flex items-center gap-2">
+                        <InlineSpinner />
+                        <span>Loading</span>
+                      </span>
+                    ) : "Load more activity"}
                   </Button>
                 ) : null}
               </div>
