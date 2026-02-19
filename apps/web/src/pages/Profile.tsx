@@ -4,16 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import LoadingSpinner from "@/components/ui/loading-spinner";
+import InlineSpinner from "@/components/ui/inline-spinner";
 import ProfilePhotoPicker from "@/components/profile/ProfilePhotoPicker";
+import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { getMe, updateMe } from "@/lib/api/me";
+import { addTopFragrance, removeFromCollection, removeTopFragrance } from "@/lib/api/collection";
 import type { MeResponse } from "@/lib/api/types";
-
-function formatDate(value?: string | null) {
-  if (!value) return "—";
-  // backend might already send ISO; keep simple + safe
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
-}
 
 function initials(name?: string | null) {
   const n = (name || "").trim();
@@ -22,6 +19,16 @@ function initials(name?: string | null) {
   const first = parts[0]?.[0] ?? "";
   const second = parts[1]?.[0] ?? "";
   return (first + second).toUpperCase() || "S";
+}
+
+function compactCount(value: number | null | undefined) {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return "0";
+  if (Math.abs(n) < 10_000) return String(Math.trunc(n));
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(n);
 }
 
 function PrivacyToggle({
@@ -61,6 +68,8 @@ export default function ProfilePage() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [removingCollectionKey, setRemovingCollectionKey] = useState<string | null>(null);
+  const [togglingTopKey, setTogglingTopKey] = useState<string | null>(null);
   const [draftDisplayName, setDraftDisplayName] = useState("");
   const [draftBio, setDraftBio] = useState("");
   const [draftIsPrivate, setDraftIsPrivate] = useState(false);
@@ -136,11 +145,108 @@ export default function ProfilePage() {
     }
   }
 
+  async function onRemoveCollectionItem(source: string, externalId: string) {
+    if (!me) return;
+    const sourceUpper = source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const key = `${sourceUpper}:${externalId}`;
+    setRemovingCollectionKey(key);
+    setError(null);
+    try {
+      await removeFromCollection({ source: sourceUpper, externalId });
+      setMe((prev) => {
+        if (!prev) return prev;
+        const nextItems = prev.collectionItems.filter(
+          (x) => !(x.source.toUpperCase() === sourceUpper && x.externalId === externalId)
+        );
+        return {
+          ...prev,
+          collectionItems: nextItems,
+          topFragrances: prev.topFragrances.filter(
+            (x) => !(x.source.toUpperCase() === sourceUpper && x.externalId === externalId)
+          ),
+          collectionCount: Math.max(0, prev.collectionCount - 1),
+        };
+      });
+    } catch (e: any) {
+      setError(e?.message || "Failed to remove from collection.");
+    } finally {
+      setRemovingCollectionKey(null);
+    }
+  }
+
+  async function onToggleTopFragrance(source: string, externalId: string) {
+    if (!me) return;
+    const sourceUpper = source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const key = `${sourceUpper}:${externalId}`;
+    const item = me.collectionItems.find((x) => x.source.toUpperCase() === sourceUpper && x.externalId === externalId);
+    if (!item) return;
+
+    const exists = me.topFragrances.some((x) => x.source.toUpperCase() === sourceUpper && x.externalId === externalId);
+    if (!exists && me.topFragrances.length >= 3) {
+      return;
+    }
+
+    setError(null);
+    setTogglingTopKey(key);
+    try {
+      if (exists) {
+        await removeTopFragrance({ source: sourceUpper, externalId });
+        setMe((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            topFragrances: prev.topFragrances.filter(
+              (x) => !(x.source.toUpperCase() === sourceUpper && x.externalId === externalId)
+            ),
+          };
+        });
+      } else {
+        await addTopFragrance({ source: sourceUpper, externalId });
+        setMe((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            topFragrances: [...prev.topFragrances, item],
+          };
+        });
+      }
+    } catch (e: any) {
+      setError(e?.message || "Failed to update top fragrances.");
+    } finally {
+      setTogglingTopKey(null);
+    }
+  }
+
+  function openFragranceDetail(source: string, externalId: string) {
+    const normalizedSource = source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const encodedExternalId = encodeURIComponent(externalId);
+    const item = me?.collectionItems.find(
+      (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
+    ) ?? me?.topFragrances.find(
+      (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
+    );
+
+    navigate(`/fragrances/${encodedExternalId}?source=${normalizedSource}`, {
+      state: item
+        ? {
+            fragrance: {
+              source: normalizedSource,
+              externalId: item.externalId,
+              name: item.name,
+              brand: item.brand,
+              imageUrl: item.imageUrl,
+            },
+            from: { pathname: "/profile", search: "" },
+          }
+        : undefined,
+    });
+  }
+
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
       <div className="mx-auto max-w-5xl px-4 pb-10">
         {/* Top bar */}
-        <div className="mb-7 flex items-center justify-between rounded-3xl border border-white/15 bg-black/30 p-5">
+        <div className="mb-7 flex flex-col gap-3 rounded-3xl border border-white/15 bg-black/30 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.15em] text-amber-200/80">Identity</div>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">My profile</h1>
@@ -149,7 +255,7 @@ export default function ProfilePage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
             <Button
               variant="secondary"
               className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
@@ -167,10 +273,12 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-          {/* Main card */}
-          <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
-            {loading && <div className="text-sm text-white/70">Loading...</div>}
+        <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
+            {loading && (
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-6">
+                <LoadingSpinner label="Loading profile..." />
+              </div>
+            )}
 
             {error && (
               <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
@@ -182,7 +290,7 @@ export default function ProfilePage() {
               <div className="space-y-6">
                 {/* Profile header */}
                 <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex items-start gap-5">
+                  <div className="flex min-w-0 items-start gap-4 sm:gap-5">
                     <ProfilePhotoPicker
                       fallbackText={initials(me.displayName)}
                       initialUrl={me.avatarUrl}
@@ -197,6 +305,7 @@ export default function ProfilePage() {
                             <div className="truncate text-2xl font-semibold tracking-tight">
                               {me.displayName || "—"}
                             </div>
+                            {me.isVerified ? <VerifiedBadge /> : null}
                             <div className="rounded-full border border-cyan-300/35 bg-cyan-400/15 px-2.5 py-0.5 text-xs font-semibold text-cyan-100">
                               {usernameLabel}
                             </div>
@@ -205,12 +314,16 @@ export default function ProfilePage() {
                             </div>
                           </div>
 
-                          <div className="mt-3 max-w-xl whitespace-pre-wrap rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/85">
+                          <div className="mt-3 max-w-xl whitespace-pre-wrap text-sm text-white/85">
                             {me.bio?.trim() ? me.bio : (
                               <span className="text-white/50">
                                 Add a bio so people know what you’re into.
                               </span>
                             )}
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+                            <div className="text-white/80"><span className="font-semibold text-white">{compactCount(me.followersCount)}</span> followers</div>
+                            <div className="text-white/80"><span className="font-semibold text-white">{compactCount(me.followingCount)}</span> following</div>
                           </div>
                         </>
                       ) : (
@@ -245,14 +358,16 @@ export default function ProfilePage() {
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+                          <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                               <div className="text-xs font-semibold text-white/85">Private profile</div>
                               <div className="mt-0.5 text-[11px] text-white/55">
                                 Only approved followers can see profile activity.
                               </div>
                             </div>
-                            <PrivacyToggle checked={draftIsPrivate} onChange={setDraftIsPrivate} />
+                            <div className="self-start sm:self-auto">
+                              <PrivacyToggle checked={draftIsPrivate} onChange={setDraftIsPrivate} />
+                            </div>
                           </div>
                         </div>
                       )}
@@ -291,76 +406,149 @@ export default function ProfilePage() {
 
                 <Separator className="bg-white/10" />
 
-                {/* “Stats” row (placeholder) */}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <div className="text-xs text-white/60">Following</div>
-                    <div className="mt-1 text-lg font-semibold">{me.followingCount}</div>
-                    <div className="mt-1 text-xs text-white/45">Accounts you follow</div>
+                    <div className="text-xs text-white/60">Collection</div>
+                    <div className="mt-1 text-lg font-semibold">{me.collectionCount}</div>
+                    <div className="mt-1 text-xs text-white/45">Fragrances in your collection</div>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <div className="text-xs text-white/60">Followers</div>
-                    <div className="mt-1 text-lg font-semibold">{me.followersCount}</div>
-                    <div className="mt-1 text-xs text-white/45">People following you</div>
+                    <div className="text-xs text-white/60">Reviews</div>
+                    <div className="mt-1 text-lg font-semibold">{me.reviewCount}</div>
+                    <div className="mt-1 text-xs text-white/45">Fragrance reviews posted</div>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <div className="text-xs text-white/60">Visibility</div>
-                    <div className="mt-1 text-lg font-semibold">{me.isPrivate ? "Private" : "Public"}</div>
-                    <div className="mt-1 text-xs text-white/45">Who can access your profile</div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Side card: account details */}
-          <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
-            <div className="mb-4">
-              <div className="text-sm font-semibold">Account</div>
-              <div className="mt-1 text-xs text-white/60">
-                Technical details from your backend user row.
-              </div>
-            </div>
-
-            {loading && <div className="text-sm text-white/70">Loading...</div>}
-
-            {!loading && !error && me && (
-              <div className="space-y-4">
-                <div>
-                  <div className="text-xs font-medium text-white/60">User id</div>
-                  <div className="mt-1 break-all text-xs text-white/70">{me.id}</div>
-                </div>
-
-                <div>
-                  <div className="text-xs font-medium text-white/60">Cognito sub</div>
-                  <div className="mt-1 break-all text-xs text-white/70">{me.cognitoSub}</div>
-                </div>
-
-                <Separator className="bg-white/10" />
-
-                <div className="grid gap-3">
-                  <div>
-                    <div className="text-xs font-medium text-white/60">Created</div>
-                    <div className="mt-1 text-xs text-white/70">{formatDate(me.createdAt)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-white/60">Updated</div>
-                    <div className="mt-1 text-xs text-white/70">{formatDate(me.updatedAt)}</div>
+                    <div className="text-xs text-white/60">Community fragrances</div>
+                    <div className="mt-1 text-lg font-semibold">{me.communityFragranceCount}</div>
+                    <div className="mt-1 text-xs text-white/45">Fragrances you contributed</div>
                   </div>
                 </div>
 
                 <Separator className="bg-white/10" />
 
-                <Button
-                    variant="secondary"
-                    className="h-10 w-full rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
-                    onClick={() => navigate("/settings")}
-                >
-                  Profile settings
-                </Button>
+                <div>
+                  <div className="text-sm font-semibold">Top 3 Fragrances</div>
+                  <div className="mt-1 text-xs text-white/60">These are your spotlight picks.</div>
+                  {!me.topFragrances?.length ? (
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-cyan-500/10 p-4 text-sm text-white/70">
+                      Pick up to 3 from your collection using “Set Top 3”.
+                    </div>
+                  ) : (
+                    <div className="mt-3 flex flex-wrap justify-center gap-3">
+                      {me.topFragrances.map((item, idx) => (
+                        <button
+                          type="button"
+                          key={`${item.source}:${item.externalId}`}
+                          onClick={() => openFragranceDetail(item.source, item.externalId)}
+                          className="w-full rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-300/15 via-white/5 to-black/20 p-3 shadow-[0_12px_30px_rgba(251,191,36,0.18)] sm:w-[220px]"
+                        >
+                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/90">Top {idx + 1}</div>
+                          {item.imageUrl ? (
+                            <img src={item.imageUrl} alt={item.name} className="h-28 w-full rounded-xl border border-white/15 object-cover" loading="lazy" />
+                          ) : (
+                            <div className="h-28 w-full rounded-xl border border-white/15 bg-white/5" />
+                          )}
+                          <div className="mt-2 truncate text-sm font-semibold text-white/95">{item.name}</div>
+                          <div className="truncate text-xs text-white/70">{item.brand || "—"}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Separator className="bg-white/10" />
+
+                <div>
+                  <div className="text-sm font-semibold">Collection</div>
+                  <div className="mt-1 text-xs text-white/60">Fragrances you have added.</div>
+                  {me.topFragrances.length >= 3 ? (
+                    <div className="mt-1 text-xs text-amber-200/80">
+                      Top 3 is full. Remove one to set another.
+                    </div>
+                  ) : null}
+                  {!me.collectionItems?.length ? (
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
+                      Your collection is empty.
+                    </div>
+                  ) : (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {me.collectionItems.map((item) => (
+                        <div key={`${item.source}:${item.externalId}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                            <div className="flex min-w-0 items-center gap-3">
+                              {item.imageUrl ? (
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.name}
+                                  className="h-14 w-14 rounded-xl border border-white/10 object-cover"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="h-14 w-14 rounded-xl border border-white/10 bg-white/5" />
+                              )}
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-white/90">{item.name}</div>
+                                <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>
+                              </div>
+                            </div>
+                            <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
+                              <Button
+                                variant="secondary"
+                                className="h-8 flex-1 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white hover:bg-white/15 sm:flex-none"
+                                onClick={() => openFragranceDetail(item.source, item.externalId)}
+                              >
+                                View
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                className="h-8 flex-1 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white hover:bg-white/15 sm:flex-none"
+                                disabled={removingCollectionKey === `${item.source}:${item.externalId}`}
+                                onClick={() => onRemoveCollectionItem(item.source, item.externalId)}
+                              >
+                                {removingCollectionKey === `${item.source}:${item.externalId}` ? (
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <InlineSpinner className="h-3 w-3" />
+                                    <span>Removing</span>
+                                  </span>
+                                ) : "Remove"}
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                className="h-8 flex-1 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white hover:bg-white/15 sm:flex-none"
+                                disabled={
+                                  togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ||
+                                  (!me.topFragrances.some(
+                                    (x) => x.source.toUpperCase() === item.source.toUpperCase() && x.externalId === item.externalId
+                                  ) &&
+                                    me.topFragrances.length >= 3)
+                                }
+                                onClick={() => onToggleTopFragrance(item.source, item.externalId)}
+                              >
+                                {me.topFragrances.some(
+                                  (x) => x.source.toUpperCase() === item.source.toUpperCase() && x.externalId === item.externalId
+                                )
+                                  ? (togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ? (
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <InlineSpinner className="h-3 w-3" />
+                                      <span>Updating</span>
+                                    </span>
+                                  ) : "Remove Top 3")
+                                  : (togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ? (
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <InlineSpinner className="h-3 w-3" />
+                                      <span>Updating</span>
+                                    </span>
+                                  ) : "Set Top 3")}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
-          </div>
         </div>
       </div>
     </div>

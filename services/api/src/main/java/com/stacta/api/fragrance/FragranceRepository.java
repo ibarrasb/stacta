@@ -11,6 +11,7 @@ import java.util.UUID;
 public interface FragranceRepository extends JpaRepository<Fragrance, UUID> {
 
   Optional<Fragrance> findByExternalSourceAndExternalId(String externalSource, String externalId);
+  long countByExternalSourceAndCreatedByUserId(String externalSource, UUID createdByUserId);
 
   @Query("""
     SELECT f FROM Fragrance f

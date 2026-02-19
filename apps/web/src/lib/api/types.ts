@@ -1,3 +1,12 @@
+export type CollectionItem = {
+  source: string;
+  externalId: string;
+  name: string;
+  brand: string | null;
+  imageUrl: string | null;
+  addedAt: string;
+};
+
 export type MeResponse = {
     id: string;            // UUID
     cognitoSub: string;
@@ -5,9 +14,15 @@ export type MeResponse = {
     displayName: string;
     bio: string | null;
     avatarUrl: string | null;
+    isVerified: boolean;
     isPrivate: boolean;
     followersCount: number;
     followingCount: number;
+    collectionCount: number;
+    reviewCount: number;
+    communityFragranceCount: number;
+    collectionItems: CollectionItem[];
+    topFragrances: CollectionItem[];
     createdAt: string;     // ISO-8601
     updatedAt: string;     // ISO-8601
   };
@@ -30,11 +45,17 @@ export type UserProfileResponse = {
   displayName: string;
   avatarUrl: string | null;
   bio: string | null;
+  isVerified: boolean;
   isPrivate: boolean;
   isOwner: boolean;
   isVisible: boolean;
   followersCount: number;
   followingCount: number;
+  collectionCount: number;
+  reviewCount: number;
+  communityFragranceCount: number;
+  collectionItems: CollectionItem[];
+  topFragrances: CollectionItem[];
   isFollowing: boolean;
   followRequested: boolean;
 };

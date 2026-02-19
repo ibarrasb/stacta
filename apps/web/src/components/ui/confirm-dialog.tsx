@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import InlineSpinner from "@/components/ui/inline-spinner";
 import {
   Dialog,
   DialogContent,
@@ -53,7 +54,12 @@ export default function ConfirmDialog({
             onClick={onConfirm}
             disabled={loading}
           >
-            {loading ? "Working..." : confirmLabel}
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <InlineSpinner />
+                <span>Working</span>
+              </span>
+            ) : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

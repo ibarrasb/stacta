@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import LoadingSpinner from "@/components/ui/loading-spinner";
+import InlineSpinner from "@/components/ui/inline-spinner";
 import { getUnreadNotificationsCount } from "@/lib/api/notifications";
 import { listFeed, type FeedFilter, type FeedTab } from "@/lib/api/feed";
 import type { FeedItem } from "@/lib/api/types";
@@ -181,7 +183,9 @@ export default function HomePage() {
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <section className="space-y-3">
             {loading ? (
-              <div className="rounded-3xl border border-white/15 bg-black/25 p-6 text-sm text-white/70">Loading feed...</div>
+              <div className="rounded-3xl border border-white/15 bg-black/25 p-6">
+                <LoadingSpinner label="Loading feed..." />
+              </div>
             ) : items.length === 0 ? (
               <div className="rounded-3xl border border-white/15 bg-black/25 p-6 text-sm text-white/70">
                 No feed items yet for this view.
@@ -244,7 +248,12 @@ export default function HomePage() {
                 onClick={loadMore}
                 disabled={loadingMore}
               >
-                {loadingMore ? "Loading..." : "Load more"}
+                {loadingMore ? (
+                  <span className="inline-flex items-center gap-2">
+                    <InlineSpinner />
+                    <span>Loading</span>
+                  </span>
+                ) : "Load more"}
               </Button>
             ) : null}
           </section>

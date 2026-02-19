@@ -7,7 +7,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.stacta.api.collection.UserCollectionService;
+import com.stacta.api.collection.dto.CollectionItemDto;
 import com.stacta.api.config.ApiException;
+import com.stacta.api.fragrance.FragranceRepository;
+import com.stacta.api.social.ActivityEventRepository;
 import com.stacta.api.social.FollowService;
 import com.stacta.api.user.dto.MeResponse;
 import com.stacta.api.user.dto.OnboardingRequest;
@@ -20,10 +24,22 @@ public class UserService {
 
   private final UserRepository repo;
   private final FollowService followService;
+  private final UserCollectionService collectionService;
+  private final ActivityEventRepository activityEvents;
+  private final FragranceRepository fragrances;
 
-  public UserService(UserRepository repo, FollowService followService) {
+  public UserService(
+    UserRepository repo,
+    FollowService followService,
+    UserCollectionService collectionService,
+    ActivityEventRepository activityEvents,
+    FragranceRepository fragrances
+  ) {
     this.repo = repo;
     this.followService = followService;
+    this.collectionService = collectionService;
+    this.activityEvents = activityEvents;
+    this.fragrances = fragrances;
   }
 
   @Transactional(readOnly = true)
@@ -118,17 +134,32 @@ public class UserService {
     boolean isVisible = !target.isPrivate() || isOwner || isFollowing;
     long followersCount = target.getFollowersCount();
     long followingCount = target.getFollowingCount();
+    long collectionCount = isVisible ? collectionService.countForUser(target.getId()) : 0;
+    long reviewCount = isVisible ? activityEvents.countByActorUserIdAndType(target.getId(), "REVIEW_POSTED") : 0;
+    long communityFragranceCount = isVisible ? fragrances.countByExternalSourceAndCreatedByUserId("COMMUNITY", target.getId()) : 0;
+    List<CollectionItemDto> collectionItems = isVisible
+      ? collectionService.listForUser(target.getId())
+      : List.of();
+    List<CollectionItemDto> topFragrances = isVisible
+      ? collectionService.listTopForUser(target.getId())
+      : List.of();
 
     return new UserProfileResponse(
       target.getUsername(),
       target.getDisplayName(),
       target.getAvatarUrl(),
       isVisible ? target.getBio() : null,
+      target.isVerified(),
       target.isPrivate(),
       isOwner,
       isVisible,
       followersCount,
       followingCount,
+      collectionCount,
+      reviewCount,
+      communityFragranceCount,
+      collectionItems,
+      topFragrances,
       isFollowing,
       followRequested
     );
@@ -152,9 +183,15 @@ public class UserService {
       u.getDisplayName(),
       u.getBio(),
       u.getAvatarUrl(),
+      u.isVerified(),
       u.isPrivate(),
       u.getFollowersCount(),
       u.getFollowingCount(),
+      collectionService.countForUser(u.getId()),
+      activityEvents.countByActorUserIdAndType(u.getId(), "REVIEW_POSTED"),
+      fragrances.countByExternalSourceAndCreatedByUserId("COMMUNITY", u.getId()),
+      collectionService.listForUser(u.getId()),
+      collectionService.listTopForUser(u.getId()),
       u.getCreatedAt(),
       u.getUpdatedAt()
     );

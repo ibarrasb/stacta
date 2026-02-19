@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UUID> {
   long deleteBySourceFollowId(UUID sourceFollowId);
+  long countByActorUserIdAndType(UUID actorUserId, String type);
 
   @Query(value = """
     SELECT
