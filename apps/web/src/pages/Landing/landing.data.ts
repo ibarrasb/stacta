@@ -41,25 +41,25 @@ export const FRAGRANCES: Fragrance[] = [
 ];
 
 export const landingCopy = {
-  pills: ["Log fast", "Structured reviews", "Top 3", "Note art"],
+  pills: ["Collection tracking", "Top 3 profile", "Social follows", "Live activity"],
   why: [
-    { title: "Consistency", desc: "Structured ratings so reviews are comparable — not random essays." },
-    { title: "Visual notes", desc: "Note art makes scents easier to remember and faster to scan." },
-    { title: "Taste graphs", desc: "See patterns in what you like — then discover smarter." },
+    { title: "Profile-first", desc: "Build a fragrance identity with a collection, counters, and a curated Top 3." },
+    { title: "Search to detail", desc: "Go from search to full fragrance pages with notes, accords, and performance data." },
+    { title: "Social by taste", desc: "Follow collectors, view profiles, and discover through people instead of random lists." },
   ],
   diffs: [
-    { title: "Comparable reviews", desc: "Smell, performance, value — the same rubric across everyone." },
-    { title: "Notes that pop", desc: "Note art and clusters make the “why it works” obvious." },
-    { title: "Discovery by taste", desc: "Follow people who match your vibe — not generic “most popular.”" },
+    { title: "Real profile surface", desc: "Collection counts, review counts, and Top 3 are first-class, not buried." },
+    { title: "Private or public", desc: "Set your account private and approve follow requests from notifications." },
+    { title: "Feed + notifications", desc: "Track follows, reviews, and collection activity from one home timeline." },
   ],
   steps: [
-    { title: "Add a scent", desc: "Search and add to your collection or wishlist." },
-    { title: "Review consistently", desc: "Same rubric every time so your taste becomes readable." },
-    { title: "Discover by people", desc: "Follow profiles that match your vibe and explore their picks." },
+    { title: "Set up your profile", desc: "Create your account, add your identity, and choose up to 3 signature fragrances." },
+    { title: "Build your collection", desc: "Search fragrances, open detail pages, and add bottles you actually wear." },
+    { title: "Follow and discover", desc: "Follow other profiles and use the home feed to find your next pickup." },
   ],
   faqs: [
-    { q: "Is this a waitlist?", a: "Right now yes — sign up and you’ll be first in when we open invites." },
-    { q: "Do you support niche + designers?", a: "That’s the goal. Discovery works best when catalog coverage is deep." },
-    { q: "Is it free?", a: "Core logging + profiles will be free. Later: optional premium insights." },
+    { q: "Can I use Stacta now?", a: "Yes. You can create an account, build a profile, and start using the core app flows." },
+    { q: "Can I make my profile private?", a: "Yes. Private profiles require approved follow requests before activity is visible." },
+    { q: "What should I do first?", a: "Search a fragrance, add it to your collection, then set your Top 3 and follow a few people." },
   ],
 };

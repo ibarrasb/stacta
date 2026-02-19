@@ -118,25 +118,27 @@ export default function SignInPage() {
 
   return (
     <div className="min-h-screen text-white">
-      <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4">
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -left-16 top-24 h-56 w-56 rounded-full bg-amber-400/18 blur-3xl" />
+        <div className="absolute right-0 top-8 h-64 w-64 rounded-full bg-teal-400/14 blur-3xl" />
+      </div>
+
+      <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 py-8">
         <div className="w-full max-w-md">
-          {/* Header */}
-          <div className="flex items-center gap-3">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/25 px-2.5 py-1">
             <img
               src="/stacta.png"
               alt="Stacta"
-              className="h-12 w-12 select-none object-contain"
+              className="h-5 w-5 rounded-md object-contain"
               draggable={false}
             />
-
-            <div className="leading-tight">
-              <div className="text-sm font-semibold">Stacta</div>
-              <div className="text-xs text-white/60">Welcome back</div>
-            </div>
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-white/80">Stacta</span>
           </div>
 
-          {/* Card */}
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+          <h1 className="text-3xl font-semibold tracking-tight">Welcome back</h1>
+          <p className="mt-2 text-sm text-white/65">Sign in to continue building your fragrance identity.</p>
+
+          <div className="mt-5 rounded-3xl border border-white/15 bg-black/30 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl">
             <form className="space-y-4" onSubmit={onSubmit}>
               <div>
                 <label className="text-xs font-medium text-white/70">Email</label>
@@ -146,7 +148,7 @@ export default function SignInPage() {
                   type="email"
                   autoComplete="email"
                   placeholder="you@example.com"
-                  className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-neutral-950/40 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-white/20"
+                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35"
                 />
               </div>
 
@@ -168,7 +170,7 @@ export default function SignInPage() {
                   type="password"
                   autoComplete="current-password"
                   placeholder="••••••••"
-                  className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-neutral-950/40 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-white/20"
+                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35"
                 />
               </div>
 
@@ -178,7 +180,7 @@ export default function SignInPage() {
                 </div>
               )}
 
-              <Button className="h-11 w-full rounded-xl" disabled={loading}>
+              <Button className="h-11 w-full rounded-xl bg-white text-black hover:bg-white/90" disabled={loading}>
                 {loading ? "Signing in..." : "Sign in"}
               </Button>
 
@@ -189,16 +191,8 @@ export default function SignInPage() {
                 </Link>
               </div>
             </form>
-
-            <div className="mt-6 rounded-2xl border border-white/10 bg-neutral-950/35 p-4">
-              <div className="text-xs font-semibold text-white/70">Coming next</div>
-              <div className="mt-1 text-xs text-white/60">
-                Social discovery, Top 3 drops, and note art that makes profiles instantly readable.
-              </div>
-            </div>
           </div>
 
-          {/* Footer */}
           <div className="mt-6 text-center text-xs text-white/50">
             By signing in, you agree to our Terms and Privacy Policy.
           </div>

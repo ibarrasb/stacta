@@ -103,7 +103,7 @@ export function GlassCard({
   return (
     <div
       className={cx(
-        "rounded-3xl border border-white/12 bg-white/6 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur",
+        "rounded-3xl border border-white/15 bg-black/25 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl",
         className
       )}
     >
@@ -114,7 +114,7 @@ export function GlassCard({
 
 export function Pill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs text-white/75">
+    <span className="rounded-full border border-white/20 bg-white/8 px-3 py-1 text-xs text-white/78">
       {children}
     </span>
   );

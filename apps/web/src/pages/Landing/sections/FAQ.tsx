@@ -5,11 +5,11 @@ import { GlassCard, cx } from "../components/ui";
 
 export default function FAQ() {
   return (
-    <section className="pb-14">
-      <GlassCard className="p-6 md:p-10">
-        <div className="text-xs font-semibold uppercase tracking-wider text-pink-100/80">FAQ</div>
-        <div className="mt-2 text-2xl font-semibold md:text-3xl">Quick answers.</div>
-        <div className="mt-6 space-y-2">
+    <section>
+      <GlassCard className="p-5">
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-100/85">Questions</div>
+        <div className="mt-2 text-xl font-semibold md:text-2xl">Fast answers while you browse.</div>
+        <div className="mt-4 space-y-2">
           {landingCopy.faqs.map((f) => (
             <FaqItem key={f.q} q={f.q} a={f.a} />
           ))}
@@ -24,13 +24,13 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   return (
     <button
       onClick={() => setOpen((v) => !v)}
-      className="w-full rounded-2xl border border-white/12 bg-[linear-gradient(145deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))] p-4 text-left transition duration-300 hover:border-pink-200/35 hover:bg-white/10"
+      className="w-full rounded-2xl border border-white/15 bg-black/20 p-4 text-left transition duration-300 hover:border-amber-200/35 hover:bg-white/10"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold">{q}</div>
         <span
           className={cx(
-            "grid h-7 w-7 place-items-center rounded-full border border-pink-200/30 bg-pink-300/10 text-xs text-pink-50 transition",
+            "grid h-7 w-7 place-items-center rounded-full border border-amber-200/30 bg-amber-300/15 text-xs text-amber-50 transition",
             open && "rotate-45"
           )}
         >
