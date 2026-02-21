@@ -18,11 +18,14 @@ export type MeResponse = {
     isPrivate: boolean;
     followersCount: number;
     followingCount: number;
+    creatorRatingAverage: number;
+    creatorRatingCount: number;
     collectionCount: number;
     reviewCount: number;
     communityFragranceCount: number;
     collectionItems: CollectionItem[];
     topFragrances: CollectionItem[];
+    communityFragrances: CollectionItem[];
     createdAt: string;     // ISO-8601
     updatedAt: string;     // ISO-8601
   };
@@ -51,13 +54,23 @@ export type UserProfileResponse = {
   isVisible: boolean;
   followersCount: number;
   followingCount: number;
+  creatorRatingAverage: number;
+  creatorRatingCount: number;
+  viewerCreatorRating: number | null;
   collectionCount: number;
   reviewCount: number;
   communityFragranceCount: number;
   collectionItems: CollectionItem[];
   topFragrances: CollectionItem[];
+  communityFragrances: CollectionItem[];
   isFollowing: boolean;
   followRequested: boolean;
+};
+
+export type CreatorRatingSummary = {
+  average: number;
+  count: number;
+  userRating: number | null;
 };
 
 export type FollowActionResponse = {

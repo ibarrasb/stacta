@@ -38,5 +38,8 @@ public record FragranceSearchResult(
   Integer longevityScore,
   Integer sillageScore,
   String visibility,
-  UUID createdByUserId
+  UUID createdByUserId,
+  String createdByUsername,
+  Long ratingCount,
+  Integer userRating
 ) {}

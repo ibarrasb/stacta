@@ -10,9 +10,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stacta.api.fragrance.dto.FragranceRatingSummary;
 import com.stacta.api.fragrance.dto.FragranceSearchResult;
 import com.stacta.api.integrations.fragella.FragellaClient;
 import com.stacta.api.integrations.fragella.FragellaDtos;
+import com.stacta.api.user.UserRepository;
 
 @Service
 public class FragellaSearchService {
@@ -24,19 +26,25 @@ public class FragellaSearchService {
 
   // for persisted detail
   private final FragranceRepository fragranceRepository;
+  private final UserRepository userRepository;
+  private final FragranceRatingService ratingService;
 
   public FragellaSearchService(
     FragellaClient client,
     FragellaMapper mapper,
     FragellaSearchCacheService cacheService,
     ObjectMapper objectMapper,
-    FragranceRepository fragranceRepository
+    FragranceRepository fragranceRepository,
+    UserRepository userRepository,
+    FragranceRatingService ratingService
   ) {
     this.client = client;
     this.mapper = mapper;
     this.cacheService = cacheService;
     this.objectMapper = objectMapper;
     this.fragranceRepository = fragranceRepository;
+    this.userRepository = userRepository;
+    this.ratingService = ratingService;
   }
 
   public List<FragranceSearchResult> searchCached(String q, int limit) {
@@ -94,7 +102,7 @@ public class FragellaSearchService {
 
         List<FragranceSearchResult> mapped = mapper.mapRaw(List.of(live));
         if (mapped != null && !mapped.isEmpty()) {
-          return withIds(mapped.get(0), "fragella", ext);
+          return withIds(mapped.get(0), "fragella", ext, null, null, null);
         }
 
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Fragrance not found");
@@ -112,12 +120,22 @@ public class FragellaSearchService {
     String responseSource =
       "COMMUNITY".equalsIgnoreCase(entity.getExternalSource()) ? "community" : "fragella";
 
+    // COMMUNITY snapshots are persisted as FragranceSearchResult; parsing them as Fragella DTO can yield null-heavy results.
+    if ("community".equalsIgnoreCase(responseSource)) {
+      try {
+        FragranceSearchResult parsed = objectMapper.readValue(snapshot, FragranceSearchResult.class);
+        return withIds(parsed, responseSource, entity.getExternalId(), entity.getCreatedByUserId(), parsed.createdByUsername(), null);
+      } catch (Exception e) {
+        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Snapshot parse failed");
+      }
+    }
+
     // 1) Try parse snapshot as Fragella DTO (typical for ingested FRAGELLA rows)
     try {
       FragellaDtos.Fragrance dto = objectMapper.readValue(snapshot, FragellaDtos.Fragrance.class);
       List<FragranceSearchResult> mapped = mapper.mapRaw(List.of(dto));
       if (mapped != null && !mapped.isEmpty()) {
-        return withIds(mapped.get(0), responseSource, entity.getExternalId());
+        return withIds(mapped.get(0), responseSource, entity.getExternalId(), entity.getCreatedByUserId(), null, null);
       }
     } catch (Exception ignore) {
       // fallthrough
@@ -126,7 +144,7 @@ public class FragellaSearchService {
     // 2) Try parse snapshot already as FragranceSearchResult (good for COMMUNITY)
     try {
       FragranceSearchResult parsed = objectMapper.readValue(snapshot, FragranceSearchResult.class);
-      return withIds(parsed, responseSource, entity.getExternalId());
+      return withIds(parsed, responseSource, entity.getExternalId(), entity.getCreatedByUserId(), parsed.createdByUsername(), null);
     } catch (Exception e) {
       throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Snapshot parse failed");
     }
@@ -220,8 +238,31 @@ public class FragellaSearchService {
     return s == null ? "" : s.trim();
   }
 
-  private static FragranceSearchResult withIds(FragranceSearchResult in, String source, String externalId) {
+  public FragranceSearchResult attachRatings(FragranceSearchResult in, String viewerSub) {
     if (in == null) return null;
+    FragranceRatingSummary summary = ratingService.getSummary(viewerSub, in.source(), in.externalId());
+    return withIds(in, in.source(), in.externalId(), in.createdByUserId(), in.createdByUsername(), summary);
+  }
+
+  private FragranceSearchResult withIds(
+    FragranceSearchResult in,
+    String source,
+    String externalId,
+    java.util.UUID createdByUserIdFallback,
+    String createdByUsernameFallback,
+    FragranceRatingSummary ratingSummary
+  ) {
+    if (in == null) return null;
+    var createdByUserId = in.createdByUserId() != null ? in.createdByUserId() : createdByUserIdFallback;
+    var createdByUsername = resolveCreatedByUsername(createdByUserId, in.createdByUsername(), createdByUsernameFallback);
+    String rating = in.rating();
+    Long ratingCount = in.ratingCount();
+    Integer userRating = in.userRating();
+    if (ratingSummary != null && ratingSummary.count() > 0) {
+      rating = String.format(java.util.Locale.US, "%.2f", ratingSummary.average());
+      ratingCount = ratingSummary.count();
+      userRating = ratingSummary.userRating();
+    }
 
     return new FragranceSearchResult(
       source,
@@ -233,7 +274,7 @@ public class FragellaSearchService {
       in.imageUrl(),
       in.gender(),
 
-      in.rating(),
+      rating,
       in.price(),
       in.priceValue(),
 
@@ -257,8 +298,22 @@ public class FragellaSearchService {
       in.longevityScore(),
       in.sillageScore(),
       in.visibility(),
-      in.createdByUserId()
+      createdByUserId,
+      createdByUsername,
+      ratingCount,
+      userRating
     );
+  }
+
+  private String resolveCreatedByUsername(java.util.UUID createdByUserId, String primary, String fallback) {
+    String normalizedPrimary = primary == null ? "" : primary.trim();
+    if (!normalizedPrimary.isBlank()) return normalizedPrimary;
+    String normalizedFallback = fallback == null ? "" : fallback.trim();
+    if (!normalizedFallback.isBlank()) return normalizedFallback;
+    if (createdByUserId == null) return null;
+    return userRepository.findById(createdByUserId)
+      .map(u -> u.getUsername())
+      .orElse(null);
   }
 
 }

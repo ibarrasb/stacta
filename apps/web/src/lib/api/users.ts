@@ -1,5 +1,5 @@
 import { authedFetch } from "@/lib/api/client";
-import type { UserProfileResponse, UserSearchItem } from "@/lib/api/types";
+import type { CreatorRatingSummary, UserProfileResponse, UserSearchItem } from "@/lib/api/types";
 
 export function searchUsers(params: { q: string; limit?: number }, init: RequestInit = {}) {
   const q = encodeURIComponent(params.q ?? "");
@@ -9,4 +9,15 @@ export function searchUsers(params: { q: string; limit?: number }, init: Request
 
 export function getUserProfile(username: string, init: RequestInit = {}) {
   return authedFetch<UserProfileResponse>(`/api/v1/users/${encodeURIComponent(username)}`, init);
+}
+
+export function getCreatorRatingSummary(username: string, init: RequestInit = {}) {
+  return authedFetch<CreatorRatingSummary>(`/api/v1/users/${encodeURIComponent(username)}/creator-rating`, init);
+}
+
+export function rateCreator(username: string, rating: number) {
+  return authedFetch<CreatorRatingSummary>(`/api/v1/users/${encodeURIComponent(username)}/creator-rating`, {
+    method: "POST",
+    body: JSON.stringify({ rating }),
+  });
 }

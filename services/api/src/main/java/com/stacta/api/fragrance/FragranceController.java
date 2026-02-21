@@ -1,10 +1,15 @@
 package com.stacta.api.fragrance;
 
 import com.stacta.api.fragrance.dto.FragranceSearchResult;
+import com.stacta.api.fragrance.dto.FragranceRatingSummary;
+import com.stacta.api.fragrance.dto.RateFragranceRequest;
 import com.stacta.api.integrations.fragella.FragellaDtos;
 import com.stacta.api.note.NoteIngestAsyncService;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -16,13 +21,16 @@ public class FragranceController {
 
   private final FragellaSearchService searchService;
   private final NoteIngestAsyncService noteIngestAsyncService;
+  private final FragranceRatingService ratingService;
 
   public FragranceController(
     FragellaSearchService searchService,
-    NoteIngestAsyncService noteIngestAsyncService
+    NoteIngestAsyncService noteIngestAsyncService,
+    FragranceRatingService ratingService
   ) {
     this.searchService = searchService;
     this.noteIngestAsyncService = noteIngestAsyncService;
+    this.ratingService = ratingService;
   }
 
   @Operation(summary = "Search fragrances via Fragella. Cached when persist=false. When persist=true, does NOT cache and persists NOTES only (async).")
@@ -58,11 +66,29 @@ public class FragranceController {
   @GetMapping("/{externalId}")
   public FragranceSearchResult getByExternalId(
     @PathVariable("externalId") String externalId,
-    @RequestParam(value = "source", defaultValue = "FRAGELLA") String source
+    @RequestParam(value = "source", defaultValue = "FRAGELLA") String source,
+    @AuthenticationPrincipal Jwt jwt
   ) {
     if (externalId == null || externalId.isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "externalId is required");
     }
-    return searchService.getPersistedDetail(source, externalId.trim());
+    String viewerSub = jwt == null ? null : jwt.getSubject();
+    return searchService.attachRatings(searchService.getPersistedDetail(source, externalId.trim()), viewerSub);
+  }
+
+  @PostMapping("/{externalId}/rating")
+  public FragranceRatingSummary rateFragrance(
+    @PathVariable("externalId") String externalId,
+    @RequestParam(value = "source", defaultValue = "FRAGELLA") String source,
+    @AuthenticationPrincipal Jwt jwt,
+    @Valid @RequestBody RateFragranceRequest req
+  ) {
+    if (externalId == null || externalId.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "externalId is required");
+    }
+    if (req == null || req.rating() == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "rating is required");
+    }
+    return ratingService.upsertRating(jwt.getSubject(), source, externalId.trim(), req.rating());
   }
 }

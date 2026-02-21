@@ -12,6 +12,11 @@ public interface FragranceRepository extends JpaRepository<Fragrance, UUID> {
 
   Optional<Fragrance> findByExternalSourceAndExternalId(String externalSource, String externalId);
   long countByExternalSourceAndCreatedByUserId(String externalSource, UUID createdByUserId);
+  List<Fragrance> findByExternalSourceAndCreatedByUserIdOrderByUpdatedAtDesc(
+    String externalSource,
+    UUID createdByUserId,
+    Pageable pageable
+  );
 
   @Query("""
     SELECT f FROM Fragrance f
@@ -25,4 +30,13 @@ public interface FragranceRepository extends JpaRepository<Fragrance, UUID> {
     ORDER BY f.updatedAt DESC
   """)
   List<Fragrance> searchCommunity(String q, UUID userId, Pageable pageable);
+
+  @Query("""
+    SELECT f FROM Fragrance f
+    WHERE f.externalSource = 'COMMUNITY'
+      AND f.createdByUserId = :createdByUserId
+      AND (:includePrivate = true OR f.visibility = 'PUBLIC')
+    ORDER BY f.updatedAt DESC
+  """)
+  List<Fragrance> listCommunityByCreator(UUID createdByUserId, boolean includePrivate, Pageable pageable);
 }

@@ -1,3 +1,5 @@
 package com.stacta.api.fragrance.dto;
 
-public record NoteDto(String name, String imageUrl) {}
+import java.util.UUID;
+
+public record NoteDto(UUID id, String name, String imageUrl) {}

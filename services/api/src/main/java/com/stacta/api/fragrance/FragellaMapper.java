@@ -47,7 +47,7 @@ public class FragellaMapper {
         f.purchaseUrl(),
       
         //new community fields (not applicable for fragella)
-        null, null, null, null, null
+        null, null, null, null, null, null, null, null
       ));
       
     }
@@ -71,7 +71,7 @@ public class FragellaMapper {
     List<NoteDto> out = new ArrayList<>(list.size());
     for (var n : list) {
       if (n == null) continue;
-      out.add(new NoteDto(n.name(), n.imageUrl()));
+      out.add(new NoteDto(null, n.name(), n.imageUrl()));
     }
     return out;
   }

@@ -14,11 +14,15 @@ public record UserProfileResponse(
   boolean isVisible,
   long followersCount,
   long followingCount,
+  double creatorRatingAverage,
+  long creatorRatingCount,
+  Integer viewerCreatorRating,
   long collectionCount,
   long reviewCount,
   long communityFragranceCount,
   List<CollectionItemDto> collectionItems,
   List<CollectionItemDto> topFragrances,
+  List<CollectionItemDto> communityFragrances,
   boolean isFollowing,
   boolean followRequested
 ) {}

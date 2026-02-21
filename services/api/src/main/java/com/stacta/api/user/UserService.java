@@ -18,6 +18,7 @@ import com.stacta.api.user.dto.OnboardingRequest;
 import com.stacta.api.user.dto.UpdateMeRequest;
 import com.stacta.api.user.dto.UserProfileResponse;
 import com.stacta.api.user.dto.UserSearchItem;
+import com.stacta.api.user.dto.CreatorRatingSummary;
 
 @Service
 public class UserService {
@@ -27,19 +28,22 @@ public class UserService {
   private final UserCollectionService collectionService;
   private final ActivityEventRepository activityEvents;
   private final FragranceRepository fragrances;
+  private final CreatorRatingService creatorRatings;
 
   public UserService(
     UserRepository repo,
     FollowService followService,
     UserCollectionService collectionService,
     ActivityEventRepository activityEvents,
-    FragranceRepository fragrances
+    FragranceRepository fragrances,
+    CreatorRatingService creatorRatings
   ) {
     this.repo = repo;
     this.followService = followService;
     this.collectionService = collectionService;
     this.activityEvents = activityEvents;
     this.fragrances = fragrances;
+    this.creatorRatings = creatorRatings;
   }
 
   @Transactional(readOnly = true)
@@ -134,9 +138,13 @@ public class UserService {
     boolean isVisible = !target.isPrivate() || isOwner || isFollowing;
     long followersCount = target.getFollowersCount();
     long followingCount = target.getFollowingCount();
+    CreatorRatingSummary creatorSummary = creatorRatings.getSummaryByCreatorId(viewerSub, target.getId());
     long collectionCount = isVisible ? collectionService.countForUser(target.getId()) : 0;
     long reviewCount = isVisible ? activityEvents.countByActorUserIdAndType(target.getId(), "REVIEW_POSTED") : 0;
     long communityFragranceCount = isVisible ? fragrances.countByExternalSourceAndCreatedByUserId("COMMUNITY", target.getId()) : 0;
+    List<CollectionItemDto> communityFragrances = isVisible
+      ? listCommunityFragrances(target.getId(), isOwner)
+      : List.of();
     List<CollectionItemDto> collectionItems = isVisible
       ? collectionService.listForUser(target.getId())
       : List.of();
@@ -155,11 +163,15 @@ public class UserService {
       isVisible,
       followersCount,
       followingCount,
+      creatorSummary.average(),
+      creatorSummary.count(),
+      creatorSummary.userRating(),
       collectionCount,
       reviewCount,
       communityFragranceCount,
       collectionItems,
       topFragrances,
+      communityFragrances,
       isFollowing,
       followRequested
     );
@@ -176,6 +188,7 @@ public class UserService {
   }
 
   private MeResponse toMe(User u) {
+    CreatorRatingSummary creatorSummary = creatorRatings.getSummaryByCreatorId(u.getCognitoSub(), u.getId());
     return new MeResponse(
       u.getId(),
       u.getCognitoSub(),
@@ -187,13 +200,30 @@ public class UserService {
       u.isPrivate(),
       u.getFollowersCount(),
       u.getFollowingCount(),
+      creatorSummary.average(),
+      creatorSummary.count(),
       collectionService.countForUser(u.getId()),
       activityEvents.countByActorUserIdAndType(u.getId(), "REVIEW_POSTED"),
       fragrances.countByExternalSourceAndCreatedByUserId("COMMUNITY", u.getId()),
       collectionService.listForUser(u.getId()),
       collectionService.listTopForUser(u.getId()),
+      listCommunityFragrances(u.getId(), true),
       u.getCreatedAt(),
       u.getUpdatedAt()
     );
+  }
+
+  private List<CollectionItemDto> listCommunityFragrances(java.util.UUID userId, boolean includePrivate) {
+    return fragrances.listCommunityByCreator(userId, includePrivate, PageRequest.of(0, 100))
+      .stream()
+      .map(f -> new CollectionItemDto(
+        "COMMUNITY",
+        f.getExternalId(),
+        f.getName(),
+        f.getBrand(),
+        f.getImageUrl(),
+        f.getCreatedAt() == null ? null : f.getCreatedAt().toInstant()
+      ))
+      .toList();
   }
 }

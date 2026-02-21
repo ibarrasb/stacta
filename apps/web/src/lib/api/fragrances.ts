@@ -1,7 +1,7 @@
 // apps/web/src/lib/api/fragrances.ts
 import { authedFetch } from "@/lib/api/client";
 
-export type NoteDto = { name: string; imageUrl: string | null };
+export type NoteDto = { id?: string | null; name: string; imageUrl: string | null };
 export type NotesDto = { top: NoteDto[]; middle: NoteDto[]; base: NoteDto[] };
 
 export type RankingDto = { name: string; score: number | null };
@@ -42,6 +42,15 @@ export type FragranceSearchResult = {
   sillageScore?: number | null;
   visibility?: "PRIVATE" | "PUBLIC" | string | null;
   createdByUserId?: string | null;
+  createdByUsername?: string | null;
+  ratingCount?: number | null;
+  userRating?: number | null;
+};
+
+export type FragranceRatingSummary = {
+  average: number;
+  count: number;
+  userRating: number | null;
 };
 
 export type NoteDictionaryItem = {
@@ -55,9 +64,14 @@ export type CreateCommunityFragranceRequest = {
   name: string;
   brand: string;
   year?: string | null;
+  imageUrl?: string | null;
   concentration?: string | null;
   longevityScore?: number | null; // 1-5
   sillageScore?: number | null; // 1-5
+  confidence?: string | null;
+  popularity?: string | null;
+  mainAccords?: string[];
+  mainAccordsPercentage?: Record<string, string> | null;
   visibility?: "PRIVATE" | "PUBLIC";
   topNoteIds?: string[];
   middleNoteIds?: string[];
@@ -179,6 +193,32 @@ export function createCommunityFragrance(body: CreateCommunityFragranceRequest) 
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+export function updateCommunityFragrance(externalId: string, body: CreateCommunityFragranceRequest) {
+  return authedFetch<FragranceSearchResult>(`/api/v1/community-fragrances/${encodeURIComponent(externalId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteCommunityFragrance(externalId: string) {
+  return authedFetch<void>(`/api/v1/community-fragrances/${encodeURIComponent(externalId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function rateFragrance(
+  params: { source?: "FRAGELLA" | "COMMUNITY"; externalId: string; rating: number }
+) {
+  const source = params.source ?? "FRAGELLA";
+  const externalId = encodeURIComponent(params.externalId);
+  return authedFetch<FragranceRatingSummary>(`/api/v1/fragrances/${externalId}/rating?source=${source}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rating: params.rating }),
   });
 }
 

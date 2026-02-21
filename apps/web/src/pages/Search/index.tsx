@@ -4,8 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { searchFragrances, searchCommunityFragrances, type FragranceSearchResult } from "@/lib/api/fragrances";
-import AddCommunityFragranceDialog from "@/components/fragrances/AddCommunityFragranceDialog";
-import fragrancePlaceholder from "@/assets/illustrations/fragrance-placeholder-4x3.png";
+import fragrancePlaceholder from "@/assets/illustrations/NotFound.png";
 
 const FALLBACK_IMG = fragrancePlaceholder;
 
@@ -57,6 +56,9 @@ function normalize(item: any): FragranceSearchResult {
     sillageScore: item?.sillageScore ?? null,
     visibility: item?.visibility ?? null,
     createdByUserId: item?.createdByUserId ?? null,
+    createdByUsername: item?.createdByUsername ?? null,
+    ratingCount: item?.ratingCount ?? null,
+    userRating: item?.userRating ?? null,
   };
 }
 
@@ -232,6 +234,11 @@ const ResultCard = React.memo(function ResultCard({
             </span>
           ))}
         </div>
+        {String(item.source ?? "").toUpperCase() === "COMMUNITY" ? (
+          <div className="mt-3 text-xs text-cyan-100/85">
+            Created by @{String(item.createdByUsername ?? "unknown").replace(/^@+/, "")}
+          </div>
+        ) : null}
       </div>
     </button>
   );
@@ -257,7 +264,6 @@ export default function SearchPage() {
   const query = useMemo(() => searchText.trim(), [searchText]);
   const canSearch = query.length >= 3;
 
-  const [addOpen, setAddOpen] = useState(false);
   const [didSearch, setDidSearch] = useState(false);
 
   // prevent re-hydrating on every param update (e.g., visible changes)
@@ -462,6 +468,17 @@ export default function SearchPage() {
     saveCache({ visibleCount: next, scrollY: window.scrollY });
   }, [query, results.length, saveCache, setParams, visibleCount]);
 
+  const goToCommunityCreator = useCallback(() => {
+    const paramsString = params.toString();
+    navigate("/fragrances/new-community?source=COMMUNITY", {
+      state: {
+        from: { pathname: "/search", search: paramsString ? `?${paramsString}` : "" },
+        createCommunity: true,
+        seedQuery: query,
+      },
+    });
+  }, [navigate, params, query]);
+
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
       <div className="mx-auto max-w-6xl px-4 pb-10">
@@ -520,7 +537,7 @@ export default function SearchPage() {
                 <Button
                   variant="secondary"
                   className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-                  onClick={() => setAddOpen(true)}
+                  onClick={goToCommunityCreator}
                 >
                   Not seeing it?
                 </Button>
@@ -545,7 +562,7 @@ export default function SearchPage() {
                 Add it as a community fragrance (private by default).
               </div>
               <div className="mt-4">
-                <Button className="h-10 rounded-xl bg-white text-black hover:bg-white/90 px-5" onClick={() => setAddOpen(true)}>
+                <Button className="h-10 rounded-xl bg-white text-black hover:bg-white/90 px-5" onClick={goToCommunityCreator}>
                   Add community fragrance
                 </Button>
               </div>
@@ -569,27 +586,13 @@ export default function SearchPage() {
             <div className="mt-6 flex items-center justify-center">
               <button
                 className="text-sm text-white/60 underline-offset-4 hover:underline"
-                onClick={() => setAddOpen(true)}
+                onClick={goToCommunityCreator}
               >
                 Can’t find what you’re looking for? Add it as a community fragrance.
               </button>
             </div>
           )}
         </div>
-
-        <AddCommunityFragranceDialog
-          open={addOpen}
-          onOpenChange={setAddOpen}
-          onCreated={(created) => {
-            const id = created.externalId ?? "";
-            navigate(`/fragrances/${encodeURIComponent(id)}`, {
-              state: {
-                fragrance: created,
-                from: { pathname: "/search", search: paramsString ? `?${paramsString}` : "" },
-              },
-            });
-          }}
-        />
       </div>
     </div>
   );

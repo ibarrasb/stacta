@@ -62,6 +62,11 @@ public class CommunityFragranceService {
     String concentration = (req.concentration() == null || req.concentration().isBlank())
       ? null
       : req.concentration().trim();
+    String imageUrl = normalizeImageUrl(req.imageUrl());
+    String confidence = normalizeOptional(req.confidence());
+    String popularity = normalizeOptional(req.popularity());
+    List<String> mainAccords = normalizeAccords(req.mainAccords());
+    Map<String, String> mainAccordsPercentage = normalizeAccordStrengths(req.mainAccordsPercentage(), mainAccords);
 
     // stable COMMUNITY externalId (so duplicates collide)
     String externalId = normalizeKey(brand) + "|" + normalizeKey(name) + "|" + year +
@@ -73,42 +78,25 @@ public class CommunityFragranceService {
     List<NoteEntity> base   = fetchNotesInOrder(req.baseNoteIds());
 
     // Build response snapshot
-    FragranceSearchResult snapshot = new FragranceSearchResult(
-      "community",
+    FragranceSearchResult snapshot = buildSnapshot(
       externalId,
-
       name,
       brand,
-      year.equals("0") ? null : year,
-      null, // imageUrl (later: allow upload)
-      null, // gender
-
-      null, // rating
-      null, // price
-      null, // priceValue
-
-      // keep existing UI behavior (chip), BUT also include concentration explicitly below
-      concentration,                 // oilType slot (existing FE UI)
-      scoreLabel(req.longevityScore()),
-      scoreLabel(req.sillageScore()),
-      null, // confidence
-      null, // popularity
-
-      null, // mainAccordsPercentage
-      List.of(), // seasonRanking
-      List.of(), // occasionRanking
-
-      List.of(), // mainAccords
-      List.of(), // generalNotes
-      new NotesDto(toNoteDtos(top), toNoteDtos(middle), toNoteDtos(base)),
-      null, // purchaseUrl
-
-      // community-only
+      year,
+      imageUrl,
       concentration,
       req.longevityScore(),
       req.sillageScore(),
+      confidence,
+      popularity,
+      mainAccords,
+      mainAccordsPercentage,
       visibility,
-      user.getId()
+      toNoteDtos(top),
+      toNoteDtos(middle),
+      toNoteDtos(base),
+      user.getId(),
+      user.getUsername()
     );
 
     // Persist fragrance row
@@ -118,6 +106,7 @@ public class CommunityFragranceService {
     f.setName(name);
     f.setBrand(brand);
     f.setYear(year.equals("0") ? null : year);
+    f.setImageUrl(imageUrl);
 
     f.setCreatedByUserId(user.getId());
     f.setVisibility(visibility);
@@ -144,6 +133,134 @@ public class CommunityFragranceService {
     insertFragranceNotes(saved.getId(), base, "BASE");
 
     return snapshot;
+  }
+
+  @Transactional
+  public FragranceSearchResult update(String externalId, CreateCommunityFragranceRequest req, String cognitoSub) {
+    var user = users.findByCognitoSub(cognitoSub)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "User not onboarded"));
+
+    String ext = normalizeKey(externalId);
+    var fragrance = fragrances.findByExternalSourceAndExternalId("COMMUNITY", ext)
+      .orElseGet(() -> fragrances.findByExternalSourceAndExternalId("community", ext)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Community fragrance not found")));
+
+    if (fragrance.getCreatedByUserId() == null || !fragrance.getCreatedByUserId().equals(user.getId())) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the creator can edit this fragrance");
+    }
+
+    String brand = safe(req.brand());
+    String name = safe(req.name());
+    if (brand.isBlank() || name.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "brand and name are required");
+    }
+
+    String year = (req.year() == null || req.year().isBlank()) ? "0" : req.year().trim();
+    String visibility = normalizeVisibility(req.visibility());
+    String concentration = normalizeOptional(req.concentration());
+    String imageUrl = normalizeImageUrl(req.imageUrl());
+    String confidence = normalizeOptional(req.confidence());
+    String popularity = normalizeOptional(req.popularity());
+    List<String> mainAccords = normalizeAccords(req.mainAccords());
+    Map<String, String> mainAccordsPercentage = normalizeAccordStrengths(req.mainAccordsPercentage(), mainAccords);
+
+    boolean topProvided = req.topNoteIds() != null;
+    boolean middleProvided = req.middleNoteIds() != null;
+    boolean baseProvided = req.baseNoteIds() != null;
+    boolean anyNotesProvided = topProvided || middleProvided || baseProvided;
+
+    List<NoteEntity> top = topProvided ? fetchNotesInOrder(req.topNoteIds()) : List.of();
+    List<NoteEntity> middle = middleProvided ? fetchNotesInOrder(req.middleNoteIds()) : List.of();
+    List<NoteEntity> base = baseProvided ? fetchNotesInOrder(req.baseNoteIds()) : List.of();
+    NotesDto existingNotes = readNotesFromSnapshot(fragrance.getSnapshot());
+
+    List<NoteDto> topDtos = topProvided ? toNoteDtos(top) : (existingNotes == null || existingNotes.top() == null ? List.of() : existingNotes.top());
+    List<NoteDto> middleDtos = middleProvided ? toNoteDtos(middle) : (existingNotes == null || existingNotes.middle() == null ? List.of() : existingNotes.middle());
+    List<NoteDto> baseDtos = baseProvided ? toNoteDtos(base) : (existingNotes == null || existingNotes.base() == null ? List.of() : existingNotes.base());
+
+    FragranceSearchResult snapshot = buildSnapshot(
+      fragrance.getExternalId(),
+      name,
+      brand,
+      year,
+      imageUrl,
+      concentration,
+      req.longevityScore(),
+      req.sillageScore(),
+      confidence,
+      popularity,
+      mainAccords,
+      mainAccordsPercentage,
+      visibility,
+      topDtos,
+      middleDtos,
+      baseDtos,
+      user.getId(),
+      user.getUsername()
+    );
+
+    fragrance.setName(name);
+    fragrance.setBrand(brand);
+    fragrance.setYear(year.equals("0") ? null : year);
+    fragrance.setImageUrl(imageUrl);
+    fragrance.setVisibility(visibility);
+    fragrance.setConcentration(concentration);
+    fragrance.setLongevityScore(req.longevityScore());
+    fragrance.setSillageScore(req.sillageScore());
+    fragrance.setUpdatedAt(OffsetDateTime.now());
+
+    try {
+      fragrance.setSnapshot(om.writeValueAsString(snapshot));
+    } catch (Exception e) {
+      fragrance.setSnapshot("{}");
+    }
+
+    Fragrance saved = fragrances.saveAndFlush(fragrance);
+    if (anyNotesProvided) {
+      if (topProvided) {
+        jdbc.update("DELETE FROM fragrance_note WHERE fragrance_id = ? AND note_category = 'TOP'", saved.getId());
+        insertFragranceNotes(saved.getId(), top, "TOP");
+      }
+      if (middleProvided) {
+        jdbc.update("DELETE FROM fragrance_note WHERE fragrance_id = ? AND note_category = 'MIDDLE'", saved.getId());
+        insertFragranceNotes(saved.getId(), middle, "MIDDLE");
+      }
+      if (baseProvided) {
+        jdbc.update("DELETE FROM fragrance_note WHERE fragrance_id = ? AND note_category = 'BASE'", saved.getId());
+        insertFragranceNotes(saved.getId(), base, "BASE");
+      }
+    }
+
+    return snapshot;
+  }
+
+  @Transactional
+  public void delete(String externalId, String cognitoSub) {
+    var user = users.findByCognitoSub(cognitoSub)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "User not onboarded"));
+
+    String ext = normalizeKey(externalId);
+    var fragrance = fragrances.findByExternalSourceAndExternalId("COMMUNITY", ext)
+      .orElseGet(() -> fragrances.findByExternalSourceAndExternalId("community", ext)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Community fragrance not found")));
+
+    if (fragrance.getCreatedByUserId() == null || !fragrance.getCreatedByUserId().equals(user.getId())) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the creator can delete this fragrance");
+    }
+
+    // Remove denormalized dependencies keyed by (source, external_id) to prevent orphaned records.
+    jdbc.update(
+      "DELETE FROM fragrance_rating WHERE LOWER(external_source) = LOWER(?) AND external_id = ?",
+      fragrance.getExternalSource(),
+      fragrance.getExternalId()
+    );
+    jdbc.update(
+      "DELETE FROM user_collection_item WHERE LOWER(fragrance_source) = LOWER(?) AND fragrance_external_id = ?",
+      fragrance.getExternalSource(),
+      fragrance.getExternalId()
+    );
+
+    fragrances.delete(fragrance);
   }
 
   // ✅ NEW: community search from DB (respects visibility via repository query)
@@ -201,7 +318,10 @@ public class CommunityFragranceService {
           parsed.longevityScore(),
           parsed.sillageScore(),
           parsed.visibility(),
-          parsed.createdByUserId()
+          parsed.createdByUserId(),
+          resolveUsername(parsed.createdByUserId(), parsed.createdByUsername()),
+          parsed.ratingCount(),
+          parsed.userRating()
         );
       } catch (Exception e) {
         // Fallback minimal row (still shows up in Search)
@@ -238,10 +358,22 @@ public class CommunityFragranceService {
           f.getLongevityScore(),
           f.getSillageScore(),
           f.getVisibility(),
-          f.getCreatedByUserId()
+          f.getCreatedByUserId(),
+          resolveUsername(f.getCreatedByUserId(), null),
+          null,
+          null
         );
       }
     }).toList();
+  }
+
+  private String resolveUsername(UUID createdByUserId, String snapshotUsername) {
+    String normalized = snapshotUsername == null ? "" : snapshotUsername.trim();
+    if (!normalized.isBlank()) return normalized;
+    if (createdByUserId == null) return null;
+    return users.findById(createdByUserId)
+      .map(u -> u.getUsername())
+      .orElse(null);
   }
 
   private void insertFragranceNotes(UUID fragranceId, List<NoteEntity> list, String category) {
@@ -278,7 +410,7 @@ public class CommunityFragranceService {
   private static List<NoteDto> toNoteDtos(List<NoteEntity> list) {
     if (list == null) return List.of();
     return list.stream()
-      .map(n -> new NoteDto(n.getName(), n.getImageUrl()))
+      .map(n -> new NoteDto(n.getId(), n.getName(), n.getImageUrl()))
       .toList();
   }
 
@@ -293,5 +425,107 @@ public class CommunityFragranceService {
 
   private static String normalizeKey(String s) {
     return safe(s).toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+  }
+
+  private NotesDto readNotesFromSnapshot(String snapshotJson) {
+    if (snapshotJson == null || snapshotJson.isBlank()) return null;
+    try {
+      FragranceSearchResult parsed = om.readValue(snapshotJson, FragranceSearchResult.class);
+      return parsed.notes();
+    } catch (Exception ignore) {
+      return null;
+    }
+  }
+
+  private static String normalizeOptional(String s) {
+    String cleaned = safe(s);
+    return cleaned.isBlank() ? null : cleaned;
+  }
+
+  private static String normalizeImageUrl(String v) {
+    String cleaned = normalizeOptional(v);
+    if (cleaned == null) return null;
+    return cleaned;
+  }
+
+  private static List<String> normalizeAccords(List<String> accords) {
+    if (accords == null || accords.isEmpty()) return List.of();
+    return accords.stream()
+      .map(CommunityFragranceService::normalizeOptional)
+      .filter(Objects::nonNull)
+      .distinct()
+      .limit(20)
+      .toList();
+  }
+
+  private static Map<String, String> normalizeAccordStrengths(Map<String, String> strengths, List<String> accords) {
+    Map<String, String> out = new LinkedHashMap<>();
+    if (strengths != null) {
+      strengths.forEach((k, v) -> {
+        String key = normalizeOptional(k);
+        String value = normalizeOptional(v);
+        if (key != null && value != null) out.put(key, value);
+      });
+    }
+    if (accords != null) {
+      for (String accord : accords) {
+        out.putIfAbsent(accord, "Moderate");
+      }
+    }
+    return out.isEmpty() ? null : out;
+  }
+
+  private FragranceSearchResult buildSnapshot(
+    String externalId,
+    String name,
+    String brand,
+    String year,
+    String imageUrl,
+    String concentration,
+    Integer longevityScore,
+    Integer sillageScore,
+    String confidence,
+    String popularity,
+    List<String> mainAccords,
+    Map<String, String> mainAccordsPercentage,
+    String visibility,
+    List<NoteDto> top,
+    List<NoteDto> middle,
+    List<NoteDto> base,
+    UUID createdByUserId,
+    String createdByUsername
+  ) {
+    return new FragranceSearchResult(
+      "community",
+      externalId,
+      name,
+      brand,
+      year.equals("0") ? null : year,
+      imageUrl,
+      null,
+      null,
+      null,
+      null,
+      concentration,
+      scoreLabel(longevityScore),
+      scoreLabel(sillageScore),
+      confidence,
+      popularity,
+      mainAccordsPercentage,
+      List.of(),
+      List.of(),
+      mainAccords == null ? List.of() : mainAccords,
+      List.of(),
+      new NotesDto(top, middle, base),
+      null,
+      concentration,
+      longevityScore,
+      sillageScore,
+      visibility,
+      createdByUserId,
+      createdByUsername,
+      null,
+      null
+    );
   }
 }

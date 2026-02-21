@@ -9,6 +9,9 @@ import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { followUser, unfollowUser } from "@/lib/api/follows";
 import { getUserProfile } from "@/lib/api/users";
 import type { UserProfileResponse } from "@/lib/api/types";
+import fragranceFallbackImg from "@/assets/illustrations/NotFound.png";
+
+const FALLBACK_FRAGRANCE_IMG = fragranceFallbackImg;
 
 function getInitials(value: string) {
   const v = value.trim();
@@ -26,6 +29,27 @@ function compactCount(value: number | null | undefined) {
   }).format(n);
 }
 
+function StarReputation({ value }: { value: number }) {
+  const safe = Number.isFinite(value) ? Math.max(0, Math.min(5, value)) : 0;
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const fill = Math.max(0, Math.min(1, safe - i));
+        return (
+          <span key={i} className="relative inline-block text-sm leading-none text-white/25">
+            ★
+            <span className="absolute inset-y-0 left-0 overflow-hidden text-amber-200" style={{ width: `${Math.round(fill * 100)}%` }}>
+              ★
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+type PublicProfileTab = "overview" | "reviews" | "wishlist" | "community";
+
 export default function PublicProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,6 +60,7 @@ export default function PublicProfilePage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<{ title: string; message: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<PublicProfileTab>("overview");
 
   const backTarget = useMemo(() => {
     const stateFrom = (location.state as any)?.from?.pathname;
@@ -222,6 +247,25 @@ export default function PublicProfilePage() {
                           <span className="font-semibold text-white">{compactCount(profile.followingCount)}</span> following
                         </div>
                       </div>
+                      <div className="mt-3 hidden items-center gap-2 rounded-full border border-white/12 bg-white/6 px-3 py-1.5 sm:inline-flex">
+                        <span className="text-xs text-white/65">Stacta rep</span>
+                        <StarReputation value={Number(profile.creatorRatingAverage ?? 0)} />
+                        <span className="text-xs text-white/80">
+                          {profile.creatorRatingCount > 0 ? `${Number(profile.creatorRatingAverage ?? 0).toFixed(2)} • ${profile.creatorRatingCount}` : "No ratings"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="sm:hidden rounded-xl border border-white/12 bg-white/6 px-3 py-2">
+                    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+                      <span className="text-xs text-white/65">Stacta rep</span>
+                      <div className="justify-self-center">
+                        <StarReputation value={Number(profile.creatorRatingAverage ?? 0)} />
+                      </div>
+                      <span className="text-xs text-white/80">
+                        {profile.creatorRatingCount > 0 ? `${Number(profile.creatorRatingAverage ?? 0).toFixed(2)} • ${profile.creatorRatingCount}` : "No ratings"}
+                      </span>
                     </div>
                   </div>
 
@@ -253,10 +297,9 @@ export default function PublicProfilePage() {
                     )}
                   </div>
                 </div>
-
                 <Separator className="bg-white/10" />
 
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-4">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <div className="text-xs text-white/60">Collection</div>
                     <div className="mt-1 text-lg font-semibold">{profile.isVisible ? profile.collectionCount : "—"}</div>
@@ -272,91 +315,242 @@ export default function PublicProfilePage() {
                     <div className="mt-1 text-lg font-semibold">{profile.isVisible ? profile.communityFragranceCount : "—"}</div>
                     <div className="mt-1 text-xs text-white/45">Fragrances contributed</div>
                   </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="text-xs text-white/60">Wishlist</div>
+                    <div className="mt-1 text-lg font-semibold">{profile.isVisible ? "—" : "—"}</div>
+                    <div className="mt-1 text-xs text-white/45">Tab is ready, data endpoint pending</div>
+                  </div>
                 </div>
 
                 <Separator className="bg-white/10" />
 
-                <div>
-                  <div className="text-sm font-semibold">Top 3 Fragrances</div>
-                  <div className="mt-1 text-xs text-white/60">
-                    {profile.isVisible ? "Their spotlight picks." : "Follow to view top fragrances."}
+                <div
+                  className="no-scrollbar overflow-x-auto"
+                  role="tablist"
+                  aria-label="Profile sections"
+                >
+                  <div className="flex min-w-max items-center gap-6 border-b border-white/10 px-1">
+                    {[
+                      { id: "overview" as const, label: "Overview", count: profile.isVisible ? profile.collectionCount : undefined },
+                      { id: "reviews" as const, label: "Reviews", count: profile.isVisible ? profile.reviewCount : undefined },
+                      { id: "wishlist" as const, label: "Wishlist" },
+                      { id: "community" as const, label: "Community", count: profile.isVisible ? profile.communityFragranceCount : undefined },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={[
+                          "group relative inline-flex items-center gap-2 py-3 text-sm font-medium transition",
+                          activeTab === tab.id
+                            ? "text-white"
+                            : "text-white/65 hover:text-white",
+                        ].join(" ")}
+                      >
+                        <span className={activeTab === tab.id ? "text-cyan-200" : "text-white/45 group-hover:text-white/75"}>
+                          {tab.id === "overview" ? (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M3 12L12 4l9 8" />
+                              <path d="M5 10v10h14V10" />
+                            </svg>
+                          ) : null}
+                          {tab.id === "reviews" ? (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M4 5h16v12H8l-4 4V5z" />
+                              <path d="M8 9h8M8 13h5" />
+                            </svg>
+                          ) : null}
+                          {tab.id === "wishlist" ? (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 21l-1.4-1.3C6 15.4 3 12.7 3 9.4A4.4 4.4 0 0 1 7.4 5c1.8 0 3.1.9 4.6 2.5C13.5 5.9 14.8 5 16.6 5A4.4 4.4 0 0 1 21 9.4c0 3.3-3 6-7.6 10.3z" />
+                            </svg>
+                          ) : null}
+                          {tab.id === "community" ? (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM8 13a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM8 14c-2.7 0-5 1.3-5 3v2h10v-2c0-1.7-2.3-3-5-3zM16 12c-2 0-4 1-4 2.5V19h9v-1.5c0-1.5-2.2-2.5-5-2.5z" />
+                            </svg>
+                          ) : null}
+                        </span>
+                        <span>{tab.label}</span>
+                        {typeof tab.count === "number" ? (
+                          <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] tabular-nums text-white/70">
+                            {tab.count}
+                          </span>
+                        ) : null}
+                        <span
+                          className={[
+                            "absolute -bottom-px left-0 right-0 h-[2px] rounded-full transition-all duration-200",
+                            activeTab === tab.id ? "bg-cyan-300/95" : "bg-transparent group-hover:bg-white/30",
+                          ].join(" ")}
+                        />
+                      </button>
+                    ))}
                   </div>
-                  {!profile.isVisible ? (
-                    <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
-                      Top fragrances are hidden because this account is private.
-                    </div>
-                  ) : !profile.topFragrances?.length ? (
-                    <div className="mt-3 rounded-2xl border border-white/10 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-cyan-500/10 p-4 text-sm text-white/70">
-                      No top fragrances selected yet.
-                    </div>
-                  ) : (
-                    <div className="mt-3 flex flex-wrap justify-center gap-3">
-                      {profile.topFragrances.map((item, idx) => (
-                        <button
-                          type="button"
-                          key={`${item.source}:${item.externalId}`}
-                          onClick={() => openFragranceDetail(item.source, item.externalId)}
-                          className="w-full rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-300/15 via-white/5 to-black/20 p-3 shadow-[0_12px_30px_rgba(251,191,36,0.18)] sm:w-[220px]"
-                        >
-                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/90">Top {idx + 1}</div>
-                          {item.imageUrl ? (
-                            <img src={item.imageUrl} alt={item.name} className="h-28 w-full rounded-xl border border-white/15 object-cover" loading="lazy" />
-                          ) : (
-                            <div className="h-28 w-full rounded-xl border border-white/15 bg-white/5" />
-                          )}
-                          <div className="mt-2 truncate text-sm font-semibold text-white/95">{item.name}</div>
-                          <div className="truncate text-xs text-white/70">{item.brand || "—"}</div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
-                <Separator className="bg-white/10" />
+                {activeTab === "overview" ? (
+                  <div className="space-y-6">
+                    <div>
+                      <div className="text-sm font-semibold">Top 3 Fragrances</div>
+                      <div className="mt-1 text-xs text-white/60">
+                        {profile.isVisible ? "Their spotlight picks." : "Follow to view top fragrances."}
+                      </div>
+                      {!profile.isVisible ? (
+                        <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
+                          Top fragrances are hidden because this account is private.
+                        </div>
+                      ) : !profile.topFragrances?.length ? (
+                        <div className="mt-3 rounded-2xl border border-white/10 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-cyan-500/10 p-4 text-sm text-white/70">
+                          No top fragrances selected yet.
+                        </div>
+                      ) : (
+                        <div className="mt-3 flex flex-wrap justify-center gap-3">
+                          {profile.topFragrances.map((item, idx) => (
+                            <button
+                              type="button"
+                              key={`${item.source}:${item.externalId}`}
+                              onClick={() => openFragranceDetail(item.source, item.externalId)}
+                              className="w-full rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-300/15 via-white/5 to-black/20 p-3 shadow-[0_12px_30px_rgba(251,191,36,0.18)] sm:w-[220px]"
+                            >
+                              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/90">Top {idx + 1}</div>
+                              {item.imageUrl ? (
+                                <img src={item.imageUrl} alt={item.name} className="h-28 w-full rounded-xl border border-white/15 object-cover" loading="lazy" />
+                              ) : (
+                                <div className="h-28 w-full rounded-xl border border-white/15 bg-white/5" />
+                              )}
+                              <div className="mt-2 truncate text-sm font-semibold text-white/95">{item.name}</div>
+                              <div className="truncate text-xs text-white/70">{item.brand || "—"}</div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
-                <div>
-                  <div className="text-sm font-semibold">Collection</div>
-                  <div className="mt-1 text-xs text-white/60">
-                    {profile.isVisible ? "Fragrances this user has added." : "Follow to view this collection."}
+                    <Separator className="bg-white/10" />
+
+                    <div>
+                      <div className="text-sm font-semibold">Collection</div>
+                      <div className="mt-1 text-xs text-white/60">
+                        {profile.isVisible ? "Fragrances this user has added." : "Follow to view this collection."}
+                      </div>
+                      {!profile.isVisible ? (
+                        <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
+                          This collection is hidden because the account is private.
+                        </div>
+                      ) : !profile.collectionItems?.length ? (
+                        <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
+                          No fragrances in this collection yet.
+                        </div>
+                      ) : (
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          {profile.collectionItems.map((item) => (
+                            <button
+                              type="button"
+                              key={`${item.source}:${item.externalId}`}
+                              onClick={() => openFragranceDetail(item.source, item.externalId)}
+                              className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left"
+                            >
+                              <div className="flex items-center gap-3">
+                                {item.imageUrl ? (
+                                  <img
+                                    src={item.imageUrl}
+                                    alt={item.name}
+                                    className="h-14 w-14 rounded-xl border border-white/10 object-cover"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="h-14 w-14 rounded-xl border border-white/10 bg-white/5" />
+                                )}
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-semibold text-white/90">{item.name}</div>
+                                  <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {!profile.isVisible ? (
-                    <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
-                      This collection is hidden because the account is private.
+                ) : null}
+
+                {activeTab === "reviews" ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                    <div className="text-sm font-semibold">Reviews</div>
+                    <div className="mt-1 text-xs text-white/60">
+                      {profile.isVisible
+                        ? `${profile.displayName || profile.username} has posted ${profile.reviewCount} review(s).`
+                        : "Follow to view this user's reviews."}
                     </div>
-                  ) : !profile.collectionItems?.length ? (
-                    <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
-                      No fragrances in this collection yet.
+                    <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                      Dedicated public review list is being wired next.
                     </div>
-                  ) : (
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      {profile.collectionItems.map((item) => (
-                        <button
-                          type="button"
-                          key={`${item.source}:${item.externalId}`}
-                          onClick={() => openFragranceDetail(item.source, item.externalId)}
-                          className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left"
-                        >
-                          <div className="flex items-center gap-3">
-                            {item.imageUrl ? (
+                  </div>
+                ) : null}
+
+                {activeTab === "wishlist" ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                    <div className="text-sm font-semibold">Wishlist</div>
+                    <div className="mt-1 text-xs text-white/60">
+                      {profile.isVisible ? "Wishlist list endpoint is pending." : "Follow to view this user's wishlist."}
+                    </div>
+                    <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                      Wishlist tab is ready and will be populated once the public endpoint is available.
+                    </div>
+                  </div>
+                ) : null}
+
+                {activeTab === "community" ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                    <div className="text-sm font-semibold">Community Fragrances</div>
+                    <div className="mt-1 text-xs text-white/60">
+                      {profile.isVisible
+                        ? `${profile.displayName || profile.username} has contributed ${profile.communityFragranceCount} fragrance(s).`
+                        : "Follow to view community contributions."}
+                    </div>
+                    {!profile.isVisible ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        Community contributions are hidden because this account is private.
+                      </div>
+                    ) : !profile.communityFragrances?.length ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        No community fragrances contributed yet.
+                      </div>
+                    ) : (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        {profile.communityFragrances.map((item) => (
+                          <button
+                            type="button"
+                            key={`${item.source}:${item.externalId}`}
+                            onClick={() => openFragranceDetail(item.source, item.externalId)}
+                            className="rounded-2xl border border-white/10 bg-black/20 p-3 text-left"
+                          >
+                            <div className="flex items-center gap-3">
                               <img
-                                src={item.imageUrl}
+                                src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
                                 alt={item.name}
-                                className="h-14 w-14 rounded-xl border border-white/10 object-cover"
+                                className="h-14 w-14 rounded-xl border border-white/10 object-cover bg-white/5"
                                 loading="lazy"
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  if (img.dataset.fallbackApplied === "1") return;
+                                  img.dataset.fallbackApplied = "1";
+                                  img.src = FALLBACK_FRAGRANCE_IMG;
+                                }}
                               />
-                            ) : (
-                              <div className="h-14 w-14 rounded-xl border border-white/10 bg-white/5" />
-                            )}
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold text-white/90">{item.name}</div>
-                              <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold text-white/90">{item.name}</div>
+                                <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

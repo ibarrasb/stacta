@@ -16,11 +16,14 @@ public record MeResponse(
   boolean isPrivate,
   long followersCount,
   long followingCount,
+  double creatorRatingAverage,
+  long creatorRatingCount,
   long collectionCount,
   long reviewCount,
   long communityFragranceCount,
   List<CollectionItemDto> collectionItems,
   List<CollectionItemDto> topFragrances,
+  List<CollectionItemDto> communityFragrances,
   Instant createdAt,
   Instant updatedAt
 ) {}

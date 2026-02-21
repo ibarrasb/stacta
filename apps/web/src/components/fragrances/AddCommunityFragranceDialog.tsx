@@ -1,4 +1,3 @@
-// apps/web/src/components/fragrances/AddCommunityFragranceDialog.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -7,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   createCommunityFragrance,
+  updateCommunityFragrance,
   searchNotes,
   type NoteDictionaryItem,
   type CreateCommunityFragranceRequest,
@@ -27,15 +27,24 @@ const CONCENTRATION_OPTIONS = [
   "Solid Perfume",
 ] as const;
 
+const LONGEVITY_LABELS = ["", "Very weak", "Weak", "Moderate", "Long lasting", "Very long lasting"] as const;
+const SILLAGE_LABELS = ["", "Intimate", "Soft", "Moderate", "Strong", "Very strong"] as const;
+const CONFIDENCE_LABELS = ["", "Low", "Moderate", "High", "Very High"] as const;
+const POPULARITY_LABELS = ["", "Low", "Moderate", "High", "Very High"] as const;
+const ACCORD_STRENGTH_LABELS = ["Low", "Moderate", "Prominent", "Dominant"] as const;
+
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   initialBrand?: string;
   initialName?: string;
-  onCreated: (fragrance: FragranceSearchResult) => void;
+  initialFragrance?: FragranceSearchResult | null;
+  onSaved: (fragrance: FragranceSearchResult) => void;
+  inlineMode?: boolean;
 };
 
 type StageKey = "TOP" | "MIDDLE" | "BASE";
+type AccordItem = { name: string; strength: number };
 
 function uniqById(arr: NoteDictionaryItem[]) {
   const map = new Map<string, NoteDictionaryItem>();
@@ -53,33 +62,70 @@ function parseScore(vRaw: string): number | null {
   return Math.max(1, Math.min(5, Math.round(n)));
 }
 
+function toSliderValueFromLabel(label: any, labels: readonly string[]) {
+  const v = String(label ?? "").trim().toLowerCase();
+  const idx = labels.findIndex((x) => x.toLowerCase() === v);
+  return idx < 0 ? 0 : idx;
+}
+
+function parseAccordsFromInitial(fragrance: FragranceSearchResult | null | undefined): AccordItem[] {
+  const out: AccordItem[] = [];
+  const map = fragrance?.mainAccordsPercentage ?? null;
+  if (map && typeof map === "object") {
+    Object.entries(map).forEach(([name, level]) => {
+      const key = String(name ?? "").trim();
+      if (!key) return;
+      const idx = ACCORD_STRENGTH_LABELS.findIndex((x) => x.toLowerCase() === String(level ?? "").trim().toLowerCase());
+      out.push({ name: key, strength: idx >= 0 ? idx : 1 });
+    });
+  }
+  if (!out.length && Array.isArray(fragrance?.mainAccords)) {
+    fragrance.mainAccords.forEach((name) => {
+      const key = String(name ?? "").trim();
+      if (!key) return;
+      out.push({ name: key, strength: 1 });
+    });
+  }
+  const deduped = new Map<string, AccordItem>();
+  out.forEach((item) => {
+    if (!deduped.has(item.name.toLowerCase())) deduped.set(item.name.toLowerCase(), item);
+  });
+  return Array.from(deduped.values()).slice(0, 20);
+}
+
 export default function AddCommunityFragranceDialog({
   open,
   onOpenChange,
   initialBrand,
   initialName,
-  onCreated,
+  initialFragrance,
+  onSaved,
+  inlineMode = false,
 }: Props) {
+  const isEdit = Boolean(initialFragrance?.externalId && String(initialFragrance?.source ?? "").toUpperCase() === "COMMUNITY");
+
   const [brand, setBrand] = useState(initialBrand ?? "");
   const [name, setName] = useState(initialName ?? "");
   const [year, setYear] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [concentration, setConcentration] = useState("");
 
-  // Switch: false => PRIVATE, true => PUBLIC
   const [isPublic, setIsPublic] = useState(false);
-
   const visibility = useMemo<"PRIVATE" | "PUBLIC">(() => (isPublic ? "PUBLIC" : "PRIVATE"), [isPublic]);
 
   const [longevity, setLongevity] = useState<number | null>(null);
   const [sillage, setSillage] = useState<number | null>(null);
+  const [confidenceSlider, setConfidenceSlider] = useState(0);
+  const [popularitySlider, setPopularitySlider] = useState(0);
+
+  const [accordInput, setAccordInput] = useState("");
+  const [accords, setAccords] = useState<AccordItem[]>([]);
 
   const [noteSearch, setNoteSearch] = useState("");
   const [noteResults, setNoteResults] = useState<NoteDictionaryItem[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
 
-  // NEW: one stage selector controls where the next note is added
   const [stage, setStage] = useState<StageKey>("TOP");
-
   const [top, setTop] = useState<NoteDictionaryItem[]>([]);
   const [middle, setMiddle] = useState<NoteDictionaryItem[]>([]);
   const [base, setBase] = useState<NoteDictionaryItem[]>([]);
@@ -87,28 +133,50 @@ export default function AddCommunityFragranceDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // reset when opened
   useEffect(() => {
     if (!open) return;
-    setBrand(initialBrand ?? "");
-    setName(initialName ?? "");
-    setYear("");
-    setConcentration("");
-    setIsPublic(false);
-    setLongevity(null);
-    setSillage(null);
-    setStage("TOP");
-    setTop([]);
-    setMiddle([]);
-    setBase([]);
+
+    const source = String(initialFragrance?.source ?? "").toUpperCase();
+    if (initialFragrance && source === "COMMUNITY") {
+      setBrand(initialFragrance.brand ?? "");
+      setName(initialFragrance.name ?? "");
+      setYear(initialFragrance.year ?? "");
+      setImageUrl((initialFragrance.imageUrl ?? "").trim());
+      setConcentration(initialFragrance.concentration ?? initialFragrance.oilType ?? "");
+      setIsPublic(String(initialFragrance.visibility ?? "PRIVATE").toUpperCase() === "PUBLIC");
+      setLongevity(initialFragrance.longevityScore ?? parseScore(String(initialFragrance.longevity ?? "")));
+      setSillage(initialFragrance.sillageScore ?? parseScore(String(initialFragrance.sillage ?? "")));
+      setConfidenceSlider(toSliderValueFromLabel(initialFragrance.confidence, CONFIDENCE_LABELS));
+      setPopularitySlider(toSliderValueFromLabel(initialFragrance.popularity, POPULARITY_LABELS));
+      setAccords(parseAccordsFromInitial(initialFragrance));
+      setTop((initialFragrance.notes?.top ?? []).map((n, i) => ({ id: n.id || `top-${i}-${n.name}`, name: n.name, imageUrl: n.imageUrl, usageCount: null })));
+      setMiddle((initialFragrance.notes?.middle ?? []).map((n, i) => ({ id: n.id || `middle-${i}-${n.name}`, name: n.name, imageUrl: n.imageUrl, usageCount: null })));
+      setBase((initialFragrance.notes?.base ?? []).map((n, i) => ({ id: n.id || `base-${i}-${n.name}`, name: n.name, imageUrl: n.imageUrl, usageCount: null })));
+    } else {
+      setBrand(initialBrand ?? "");
+      setName(initialName ?? "");
+      setYear("");
+      setImageUrl("");
+      setConcentration("");
+      setIsPublic(false);
+      setLongevity(null);
+      setSillage(null);
+      setConfidenceSlider(0);
+      setPopularitySlider(0);
+      setAccords([]);
+      setStage("TOP");
+      setTop([]);
+      setMiddle([]);
+      setBase([]);
+    }
+
     setNoteSearch("");
     setNoteResults([]);
     setError(null);
-  }, [open, initialBrand, initialName]);
+  }, [open, initialBrand, initialName, initialFragrance]);
 
   useEffect(() => {
     if (!open) return;
-
     const q = noteSearch.trim();
     if (q.length < 2) {
       setNoteResults([]);
@@ -152,109 +220,126 @@ export default function AddCommunityFragranceDialog({
     if (targetStage === "BASE") setBase((prev) => prev.filter((x) => x.id !== id));
   }
 
+  function addAccord() {
+    const cleaned = accordInput.trim();
+    if (!cleaned) return;
+    setAccords((prev) => {
+      const exists = prev.some((x) => x.name.toLowerCase() === cleaned.toLowerCase());
+      if (exists || prev.length >= 20) return prev;
+      return [...prev, { name: cleaned, strength: 1 }];
+    });
+    setAccordInput("");
+  }
+
+  function updateAccordStrength(name: string, strength: number) {
+    setAccords((prev) => prev.map((item) => (item.name === name ? { ...item, strength } : item)));
+  }
+
+  function removeAccord(name: string) {
+    setAccords((prev) => prev.filter((item) => item.name !== name));
+  }
+
   async function onSave() {
     setError(null);
     if (!canSave) return;
+
+    const mainAccords = accords.map((x) => x.name);
+    const mainAccordsPercentage = accords.length
+      ? accords.reduce<Record<string, string>>((acc, item) => {
+          acc[item.name] = ACCORD_STRENGTH_LABELS[item.strength] ?? "Moderate";
+          return acc;
+        }, {})
+      : null;
+
+    const topNoteIds = top.map((x) => x.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+    const middleNoteIds = middle.map((x) => x.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+    const baseNoteIds = base.map((x) => x.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
 
     const body: CreateCommunityFragranceRequest = {
       name: name.trim(),
       brand: brand.trim(),
       year: year.trim() || null,
+      imageUrl: imageUrl.trim() || null,
       concentration: concentration.trim() || null,
       longevityScore: longevity,
       sillageScore: sillage,
+      confidence: confidenceSlider > 0 ? CONFIDENCE_LABELS[confidenceSlider] : null,
+      popularity: popularitySlider > 0 ? POPULARITY_LABELS[popularitySlider] : null,
+      mainAccords,
+      mainAccordsPercentage,
       visibility,
-      topNoteIds: top.map((x) => x.id),
-      middleNoteIds: middle.map((x) => x.id),
-      baseNoteIds: base.map((x) => x.id),
+      topNoteIds: !isEdit || topNoteIds.length ? topNoteIds : undefined,
+      middleNoteIds: !isEdit || middleNoteIds.length ? middleNoteIds : undefined,
+      baseNoteIds: !isEdit || baseNoteIds.length ? baseNoteIds : undefined,
     };
 
     setSaving(true);
     try {
-      const created = await createCommunityFragrance(body);
-      onCreated(created);
+      const externalId = String(initialFragrance?.externalId ?? "").trim();
+      const saved = isEdit && externalId
+        ? await updateCommunityFragrance(externalId, body)
+        : await createCommunityFragrance(body);
+      onSaved(saved);
       onOpenChange(false);
     } catch (e: any) {
-      setError(e?.message || "Failed to create fragrance.");
+      setError(e?.message || `Failed to ${isEdit ? "update" : "create"} fragrance.`);
     } finally {
       setSaving(false);
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-  className="max-h-[85dvh] w-[calc(100vw-24px)] max-w-2xl overflow-y-auto overscroll-contain rounded-3xl border border-white/10 bg-[#0b0b10] text-white [-webkit-overflow-scrolling:touch]"
->
-
+  const formBody = (
+    <>
+      {inlineMode ? (
+        <div className="mb-2">
+          <h3 className="text-lg font-semibold">{isEdit ? "Edit community fragrance" : "Add a community fragrance"}</h3>
+        </div>
+      ) : (
         <DialogHeader>
-          <DialogTitle className="text-lg">Add a community fragrance</DialogTitle>
+          <DialogTitle className="text-lg">{isEdit ? "Edit community fragrance" : "Add a community fragrance"}</DialogTitle>
         </DialogHeader>
+      )}
 
-        {error ? (
-          <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-            {error}
-          </div>
-        ) : null}
+      {error ? <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
 
         <div className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <div className="mb-1 text-xs text-white/60">Brand</div>
-              <Input
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
-                className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
-                placeholder="Dior"
-              />
+              <Input value={brand} onChange={(e) => setBrand(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="Dior" />
             </div>
             <div>
               <div className="mb-1 text-xs text-white/60">Name</div>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
-                placeholder="Sauvage"
-              />
+              <Input value={name} onChange={(e) => setName(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="Sauvage" />
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <div className="mb-1 text-xs text-white/60">Year (optional)</div>
-              <Input
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
-                placeholder="2015"
-              />
+              <Input value={year} onChange={(e) => setYear(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="2015" />
             </div>
             <div>
               <div className="mb-1 text-xs text-white/60">Concentration (optional)</div>
-              <select
-                value={concentration}
-                onChange={(e) => setConcentration(e.target.value)}
-                className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none focus-visible:border-white/20"
-              >
+              <select value={concentration} onChange={(e) => setConcentration(e.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none focus-visible:border-white/20">
                 <option value="">Select concentration</option>
                 {CONCENTRATION_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
+                  <option key={option} value={option}>{option}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Visibility slider */}
+          <div>
+            <div className="mb-1 text-xs text-white/60">Image URL (optional)</div>
+            <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="https://..." />
+          </div>
+
           <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-medium">Visibility</div>
-              <div className="text-xs text-white/60">
-                {isPublic ? "Public: others can find it." : "Private: only you can see it."}
-              </div>
+              <div className="text-xs text-white/60">{isPublic ? "Public: others can find it." : "Private: only you can see it."}</div>
             </div>
-
             <div className="flex items-center gap-3">
               <span className={`text-xs ${!isPublic ? "text-white" : "text-white/60"}`}>Private</span>
               <Switch checked={isPublic} onCheckedChange={setIsPublic} />
@@ -263,27 +348,39 @@ export default function AddCommunityFragranceDialog({
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-              <div className="text-xs text-white/60">Longevity (1–5 optional)</div>
-              <Input
-                value={longevity ?? ""}
-                onChange={(e) => setLongevity(parseScore(e.target.value))}
-                className="mt-2 h-10 rounded-xl border-white/10 bg-white/5 text-white"
-                placeholder="e.g. 4"
-              />
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-              <div className="text-xs text-white/60">Sillage (1–5 optional)</div>
-              <Input
-                value={sillage ?? ""}
-                onChange={(e) => setSillage(parseScore(e.target.value))}
-                className="mt-2 h-10 rounded-xl border-white/10 bg-white/5 text-white"
-                placeholder="e.g. 3"
-              />
-            </div>
+            <SliderField title="Longevity" value={longevity ?? 0} min={0} max={5} onChange={(v) => setLongevity(v <= 0 ? null : v)} label={longevity ? LONGEVITY_LABELS[longevity] : "—"} />
+            <SliderField title="Sillage" value={sillage ?? 0} min={0} max={5} onChange={(v) => setSillage(v <= 0 ? null : v)} label={sillage ? SILLAGE_LABELS[sillage] : "—"} />
+            <SliderField title="Confidence" value={confidenceSlider} min={0} max={4} onChange={setConfidenceSlider} label={CONFIDENCE_LABELS[confidenceSlider] || "—"} />
+            <SliderField title="Popularity" value={popularitySlider} min={0} max={4} onChange={setPopularitySlider} label={POPULARITY_LABELS[popularitySlider] || "—"} />
           </div>
 
-          {/* Notes */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium">Main accords</div>
+              <div className="text-xs text-white/55">{accords.length}/20</div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Input value={accordInput} onChange={(e) => setAccordInput(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="Add accord (e.g. woody)" />
+              <Button type="button" className="h-10 rounded-xl px-4" onClick={addAccord}>Add</Button>
+            </div>
+            {accords.length ? (
+              <div className="mt-3 space-y-3">
+                {accords.map((item) => (
+                  <div key={item.name} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="text-sm text-white/90 capitalize">{item.name}</div>
+                      <button type="button" className="rounded-lg px-2 py-1 text-xs text-white/60 hover:bg-white/10 hover:text-white" onClick={() => removeAccord(item.name)}>Remove</button>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input type="range" min={0} max={3} step={1} value={item.strength} onChange={(e) => updateAccordStrength(item.name, Number(e.target.value))} className="w-full accent-cyan-300" />
+                      <div className="w-20 text-right text-xs text-cyan-100">{ACCORD_STRENGTH_LABELS[item.strength]}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -293,74 +390,34 @@ export default function AddCommunityFragranceDialog({
               <div className="text-xs text-white/50">{loadingNotes ? "Searching…" : ""}</div>
             </div>
 
-            {/* Stage selector (fixes “Top always highlighted”) */}
             <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
               <div className="text-xs text-white/60">Add next note to:</div>
-              <ToggleGroup
-                type="single"
-                value={stage}
-                onValueChange={(v) => {
-                  if (!v) return;
-                  setStage(v as StageKey);
-                }}
-                className="gap-2"
-              >
-                <ToggleGroupItem value="TOP" className="h-8 rounded-xl px-3 text-xs">
-                  Top
-                </ToggleGroupItem>
-                <ToggleGroupItem value="MIDDLE" className="h-8 rounded-xl px-3 text-xs">
-                  Mid
-                </ToggleGroupItem>
-                <ToggleGroupItem value="BASE" className="h-8 rounded-xl px-3 text-xs">
-                  Base
-                </ToggleGroupItem>
+              <ToggleGroup type="single" value={stage} onValueChange={(v) => v && setStage(v as StageKey)} className="gap-2">
+                <ToggleGroupItem value="TOP" className="h-8 rounded-xl px-3 text-xs">Top</ToggleGroupItem>
+                <ToggleGroupItem value="MIDDLE" className="h-8 rounded-xl px-3 text-xs">Mid</ToggleGroupItem>
+                <ToggleGroupItem value="BASE" className="h-8 rounded-xl px-3 text-xs">Base</ToggleGroupItem>
               </ToggleGroup>
             </div>
 
             <div className="mt-3">
-              <Input
-                value={noteSearch}
-                onChange={(e) => setNoteSearch(e.target.value)}
-                className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
-                placeholder="Search notes (e.g. bergamot, amber, vanilla)…"
-              />
+              <Input value={noteSearch} onChange={(e) => setNoteSearch(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="Search notes (e.g. bergamot, amber, vanilla)…" />
             </div>
 
             {noteResults.length ? (
               <div className="mt-3 max-h-60 overflow-y-auto pr-1">
                 <div className="grid gap-2 sm:grid-cols-2">
                   {noteResults.slice(0, 30).map((n) => (
-                  <div
-                    key={n.id}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                    <img
-                          src={n.imageUrl || DEFAULT_NOTE_IMG}
-                          onError={(e) => {
-                            // handles broken/404 note images too
-                            e.currentTarget.src = DEFAULT_NOTE_IMG;
-                          }}
-                          alt={n.name}
-                          className="h-9 w-9 shrink-0 rounded-xl object-cover"
-                        />
-                      <div className="min-w-0">
-                        <div className="truncate text-sm">{n.name}</div>
-                        <div className="mt-0.5 text-[11px] text-white/50">
-                          {typeof n.usageCount === "number" ? `Used ${n.usageCount}` : ""}
+                    <div key={n.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <img src={n.imageUrl || DEFAULT_NOTE_IMG} onError={(e) => { e.currentTarget.src = DEFAULT_NOTE_IMG; }} alt={n.name} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
+                        <div className="min-w-0">
+                          <div className="truncate text-sm">{n.name}</div>
+                          <div className="mt-0.5 text-[11px] text-white/50">{typeof n.usageCount === "number" ? `Used ${n.usageCount}` : ""}</div>
                         </div>
                       </div>
+                      <Button type="button" className="h-8 rounded-xl px-3 text-xs" onClick={() => addNote(stage, n)}>Add</Button>
                     </div>
-
-                    <Button
-                      type="button"
-                      className="h-8 rounded-xl px-3 text-xs"
-                      onClick={() => addNote(stage, n)}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                ))}
+                  ))}
                 </div>
               </div>
             ) : null}
@@ -372,57 +429,58 @@ export default function AddCommunityFragranceDialog({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="button" className="h-10 rounded-xl px-5" onClick={onSave} disabled={!canSave || saving}>
-              {saving ? "Saving…" : "Create"}
-            </Button>
-          </div>
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" variant="secondary" className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" className="h-10 rounded-xl px-5" onClick={onSave} disabled={!canSave || saving}>{saving ? (isEdit ? "Saving…" : "Creating…") : (isEdit ? "Save changes" : "Create")}</Button>
         </div>
+      </div>
+    </>
+  );
+
+  if (inlineMode) {
+    if (!open) return null;
+    return (
+      <div className="rounded-3xl border border-white/10 bg-[#0b0b10] p-4">
+        {formBody}
+      </div>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85dvh] w-[calc(100vw-24px)] max-w-2xl overflow-y-auto overscroll-contain rounded-3xl border border-white/10 bg-[#0b0b10] text-white [-webkit-overflow-scrolling:touch]">
+        {formBody}
       </DialogContent>
     </Dialog>
   );
 }
 
-function Stage({
-  title,
-  items,
-  onRemove,
-}: {
-  title: string;
-  items: NoteDictionaryItem[];
-  onRemove: (id: string) => void;
-}) {
+function SliderField({ title, value, min, max, onChange, label }: { title: string; value: number; min: number; max: number; onChange: (v: number) => void; label: string; }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-xs text-white/60">{title}</div>
+        <div className="text-xs text-cyan-100">{label}</div>
+      </div>
+      <input type="range" min={min} max={max} step={1} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-cyan-300" />
+      <div className="mt-1 text-[11px] text-white/45">{value > 0 ? `${value}/${max}` : "Not set"}</div>
+    </div>
+  );
+}
+
+function Stage({ title, items, onRemove }: { title: string; items: NoteDictionaryItem[]; onRemove: (id: string) => void; }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
       <div className="mb-2 flex items-center justify-between">
         <div className="text-xs font-medium text-white/80">{title}</div>
         <div className="text-[10px] text-white/50">{items.length}</div>
       </div>
-
       <div className="space-y-2">
         {items.length ? (
           items.map((n) => (
-            <div
-              key={n.id}
-              className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-2 py-2"
-            >
+            <div key={n.id} className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-2 py-2">
               <div className="min-w-0 truncate text-xs text-white/85">{n.name}</div>
-              <button
-                type="button"
-                className="shrink-0 rounded-lg px-2 py-1 text-xs text-white/60 hover:bg-white/10 hover:text-white"
-                onClick={() => onRemove(n.id)}
-                aria-label={`Remove ${n.name}`}
-              >
-                ✕
-              </button>
+              <button type="button" className="shrink-0 rounded-lg px-2 py-1 text-xs text-white/60 hover:bg-white/10 hover:text-white" onClick={() => onRemove(n.id)} aria-label={`Remove ${n.name}`}>✕</button>
             </div>
           ))
         ) : (

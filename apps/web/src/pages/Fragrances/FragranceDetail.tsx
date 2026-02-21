@@ -3,22 +3,55 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import NoticeDialog from "@/components/ui/notice-dialog";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
 import type { FragranceSearchResult } from "@/lib/api/fragrances";
-import { getFragranceDetail, searchCommunityFragrances, searchFragrances } from "@/lib/api/fragrances";
+import {
+  createCommunityFragrance,
+  deleteCommunityFragrance,
+  getFragranceDetail,
+  rateFragrance,
+  searchCommunityFragrances,
+  searchFragrances,
+  searchNotes,
+  updateCommunityFragrance,
+  type NoteDictionaryItem,
+} from "@/lib/api/fragrances";
 import { addToCollection as addCollectionItem } from "@/lib/api/collection";
+import { getMe } from "@/lib/api/me";
+import { getCreatorRatingSummary, rateCreator } from "@/lib/api/users";
 
-import fragrancePlaceholder from "@/assets/illustrations/fragrance-placeholder-4x3.png";
+import fragrancePlaceholder from "@/assets/illustrations/NotFound.png";
 import defaultNoteImg from "@/assets/notes/download.svg";
 
 const DEFAULT_NOTE_IMG = defaultNoteImg;
 const FALLBACK_FRAGRANCE_IMG = fragrancePlaceholder;
 
 
-type Note = { name: string; imageUrl: string | null };
+type Note = { id?: string | null; name: string; imageUrl: string | null };
 type RankingItem = { name: string; score: number };
+type StageKey = "TOP" | "MIDDLE" | "BASE";
+type AccordDraft = { name: string; strength: 0 | 1 | 2 | 3 };
+
+const LONGEVITY_EDIT_LABELS = ["", "Very weak", "Weak", "Moderate", "Long lasting", "Very long lasting"] as const;
+const SILLAGE_EDIT_LABELS = ["", "Intimate", "Soft", "Moderate", "Strong", "Very strong"] as const;
+const SIGNAL_EDIT_LABELS = ["", "Low", "Moderate", "High", "Very High"] as const;
+const ACCORD_STRENGTH_LABELS = ["Low", "Moderate", "Prominent", "Dominant"] as const;
+const CONCENTRATION_OPTIONS = [
+  "Eau Fraiche",
+  "Eau de Cologne (EdC)",
+  "Eau de Toilette (EdT)",
+  "Eau de Parfum (EdP)",
+  "Eau de Parfum Intense",
+  "Parfum",
+  "Extrait de Parfum",
+  "Elixir",
+  "Perfume Oil / Attar",
+  "Solid Perfume",
+] as const;
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -40,8 +73,26 @@ function pct(n01: number) {
   return `${Math.round(clamp01(n01) * 100)}%`;
 }
 
+function getBarFillStyle(value01: number) {
+  const v = clamp01(value01);
+  const satA = Math.round(42 + v * 38);
+  const satB = Math.round(56 + v * 40);
+  const lightA = Math.round(66 - v * 18);
+  const lightB = Math.round(58 - v * 22);
+  const alphaA = (0.32 + v * 0.42).toFixed(3);
+  const alphaB = (0.5 + v * 0.48).toFixed(3);
+  const glow = (0.08 + v * 0.16).toFixed(3);
+
+  return {
+    backgroundImage: `linear-gradient(90deg, hsla(184, ${satA}%, ${lightA}%, ${alphaA}), hsla(170, ${satB}%, ${lightB}%, ${alphaB}))`,
+    boxShadow: `0 0 12px hsla(178, 92%, 58%, ${glow})`,
+  };
+}
+
 function labelToPercent(label: any, kind: "longevity" | "sillage" | "confidence" | "popularity") {
   const v = normalizeLabel(label);
+  const numeric = String(label ?? "").match(/([1-5])\s*\/\s*5/i);
+  if (numeric) return clamp01(Number(numeric[1]) / 5);
 
   if (kind === "longevity") {
     const map: Record<string, number> = {
@@ -89,11 +140,50 @@ function labelToPercent(label: any, kind: "longevity" | "sillage" | "confidence"
   return map[v] ?? 0;
 }
 
+function sliderIndexFromLabel(label: any, labels: readonly string[]) {
+  const v = normalizeLabel(label);
+  if (!v) return 0;
+  const idx = labels.findIndex((x) => normalizeLabel(x) === v);
+  return idx < 0 ? 0 : idx;
+}
+
+function mapAccordsForEdit(fragrance: FragranceSearchResult | null): AccordDraft[] {
+  if (!fragrance) return [];
+  const out: AccordDraft[] = [];
+  const map = fragrance.mainAccordsPercentage ?? null;
+  if (map && typeof map === "object") {
+    Object.entries(map).forEach(([name, level]) => {
+      const key = String(name ?? "").trim();
+      if (!key) return;
+      const normalized = normalizeLabel(level);
+      const strength =
+        normalized === "dominant" ? 3 :
+        normalized === "prominent" ? 2 :
+        normalized === "moderate" ? 1 : 0;
+      out.push({ name: key, strength: strength as 0 | 1 | 2 | 3 });
+    });
+  }
+  if (!out.length && Array.isArray(fragrance.mainAccords)) {
+    fragrance.mainAccords.forEach((name) => {
+      const key = String(name ?? "").trim();
+      if (!key) return;
+      out.push({ name: key, strength: 1 });
+    });
+  }
+  const dedup = new Map<string, AccordDraft>();
+  out.forEach((x) => {
+    const k = x.name.toLowerCase();
+    if (!dedup.has(k)) dedup.set(k, x);
+  });
+  return Array.from(dedup.values()).slice(0, 20);
+}
+
 function normalizeNotes(input: any): { top: Note[]; middle: Note[]; base: Note[] } {
   const toList = (arr: any): Note[] => {
     if (!Array.isArray(arr)) return [];
     return arr
       .map((n: any) => ({
+        id: typeof n?.id === "string" ? n.id : null,
         name: typeof n?.name === "string" ? n.name.trim() : "",
         imageUrl: typeof n?.imageUrl === "string" ? n.imageUrl : null,
       }))
@@ -124,15 +214,13 @@ function Bar({
   label,
   value01,
   rightText,
-  gradientClass,
 }: {
   label: string;
   value01: number;
   rightText?: string;
-  gradientClass?: string;
 }) {
   const w = pct(value01);
-  const g = gradientClass ?? BAR_GRADIENTS[0];
+  const fillStyle = getBarFillStyle(value01);
 
   return (
     <div className="space-y-2">
@@ -142,7 +230,7 @@ function Bar({
       </div>
 
       <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
-        <div className={cx("h-full rounded-full bg-gradient-to-r", g)} style={{ width: w }} />
+        <div className="h-full rounded-full" style={{ width: w, ...fillStyle }} />
       </div>
     </div>
   );
@@ -157,6 +245,28 @@ function Stars({ value01 }: { value01: number }) {
           ★
         </span>
       ))}
+    </div>
+  );
+}
+
+function AverageStars({ value, max = 5 }: { value: number; max?: number }) {
+  const safe = Number.isFinite(value) ? Math.max(0, Math.min(max, value)) : 0;
+  return (
+    <div className="flex items-center gap-1" aria-label={`Average rating ${safe.toFixed(2)} out of ${max}`}>
+      {Array.from({ length: max }).map((_, i) => {
+        const fill = Math.max(0, Math.min(1, safe - i));
+        return (
+          <span key={i} className="relative inline-block text-base leading-none text-white/25">
+            ★
+            <span
+              className="absolute inset-y-0 left-0 overflow-hidden text-amber-200"
+              style={{ width: `${Math.round(fill * 100)}%` }}
+            >
+              ★
+            </span>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -222,6 +332,41 @@ function PyramidRow({ title, notes }: { title: string; notes: Note[] }) {
   );
 }
 
+function EditablePyramidRow({
+  title,
+  notes,
+  onRemove,
+}: {
+  title: string;
+  notes: Note[];
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-xs font-medium tracking-wide text-white/60">{title.toUpperCase()}</div>
+        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/50">
+          {notes.length || 0}
+        </span>
+      </div>
+      {notes.length ? (
+        <div className="flex flex-wrap gap-2">
+          {notes.map((n, i) => (
+            <div key={`${n.id ?? n.name}-${i}`} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+              <span className="text-xs text-white/85">{n.name}</span>
+              <button type="button" className="text-xs text-white/50 hover:text-white" onClick={() => onRemove(i)}>
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-xs text-white/50">—</div>
+      )}
+    </div>
+  );
+}
+
 function RankingCard({ title, items }: { title: string; items: RankingItem[] }) {
   const clean = (items ?? []).filter((x) => x && typeof x.name === "string" && Number.isFinite(x.score));
   const sorted = clean.slice().sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
@@ -241,13 +386,12 @@ function RankingCard({ title, items }: { title: string; items: RankingItem[] }) 
         {sorted.length ? (
           sorted.map((it) => {
             const v01 = clamp01((it.score || 0) / max);
-            const grad = BAR_GRADIENTS[hashIdx(`${title}:${it.name}`, BAR_GRADIENTS.length)];
             return (
               <div key={`${it.name}-${it.score}`} className="grid grid-cols-[90px_1fr_130px] items-center gap-3">
                 <div className="text-xs text-white/80 capitalize">{it.name}</div>
 
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
-                  <div className={cx("h-full rounded-full bg-gradient-to-r", grad)} style={{ width: pct(v01) }} />
+                  <div className="h-full rounded-full" style={{ width: pct(v01), ...getBarFillStyle(v01) }} />
                 </div>
 
                 <div className="flex items-center justify-end gap-2">
@@ -306,12 +450,27 @@ function computeFragellaExternalId(
   return `${b}|${n}|${y || "0"}`.trim();
 }
 
+function imageSourceLabel(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:")) return "Uploaded image";
+  try {
+    const u = new URL(raw);
+    const leaf = u.pathname.split("/").filter(Boolean).pop() ?? "";
+    return decodeURIComponent(leaf) || "Selected image";
+  } catch {
+    const leaf = raw.split("/").filter(Boolean).pop() ?? "";
+    return leaf || "Selected image";
+  }
+}
+
 export default function FragranceDetailPage() {
   const navigate = useNavigate();
   const location = useLocation() as any;
   const { externalId } = useParams();
 
   const routeExternalId = externalId ? safeDecodeURIComponent(externalId) : null;
+  const isCreateMode = routeExternalId === "new-community" || Boolean(location?.state?.createCommunity);
 
   const [loaded, setLoaded] = useState<FragranceSearchResult | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -322,9 +481,69 @@ export default function FragranceDetailPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTitle, setNoticeTitle] = useState("Notice");
   const [addingToCollection, setAddingToCollection] = useState(false);
+  const [editingCommunity, setEditingCommunity] = useState(false);
+  const [deletingCommunity, setDeletingCommunity] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [viewerUser, setViewerUser] = useState<{ id: string | null; username: string | null } | null>(null);
+  const [ratingState, setRatingState] = useState<{ average: number; count: number; userRating: number | null } | null>(null);
+  const [ratingBusy, setRatingBusy] = useState(false);
+  const [creatorRatingState, setCreatorRatingState] = useState<{ average: number; count: number; userRating: number | null } | null>(null);
+  const [creatorRatingBusy, setCreatorRatingBusy] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [draftAccordInput, setDraftAccordInput] = useState("");
+  const [draftNoteSearch, setDraftNoteSearch] = useState("");
+  const [draftNoteResults, setDraftNoteResults] = useState<NoteDictionaryItem[]>([]);
+  const [draftStage, setDraftStage] = useState<StageKey>("TOP");
+  const [draftBrand, setDraftBrand] = useState("");
+  const [draftName, setDraftName] = useState("");
+  const [draftYear, setDraftYear] = useState("");
+  const [draftConcentration, setDraftConcentration] = useState("");
+  const [draftImageUrl, setDraftImageUrl] = useState("");
+  const [draftImageLabel, setDraftImageLabel] = useState("");
+  const [draftLongevity, setDraftLongevity] = useState(0);
+  const [draftSillage, setDraftSillage] = useState(0);
+  const [draftConfidence, setDraftConfidence] = useState(0);
+  const [draftPopularity, setDraftPopularity] = useState(0);
+  const [draftVisibility, setDraftVisibility] = useState<"PRIVATE" | "PUBLIC">("PUBLIC");
+  const [draftAccords, setDraftAccords] = useState<AccordDraft[]>([]);
+  const [draftTopNotes, setDraftTopNotes] = useState<Note[]>([]);
+  const [draftMiddleNotes, setDraftMiddleNotes] = useState<Note[]>([]);
+  const [draftBaseNotes, setDraftBaseNotes] = useState<Note[]>([]);
 
   const stateFragrance = (location?.state?.fragrance ?? null) as (FragranceSearchResult & any) | null;
-  const fragrance = (loaded ?? stateFragrance) as (FragranceSearchResult & any) | null;
+  const blankCreateFragrance = useMemo(() => ({
+    source: "COMMUNITY",
+    externalId: "new-community",
+    name: "",
+    brand: "",
+    year: null,
+    imageUrl: null,
+    gender: null,
+    rating: null,
+    price: null,
+    priceValue: null,
+    purchaseUrl: null,
+    oilType: null,
+    longevity: null,
+    sillage: null,
+    confidence: null,
+    popularity: null,
+    mainAccords: [],
+    generalNotes: [],
+    mainAccordsPercentage: null,
+    seasonRanking: [],
+    occasionRanking: [],
+    notes: { top: [], middle: [], base: [] },
+    concentration: null,
+    longevityScore: null,
+    sillageScore: null,
+    visibility: "PUBLIC",
+    createdByUserId: null,
+    createdByUsername: null,
+    ratingCount: 0,
+    userRating: null,
+  } as (FragranceSearchResult & any)), []);
+  const fragrance = (loaded ?? stateFragrance ?? (isCreateMode ? blankCreateFragrance : null)) as (FragranceSearchResult & any) | null;
   const sourceParam = useMemo(() => {
     const value = new URLSearchParams(location.search).get("source");
     if (!value) return null;
@@ -341,6 +560,94 @@ export default function FragranceDetailPage() {
   }
 
   useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((me) => {
+        if (cancelled) return;
+        setViewerUser({ id: me.id ?? null, username: me.username ?? null });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setViewerUser(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isCreateMode) return;
+    if (!editingCommunity || !fragrance) return;
+    setDraftBrand(String(fragrance.brand ?? ""));
+    setDraftName(String(fragrance.name ?? ""));
+    setDraftYear(String(fragrance.year ?? ""));
+    setDraftConcentration(String((fragrance as any).concentration ?? fragrance.oilType ?? ""));
+    setDraftImageUrl(String(fragrance.imageUrl ?? ""));
+    setDraftImageLabel(imageSourceLabel(fragrance.imageUrl));
+    setDraftLongevity(sliderIndexFromLabel(fragrance.longevity ?? (fragrance as any)?.Longevity, LONGEVITY_EDIT_LABELS));
+    setDraftSillage(sliderIndexFromLabel(fragrance.sillage ?? (fragrance as any)?.Sillage, SILLAGE_EDIT_LABELS));
+    setDraftConfidence(sliderIndexFromLabel(fragrance.confidence ?? (fragrance as any)?.Confidence, SIGNAL_EDIT_LABELS));
+    setDraftPopularity(sliderIndexFromLabel(fragrance.popularity ?? (fragrance as any)?.Popularity, SIGNAL_EDIT_LABELS));
+    setDraftVisibility(String((fragrance as any)?.visibility ?? "PRIVATE").toUpperCase() === "PUBLIC" ? "PUBLIC" : "PRIVATE");
+    setDraftAccords(mapAccordsForEdit(fragrance));
+    setDraftTopNotes(normalizeNotes(fragrance.notes).top);
+    setDraftMiddleNotes(normalizeNotes(fragrance.notes).middle);
+    setDraftBaseNotes(normalizeNotes(fragrance.notes).base);
+    setDraftAccordInput("");
+    setDraftNoteSearch("");
+    setDraftNoteResults([]);
+    setDraftStage("TOP");
+  }, [editingCommunity, fragrance, isCreateMode]);
+
+  useEffect(() => {
+    if (!isCreateMode) return;
+    setEditingCommunity(true);
+    const seed = String(location?.state?.seedQuery ?? "").trim();
+    setDraftBrand("");
+    setDraftName(seed);
+    setDraftYear("");
+    setDraftConcentration("");
+    setDraftImageUrl("");
+    setDraftImageLabel("");
+    setDraftLongevity(0);
+    setDraftSillage(0);
+    setDraftConfidence(0);
+    setDraftPopularity(0);
+    setDraftVisibility("PUBLIC");
+    setDraftAccords([]);
+    setDraftTopNotes([]);
+    setDraftMiddleNotes([]);
+    setDraftBaseNotes([]);
+    setDraftAccordInput("");
+    setDraftNoteSearch("");
+    setDraftNoteResults([]);
+    setDraftStage("TOP");
+  }, [isCreateMode, location?.state]);
+
+  useEffect(() => {
+    if (!editingCommunity) return;
+    const q = draftNoteSearch.trim();
+    if (q.length < 2) {
+      setDraftNoteResults([]);
+      return;
+    }
+    let cancelled = false;
+    searchNotes({ search: q, limit: 30 })
+      .then((list) => {
+        if (cancelled) return;
+        setDraftNoteResults(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDraftNoteResults([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editingCommunity, draftNoteSearch]);
+
+  useEffect(() => {
+    if (isCreateMode) return;
     if (!routeExternalId) return;
 
     const ctrl = new AbortController();
@@ -427,7 +734,7 @@ export default function FragranceDetailPage() {
     return () => {
       ctrl.abort();
     };
-  }, [routeExternalId, sourceParam, stateFragrance, retryTick]);
+  }, [routeExternalId, sourceParam, stateFragrance, retryTick, isCreateMode]);
 
   const accords = useMemo(() => {
     const a = fragrance?.mainAccords ?? [];
@@ -585,6 +892,10 @@ export default function FragranceDetailPage() {
     const gender = fragrance?.gender ? String(fragrance.gender) : null;
     return { year, gender };
   }, [fragrance?.year, fragrance?.gender]);
+  const createdByUsername = useMemo(() => {
+    const raw = String((fragrance as any)?.createdByUsername ?? "").trim();
+    return raw ? raw.replace(/^@+/, "") : "";
+  }, [fragrance]);
   
 
   const stateHasRichDetails = useMemo(() => {
@@ -621,31 +932,376 @@ export default function FragranceDetailPage() {
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [fragrance]);
 
-  const rating01 = ratingValue ? clamp01(ratingValue / 5) : 0;
+  const ratingCount = useMemo(() => {
+    const n = Number((fragrance as any)?.ratingCount ?? 0);
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+  }, [fragrance]);
+  const currentUserRating = useMemo(() => {
+    const n = Number((fragrance as any)?.userRating ?? 0);
+    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : null;
+  }, [fragrance]);
+
+  useEffect(() => {
+    if (!fragrance) {
+      setRatingState(null);
+      return;
+    }
+    setRatingState({
+      average: ratingValue ?? 0,
+      count: ratingCount,
+      userRating: currentUserRating,
+    });
+  }, [fragrance, ratingValue, ratingCount, currentUserRating]);
+
+  const onRateFragrance = useCallback(async (stars: number) => {
+    if (!fragrance?.externalId || stars < 1 || stars > 5) return;
+    setRatingBusy(true);
+    try {
+      const summary = await rateFragrance({
+        source: String(fragrance.source ?? "").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA",
+        externalId: fragrance.externalId,
+        rating: stars,
+      });
+      setRatingState({
+        average: Number(summary.average ?? 0),
+        count: Number(summary.count ?? 0),
+        userRating: summary.userRating ?? stars,
+      });
+    } catch (e: any) {
+      setNoticeTitle("Rating");
+      setNotice(e?.message || "Failed to submit rating.");
+    } finally {
+      setRatingBusy(false);
+    }
+  }, [fragrance]);
+  const isCommunityFragrance = String(fragrance?.source ?? "").toUpperCase() === "COMMUNITY";
+  const canRateCreator = Boolean(
+    isCommunityFragrance &&
+    createdByUsername &&
+    (!viewerUser?.username || viewerUser.username.toLowerCase() !== createdByUsername.toLowerCase())
+  );
+  const canManageCommunity = Boolean(
+    isCommunityFragrance &&
+    fragrance &&
+    (
+      (viewerUser?.id && String((fragrance as any)?.createdByUserId ?? "") === viewerUser.id) ||
+      (viewerUser?.username && createdByUsername && viewerUser.username.toLowerCase() === createdByUsername.toLowerCase())
+    )
+  );
+  const isEditingForm = isCreateMode || (canManageCommunity && editingCommunity);
+
+  const onDeleteCommunity = useCallback(async () => {
+    if (!canManageCommunity || !fragrance?.externalId) return;
+    setDeletingCommunity(true);
+    try {
+      await deleteCommunityFragrance(fragrance.externalId);
+      navigate("/profile");
+    } catch (e: any) {
+      setNoticeTitle("Delete");
+      setNotice(e?.message || "Failed to delete fragrance.");
+    } finally {
+      setDeletingCommunity(false);
+      setConfirmDeleteOpen(false);
+    }
+  }, [canManageCommunity, fragrance?.externalId, navigate]);
+
+  useEffect(() => {
+    if (!isCommunityFragrance || !createdByUsername) {
+      setCreatorRatingState(null);
+      return;
+    }
+    let cancelled = false;
+    getCreatorRatingSummary(createdByUsername)
+      .then((summary) => {
+        if (cancelled) return;
+        setCreatorRatingState({
+          average: Number(summary.average ?? 0),
+          count: Number(summary.count ?? 0),
+          userRating: summary.userRating ?? null,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCreatorRatingState(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCommunityFragrance, createdByUsername]);
+
+  const onRateCreator = useCallback(async (stars: number) => {
+    if (!canRateCreator || !createdByUsername || stars < 1 || stars > 5) return;
+    setCreatorRatingBusy(true);
+    try {
+      const summary = await rateCreator(createdByUsername, stars);
+      setCreatorRatingState({
+        average: Number(summary.average ?? 0),
+        count: Number(summary.count ?? 0),
+        userRating: summary.userRating ?? stars,
+      });
+    } catch (e: any) {
+      setNoticeTitle("Creator rating");
+      setNotice(e?.message || "Failed to submit creator rating.");
+    } finally {
+      setCreatorRatingBusy(false);
+    }
+  }, [canRateCreator, createdByUsername]);
+
+  const shownLongevityLabel = isEditingForm
+    ? (draftLongevity > 0 ? LONGEVITY_EDIT_LABELS[draftLongevity] : "—")
+    : (longevityLabel ? String(longevityLabel) : "—");
+  const shownSillageLabel = isEditingForm
+    ? (draftSillage > 0 ? SILLAGE_EDIT_LABELS[draftSillage] : "—")
+    : (sillageLabel ? String(sillageLabel) : "—");
+  const shownConfidenceLabel = isEditingForm
+    ? (draftConfidence > 0 ? SIGNAL_EDIT_LABELS[draftConfidence] : "—")
+    : (confidenceLabel ? String(confidenceLabel) : "—");
+  const shownPopularityLabel = isEditingForm
+    ? (draftPopularity > 0 ? SIGNAL_EDIT_LABELS[draftPopularity] : "—")
+    : (popularityLabel ? String(popularityLabel) : "—");
+  const shownVisibilityLabel = isEditingForm ? (draftVisibility === "PUBLIC" ? "Public" : "Private")
+    : (String((fragrance as any)?.visibility ?? "PRIVATE").toUpperCase() === "PUBLIC" ? "Public" : "Private");
+
+  const shownLongevity01 = isEditingForm ? clamp01(draftLongevity / 5) : longevity01;
+  const shownSillage01 = isEditingForm ? clamp01(draftSillage / 5) : sillage01;
+  const shownConfidence01 = isEditingForm ? clamp01(draftConfidence / 4) : confidence01;
+  const shownPopularity01 = isEditingForm ? clamp01(draftPopularity / 4) : popularity01;
+  const canSaveEdit = draftBrand.trim().length > 0 && draftName.trim().length > 0;
+
+  function addDraftAccord() {
+    const cleaned = draftAccordInput.trim();
+    if (!cleaned) return;
+    setDraftAccords((prev) => {
+      if (prev.some((x) => x.name.toLowerCase() === cleaned.toLowerCase()) || prev.length >= 20) return prev;
+      return [...prev, { name: cleaned, strength: 1 }];
+    });
+    setDraftAccordInput("");
+  }
+
+  const onPickDraftImage = useCallback((file: File | null) => {
+    if (!file) return;
+    setDraftImageLabel(file.name || "Uploaded image");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const v = typeof reader.result === "string" ? reader.result : "";
+      if (v) setDraftImageUrl(v);
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  function addDraftNote(note: NoteDictionaryItem) {
+    const mapped: Note = { id: note.id, name: note.name, imageUrl: note.imageUrl };
+    const dedupe = (arr: Note[]) => {
+      const seen = new Set<string>();
+      return arr.filter((n) => {
+        const k = `${n.id ?? ""}:${n.name.toLowerCase()}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }).slice(0, 20);
+    };
+    if (draftStage === "TOP") setDraftTopNotes((prev) => dedupe([...prev, mapped]));
+    if (draftStage === "MIDDLE") setDraftMiddleNotes((prev) => dedupe([...prev, mapped]));
+    if (draftStage === "BASE") setDraftBaseNotes((prev) => dedupe([...prev, mapped]));
+  }
+
+  const saveInPlaceEdit = useCallback(async () => {
+    if (!fragrance?.externalId) return;
+    if (!isCreateMode && !canManageCommunity) return;
+    const nextYear = draftYear.trim();
+    if (nextYear && !/^\d{4}$/.test(nextYear)) {
+      setNoticeTitle("Edit");
+      setNotice("Year must be a 4-digit value.");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const mainAccords = draftAccords.map((x) => x.name);
+      const mainAccordsPercentage = draftAccords.reduce<Record<string, string>>((acc, it) => {
+        acc[it.name] = ACCORD_STRENGTH_LABELS[it.strength] ?? "Moderate";
+        return acc;
+      }, {});
+
+      const toIdList = (items: Note[]) => items
+        .map((n) => String(n.id ?? "").trim())
+        .filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+
+      const body = {
+        name: draftName.trim(),
+        brand: draftBrand.trim(),
+        year: nextYear || null,
+        imageUrl: draftImageUrl.trim() || null,
+        concentration: draftConcentration.trim() || null,
+        longevityScore: draftLongevity > 0 ? draftLongevity : null,
+        sillageScore: draftSillage > 0 ? draftSillage : null,
+        confidence: draftConfidence > 0 ? SIGNAL_EDIT_LABELS[draftConfidence] : null,
+        popularity: draftPopularity > 0 ? SIGNAL_EDIT_LABELS[draftPopularity] : null,
+        mainAccords,
+        mainAccordsPercentage,
+        visibility: draftVisibility,
+        topNoteIds: toIdList(draftTopNotes),
+        middleNoteIds: toIdList(draftMiddleNotes),
+        baseNoteIds: toIdList(draftBaseNotes),
+      };
+      const saved = isCreateMode
+        ? await createCommunityFragrance(body)
+        : await updateCommunityFragrance(fragrance.externalId, body);
+      setLoaded(saved);
+      if (isCreateMode) {
+        const nextId = String(saved.externalId ?? "").trim();
+        if (nextId) {
+          navigate(`/fragrances/${encodeURIComponent(nextId)}?source=COMMUNITY`, {
+            replace: true,
+            state: {
+              fragrance: saved,
+              from,
+            },
+          });
+        }
+      } else {
+        setEditingCommunity(false);
+      }
+    } catch (e: any) {
+      setNoticeTitle(isCreateMode ? "Publish" : "Edit");
+      setNotice(e?.message || (isCreateMode ? "Failed to publish fragrance." : "Failed to update fragrance."));
+    } finally {
+      setSavingEdit(false);
+    }
+  }, [
+    isCreateMode,
+    canManageCommunity,
+    fragrance,
+    from,
+    navigate,
+    draftBrand,
+    draftName,
+    draftYear,
+    draftConcentration,
+    draftImageUrl,
+    draftAccords,
+    draftLongevity,
+    draftSillage,
+    draftConfidence,
+    draftPopularity,
+    draftVisibility,
+    draftTopNotes,
+    draftMiddleNotes,
+    draftBaseNotes,
+  ]);
 
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
-      <div className="mx-auto max-w-6xl px-4 pb-10">
-        <div className="mb-6 flex items-center justify-between rounded-3xl border border-white/15 bg-black/30 p-5">
+      <div className="mx-auto max-w-6xl px-4 pb-28 sm:pb-10">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/15 bg-black/30 p-5">
           <div>
             <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Fragrance Intelligence</div>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Fragrance</h1>
-            <p className="mt-1 text-sm text-white/65">Details + add to your collection.</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">{isCreateMode ? "Create Community Fragrance" : "Fragrance"}</h1>
+            <p className="mt-1 text-sm text-white/65">{isCreateMode ? "Build it with full details, then publish it." : "Details + add to your collection."}</p>
           </div>
-
-          <Button
-            variant="secondary"
-            className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-            onClick={() => {
-              if (from?.pathname) {
-                navigate(`${from.pathname}${from.search ?? ""}`);
-                return;
-              }
-              navigate(-1);
-            }}
-          >
-            Back
-          </Button>
+          <div className="flex flex-wrap items-start gap-2 sm:items-center">
+            {canManageCommunity && !isCreateMode ? (
+              <Button
+                variant="secondary"
+                className="h-10 rounded-xl border border-cyan-300/30 bg-cyan-400/12 text-cyan-100 hover:bg-cyan-400/20"
+                onClick={() => setEditingCommunity((v) => !v)}
+              >
+                {editingCommunity ? "Editing" : "Edit"}
+              </Button>
+            ) : null}
+            {isEditingForm ? (
+              <Button className="h-10 rounded-xl px-5" onClick={saveInPlaceEdit} disabled={savingEdit || !canSaveEdit}>
+                {savingEdit ? (isCreateMode ? "Publishing..." : "Saving...") : (isCreateMode ? "Publish" : "Save Changes")}
+              </Button>
+            ) : null}
+            {isEditingForm ? (
+              <Button
+                variant="secondary"
+                className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                onClick={() => {
+                  if (isCreateMode) {
+                    if (from?.pathname) {
+                      navigate(`${from.pathname}${from.search ?? ""}`);
+                      return;
+                    }
+                    navigate("/search");
+                    return;
+                  }
+                  setEditingCommunity(false);
+                }}
+                disabled={savingEdit}
+              >
+                Cancel
+              </Button>
+            ) : null}
+            {canManageCommunity && !isCreateMode ? (
+              <Button
+                variant="secondary"
+                className="h-10 rounded-xl border border-red-300/30 bg-red-400/12 text-red-100 hover:bg-red-400/20"
+                onClick={() => setConfirmDeleteOpen(true)}
+                disabled={deletingCommunity}
+              >
+                {deletingCommunity ? "Deleting..." : "Delete"}
+              </Button>
+            ) : null}
+            {isCommunityFragrance && createdByUsername ? (
+              <div className="w-full rounded-2xl border border-cyan-300/20 bg-cyan-400/8 px-3 py-2 sm:w-auto">
+                <div className="flex items-center justify-center gap-2 sm:justify-start">
+                  <span className="text-[11px] font-medium text-cyan-100/90">Stacta rep</span>
+                  <AverageStars value={creatorRatingState?.average ?? 0} />
+                  <span className="text-[11px] text-white/75">
+                    {creatorRatingState && creatorRatingState.count > 0
+                      ? `${creatorRatingState.average.toFixed(2)} • ${creatorRatingState.count}`
+                      : "No ratings"}
+                  </span>
+                </div>
+                {canRateCreator ? (
+                  <div className="mt-1 flex flex-col items-center gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <span className="text-[11px] text-white/55">Rate stacta rep</span>
+                    <div className="inline-flex flex-nowrap items-center gap-1 rounded-full border border-white/15 bg-black/20 px-2 py-1 whitespace-nowrap">
+                      {Array.from({ length: 5 }).map((_, i) => {
+                        const n = i + 1;
+                        const lit = n <= (creatorRatingState?.userRating ?? 0);
+                        return (
+                          <button
+                            key={`creator-rate-${n}`}
+                            type="button"
+                            className={cx(
+                              "grid h-8 w-8 place-items-center rounded-md text-base leading-none transition touch-manipulation",
+                              lit ? "text-amber-200" : "text-white/30 hover:text-white/70"
+                            )}
+                            onClick={() => onRateCreator(n)}
+                            disabled={creatorRatingBusy}
+                            aria-label={`Rate stacta rep ${n} star${n > 1 ? "s" : ""}`}
+                          >
+                            ★
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-white/55">
+                    {viewerUser?.username && createdByUsername && viewerUser.username.toLowerCase() === createdByUsername.toLowerCase()
+                      ? "You can’t rate yourself"
+                      : "Sign in to rate creator"}
+                  </div>
+                )}
+              </div>
+            ) : null}
+            <Button
+              variant="secondary"
+              className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+              onClick={() => {
+                if (from?.pathname) {
+                  navigate(`${from.pathname}${from.search ?? ""}`);
+                  return;
+                }
+                navigate(-1);
+              }}
+            >
+              Back
+            </Button>
+          </div>
         </div>
 
         <div className="rounded-3xl border border-white/15 bg-white/6 p-6">
@@ -686,18 +1342,47 @@ export default function FragranceDetailPage() {
               <div className="overflow-hidden rounded-3xl border border-white/15 bg-black/25 lg:sticky lg:top-24">
                 <div className="p-4">
                   <div className="mb-4 lg:hidden">
-                    <div className="text-xs text-white/60">{fragrance.brand || "—"}</div>
-                    <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
+                    {isEditingForm ? (
+                      <div className="space-y-2">
+                        <input value={draftBrand} onChange={(e) => setDraftBrand(e.target.value)} placeholder="Brand" className="h-9 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none" />
+                        <input value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="Name" className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-lg font-semibold text-white outline-none" />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-xs text-white/60">{fragrance.brand || "—"}</div>
+                        <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
+                      </>
+                    )}
 
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      {oilType ? (
+                      {isEditingForm ? (
+                        <select
+                          value={draftConcentration}
+                          onChange={(e) => setDraftConcentration(e.target.value)}
+                          className="h-8 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                        >
+                          <option value="">Select concentration</option>
+                          {CONCENTRATION_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      ) : oilType ? (
                         <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/85">
                           {oilType}
                         </span>
                       ) : null}
 
                         <div className="text-sm text-white/60">
-                          {headerMeta.year || headerMeta.gender ? (
+                          {isEditingForm ? (
+                            <input
+                              value={draftYear}
+                              onChange={(e) => setDraftYear(e.target.value)}
+                              placeholder="Year"
+                              className="h-8 w-24 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                            />
+                          ) : headerMeta.year || headerMeta.gender ? (
                             <span className="inline-flex items-center gap-2">
                               {headerMeta.year ? (
                                 <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-white font-semibold tabular-nums">
@@ -710,13 +1395,68 @@ export default function FragranceDetailPage() {
                             "—"
                           )}
                         </div>
+                        {isEditingForm ? (
+                          <div className="flex min-w-[170px] items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                            <span className="text-[11px] text-white/65">Visibility</span>
+                            <Switch
+                              checked={draftVisibility === "PUBLIC"}
+                              onCheckedChange={(checked) => setDraftVisibility(checked ? "PUBLIC" : "PRIVATE")}
+                              aria-label="Set fragrance visibility"
+                            />
+                            <span className="text-[11px] text-cyan-100">{shownVisibilityLabel}</span>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
+                            {shownVisibilityLabel}
+                          </span>
+                        )}
+                        {createdByUsername ? (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/u/${encodeURIComponent(createdByUsername)}`)}
+                            className="inline-flex items-center rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-100/95 hover:bg-cyan-400/20"
+                          >
+                            Created by @{createdByUsername}
+                          </button>
+                        ) : null}
 
                     </div>
+                    {isEditingForm ? (
+                      <div className="mt-2 flex items-center gap-2">
+                        <label className="inline-flex cursor-pointer items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10">
+                          Upload image
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => onPickDraftImage(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        <input
+                          value={draftImageLabel}
+                          readOnly
+                          placeholder="No image selected"
+                          className="h-8 flex-1 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-8 rounded-full border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/18"
+                          onClick={() => {
+                            setDraftImageUrl("");
+                            setDraftImageLabel("");
+                          }}
+                          disabled={!draftImageUrl.trim()}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="overflow-hidden rounded-2xl border border-white/15 bg-black/20">
                       <img
-                        src={fragrance.imageUrl?.trim() ? fragrance.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                        src={(isEditingForm ? draftImageUrl : fragrance.imageUrl)?.trim() ? (isEditingForm ? draftImageUrl : fragrance.imageUrl) : FALLBACK_FRAGRANCE_IMG}
                         alt={`${fragrance.brand} ${fragrance.name}`.trim()}
                         className="w-full bg-white/5 object-contain"
                         loading="lazy"
@@ -733,61 +1473,86 @@ export default function FragranceDetailPage() {
                 </div>
 
                 <div className="border-t border-white/15 bg-gradient-to-b from-white/8 to-black/10 p-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button className="h-10 rounded-xl px-5" onClick={addToCollection} disabled={addingToCollection}>
-                      {addingToCollection ? (
-                        <span className="inline-flex items-center gap-2">
-                          <InlineSpinner />
-                          <span>Adding</span>
-                        </span>
-                      ) : "Add to collection"}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-                      onClick={addToWishlist}
-                    >
-                      Add to wishlist
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-                      onClick={writeReview}
-                    >
-                      Review
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-                      disabled={buyDisabled}
-                      onClick={() => {
-                        if (fragrance.purchaseUrl) window.open(fragrance.purchaseUrl, "_blank");
-                      }}
-                    >
-                      Buy
-                    </Button>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
+                  {!isCreateMode ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button className="h-10 rounded-xl px-5" onClick={addToCollection} disabled={addingToCollection}>
+                        {addingToCollection ? (
+                          <span className="inline-flex items-center gap-2">
+                            <InlineSpinner />
+                            <span>Adding</span>
+                          </span>
+                        ) : "Add to collection"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                        onClick={addToWishlist}
+                      >
+                        Add to wishlist
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                        onClick={writeReview}
+                      >
+                        Review
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                        disabled={buyDisabled}
+                        onClick={() => {
+                          if (fragrance.purchaseUrl) window.open(fragrance.purchaseUrl, "_blank");
+                        }}
+                      >
+                        Buy
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-cyan-100/85">
+                      Fill out fragrance details and click Publish at the top when ready.
+                    </div>
+                  )}
+                  {!isCreateMode ? (
+                    <div className="mt-4 grid grid-cols-2 gap-3">
                     <div className="rounded-2xl border border-white/15 bg-black/20 p-3">
                       <div className="text-[11px] text-white/60">Rating</div>
-                      {ratingValue ? (
-                        <div className="mt-2 flex flex-col items-center">
-                          <Stars value01={rating01} />
-                          <div className="mt-1 text-[12px] font-semibold tabular-nums text-white/85">
-                            {ratingValue.toFixed(2)}/5
-                          </div>
+                      <div className="mt-2 flex flex-col items-center">
+                        <AverageStars value={ratingState?.average ?? 0} />
+                        <div className="mt-1 text-[12px] font-semibold tabular-nums text-white/85">
+                          {ratingState && ratingState.average > 0 ? `${ratingState.average.toFixed(2)}/5` : "—"}
                         </div>
-                      ) : (
-                        <div className="mt-1 text-sm font-semibold">—</div>
-                      )}
+                        <div className="text-[11px] text-white/55">
+                          {ratingState && ratingState.count > 0 ? `${ratingState.count} ratings` : "No ratings yet"}
+                        </div>
+                        <div className="mt-2 text-[11px] text-white/55">Your rating</div>
+                        <div className="mt-1 flex items-center gap-1">
+                          {Array.from({ length: 5 }).map((_, i) => {
+                            const n = i + 1;
+                            const lit = n <= (ratingState?.userRating ?? 0);
+                            return (
+                              <button
+                                key={n}
+                                type="button"
+                                className={cx("text-base transition", lit ? "text-amber-200" : "text-white/25 hover:text-white/60")}
+                                onClick={() => onRateFragrance(n)}
+                                disabled={ratingBusy}
+                                aria-label={`Rate ${n} star${n > 1 ? "s" : ""}`}
+                              >
+                                ★
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="rounded-2xl border border-white/15 bg-black/20 p-3">
                       <div className="text-[11px] text-white/60">Price</div>
                       <div className="mt-1 text-sm font-semibold">{fragrance.priceValue ?? fragrance.price ?? "—"}</div>
                     </div>
-                  </div>
+                    </div>
+                  ) : null}
 
                   <div className="mt-6 rounded-2xl border border-white/15 bg-black/20 p-4">
                     <div className="flex items-center justify-between">
@@ -801,28 +1566,68 @@ export default function FragranceDetailPage() {
                     <div className="mt-4 space-y-4">
                       <Bar
                         label="Longevity"
-                        value01={longevity01}
-                        rightText={longevityLabel ? String(longevityLabel) : "—"}
-                        gradientClass={BAR_GRADIENTS[0]}
+                        value01={shownLongevity01}
+                        rightText={shownLongevityLabel}
                       />
+                      {isEditingForm ? (
+                        <input
+                          type="range"
+                          min={0}
+                          max={5}
+                          step={1}
+                          value={draftLongevity}
+                          onChange={(e) => setDraftLongevity(Number(e.target.value))}
+                          className="w-full accent-cyan-300"
+                        />
+                      ) : null}
                       <Bar
                         label="Sillage"
-                        value01={sillage01}
-                        rightText={sillageLabel ? String(sillageLabel) : "—"}
-                        gradientClass={BAR_GRADIENTS[1]}
+                        value01={shownSillage01}
+                        rightText={shownSillageLabel}
                       />
+                      {isEditingForm ? (
+                        <input
+                          type="range"
+                          min={0}
+                          max={5}
+                          step={1}
+                          value={draftSillage}
+                          onChange={(e) => setDraftSillage(Number(e.target.value))}
+                          className="w-full accent-cyan-300"
+                        />
+                      ) : null}
                       <Bar
                         label="Confidence"
-                        value01={confidence01}
-                        rightText={confidenceLabel ? String(confidenceLabel) : "—"}
-                        gradientClass={BAR_GRADIENTS[2]}
+                        value01={shownConfidence01}
+                        rightText={shownConfidenceLabel}
                       />
+                      {isEditingForm ? (
+                        <input
+                          type="range"
+                          min={0}
+                          max={4}
+                          step={1}
+                          value={draftConfidence}
+                          onChange={(e) => setDraftConfidence(Number(e.target.value))}
+                          className="w-full accent-cyan-300"
+                        />
+                      ) : null}
                       <Bar
                         label="Popularity"
-                        value01={popularity01}
-                        rightText={popularityLabel ? String(popularityLabel) : "—"}
-                        gradientClass={BAR_GRADIENTS[3]}
+                        value01={shownPopularity01}
+                        rightText={shownPopularityLabel}
                       />
+                      {isEditingForm ? (
+                        <input
+                          type="range"
+                          min={0}
+                          max={4}
+                          step={1}
+                          value={draftPopularity}
+                          onChange={(e) => setDraftPopularity(Number(e.target.value))}
+                          className="w-full accent-cyan-300"
+                        />
+                      ) : null}
                     </div>
 
                     <div className="mt-4 text-xs text-white/45">
@@ -834,18 +1639,47 @@ export default function FragranceDetailPage() {
 
               <div className="space-y-5">
                 <div className="hidden lg:block">
-                  <div className="text-xs text-white/60">{fragrance.brand || "—"}</div>
-                  <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
+                  {isEditingForm ? (
+                    <div className="space-y-2">
+                      <input value={draftBrand} onChange={(e) => setDraftBrand(e.target.value)} placeholder="Brand" className="h-9 w-full max-w-md rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none" />
+                      <input value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="Name" className="h-10 w-full max-w-md rounded-xl border border-white/10 bg-white/5 px-3 text-lg font-semibold text-white outline-none" />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-xs text-white/60">{fragrance.brand || "—"}</div>
+                      <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
+                    </>
+                  )}
 
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {oilType ? (
+                    {isEditingForm ? (
+                      <select
+                        value={draftConcentration}
+                        onChange={(e) => setDraftConcentration(e.target.value)}
+                        className="h-8 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                      >
+                        <option value="">Select concentration</option>
+                        {CONCENTRATION_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    ) : oilType ? (
                       <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/85">
                         {oilType}
                       </span>
                     ) : null}
 
                       <div className="text-sm text-white/60">
-                        {headerMeta.year || headerMeta.gender ? (
+                        {isEditingForm ? (
+                          <input
+                            value={draftYear}
+                            onChange={(e) => setDraftYear(e.target.value)}
+                            placeholder="Year"
+                            className="h-8 w-24 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                          />
+                        ) : headerMeta.year || headerMeta.gender ? (
                           <span className="inline-flex items-center gap-2">
                             {headerMeta.year ? (
                               <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-white font-semibold tabular-nums">
@@ -858,8 +1692,63 @@ export default function FragranceDetailPage() {
                           "—"
                         )}
                       </div>
+                      {isEditingForm ? (
+                        <div className="flex min-w-[170px] items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                          <span className="text-[11px] text-white/65">Visibility</span>
+                          <Switch
+                            checked={draftVisibility === "PUBLIC"}
+                            onCheckedChange={(checked) => setDraftVisibility(checked ? "PUBLIC" : "PRIVATE")}
+                            aria-label="Set fragrance visibility"
+                          />
+                          <span className="text-[11px] text-cyan-100">{shownVisibilityLabel}</span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
+                          {shownVisibilityLabel}
+                        </span>
+                      )}
+                      {createdByUsername ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/u/${encodeURIComponent(createdByUsername)}`)}
+                          className="inline-flex items-center rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-100/95 hover:bg-cyan-400/20"
+                        >
+                          Created by @{createdByUsername}
+                        </button>
+                      ) : null}
 
                   </div>
+                  {isEditingForm ? (
+                    <div className="mt-2 flex max-w-2xl items-center gap-2">
+                      <label className="inline-flex cursor-pointer items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10">
+                        Upload image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => onPickDraftImage(e.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                      <input
+                        value={draftImageLabel}
+                        readOnly
+                        placeholder="No image selected"
+                        className="h-8 flex-1 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="h-8 rounded-full border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/18"
+                        onClick={() => {
+                          setDraftImageUrl("");
+                          setDraftImageLabel("");
+                        }}
+                        disabled={!draftImageUrl.trim()}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
@@ -872,13 +1761,57 @@ export default function FragranceDetailPage() {
                   </div>
 
                   <div className="mt-4">
-                    {accordBars && accordBars.length ? (
+                    {isEditingForm ? (
+                      <div className="space-y-3">
+                        <div className="flex gap-2">
+                          <input
+                            value={draftAccordInput}
+                            onChange={(e) => setDraftAccordInput(e.target.value)}
+                            placeholder="Add accord (e.g. woody)"
+                            className="h-9 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none"
+                          />
+                          <Button className="h-9 rounded-xl px-4" onClick={addDraftAccord}>
+                            Add
+                          </Button>
+                        </div>
+                        {draftAccords.length ? draftAccords.map((it) => (
+                          <div key={it.name} className="rounded-xl border border-white/10 bg-black/25 p-3">
+                            <div className="mb-2 flex items-center justify-between">
+                              <div className="text-sm capitalize text-white/90">{it.name}</div>
+                              <button
+                                type="button"
+                                className="text-xs text-white/60 hover:text-white"
+                                onClick={() => setDraftAccords((prev) => prev.filter((x) => x.name !== it.name))}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="range"
+                                min={0}
+                                max={3}
+                                step={1}
+                                value={it.strength}
+                                onChange={(e) => {
+                                  const next = Number(e.target.value) as 0 | 1 | 2 | 3;
+                                  setDraftAccords((prev) => prev.map((x) => x.name === it.name ? { ...x, strength: next } : x));
+                                }}
+                                className="w-full accent-cyan-300"
+                              />
+                              <div className="w-20 text-right text-xs text-cyan-100">
+                                {ACCORD_STRENGTH_LABELS[it.strength]}
+                              </div>
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="text-xs text-white/50">No accords yet.</div>
+                        )}
+                      </div>
+                    ) : accordBars && accordBars.length ? (
                       <div className="space-y-3">
                         {accordBars.slice(0, 8).map((it) => {
-                          const grad = BAR_GRADIENTS[hashIdx(it.name, BAR_GRADIENTS.length)];
-                          return (
-                            <Bar key={it.name} label={it.name} value01={it.value01} rightText={it.labelRight} gradientClass={grad} />
-                          );
+                          return <Bar key={it.name} label={it.name} value01={it.value01} rightText={it.labelRight} />;
                         })}
 
                         <div className="mt-3 text-xs text-white/45">
@@ -914,7 +1847,62 @@ export default function FragranceDetailPage() {
                   <RankingCard title="Occasion ranking" items={occasionRanking} />
                 </div>
 
-                {hasStageNotes ? (
+                {isEditingForm ? (
+                  <div className="space-y-4">
+                    <div>
+                      <div className="text-sm font-semibold">Perfume pyramid</div>
+                      <div className="mt-1 text-xs text-white/55">Edit top / middle / base notes in place.</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="text-xs text-white/60">Add next note to:</div>
+                        <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1">
+                          {(["TOP", "MIDDLE", "BASE"] as StageKey[]).map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => setDraftStage(s)}
+                              className={cx(
+                                "rounded-lg px-3 py-1 text-xs",
+                                draftStage === s ? "bg-cyan-400/20 text-cyan-100" : "text-white/65 hover:text-white"
+                              )}
+                            >
+                              {s === "TOP" ? "Top" : s === "MIDDLE" ? "Middle" : "Base"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <input
+                          value={draftNoteSearch}
+                          onChange={(e) => setDraftNoteSearch(e.target.value)}
+                          placeholder="Search note (e.g. bergamot)"
+                          className="h-9 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none"
+                        />
+                      </div>
+                      {draftNoteResults.length ? (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          {draftNoteResults.slice(0, 12).map((n) => (
+                            <button
+                              key={n.id}
+                              type="button"
+                              onClick={() => addDraftNote(n)}
+                              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/85 hover:bg-white/10"
+                            >
+                              {n.name}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="grid gap-4">
+                      <EditablePyramidRow title="Top notes" notes={draftTopNotes} onRemove={(idx) => setDraftTopNotes((prev) => prev.filter((_, i) => i !== idx))} />
+                      <EditablePyramidRow title="Middle notes" notes={draftMiddleNotes} onRemove={(idx) => setDraftMiddleNotes((prev) => prev.filter((_, i) => i !== idx))} />
+                      <EditablePyramidRow title="Base notes" notes={draftBaseNotes} onRemove={(idx) => setDraftBaseNotes((prev) => prev.filter((_, i) => i !== idx))} />
+                    </div>
+                  </div>
+                ) : hasStageNotes ? (
                   <div className="space-y-4">
                     <div>
                       <div className="text-sm font-semibold">Perfume pyramid</div>
@@ -938,6 +1926,20 @@ export default function FragranceDetailPage() {
           )}
         </div>
       </div>
+
+      <div className="h-10 sm:h-0" aria-hidden />
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        title="Delete Fragrance?"
+        description="This will permanently remove this community fragrance."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        destructive
+        loading={deletingCommunity}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        onConfirm={onDeleteCommunity}
+      />
 
       <NoticeDialog
         open={Boolean(notice)}

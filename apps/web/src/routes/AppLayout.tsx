@@ -29,7 +29,7 @@ export default function AppLayout() {
       <GlobalBackground />
       {isAuthedRoute ? <Navbar /> : null}
       <Suspense fallback={<RouteFallback />}>
-        <div className={isAuthedRoute ? "pt-28 sm:pt-24" : ""}>
+        <div className={isAuthedRoute ? "pt-28 pb-[env(safe-area-inset-bottom)] sm:pt-24" : ""}>
           <Outlet />
         </div>
       </Suspense>

@@ -29,6 +29,25 @@ public class CommunityFragranceController {
     return community.create(req, sub);
   }
 
+  @PutMapping("/{externalId}")
+  public FragranceSearchResult update(
+    @AuthenticationPrincipal Jwt jwt,
+    @PathVariable("externalId") String externalId,
+    @Valid @RequestBody CreateCommunityFragranceRequest req
+  ) {
+    String sub = jwt.getSubject();
+    return community.update(externalId, req, sub);
+  }
+
+  @DeleteMapping("/{externalId}")
+  public void delete(
+    @AuthenticationPrincipal Jwt jwt,
+    @PathVariable("externalId") String externalId
+  ) {
+    String sub = jwt.getSubject();
+    community.delete(externalId, sub);
+  }
+
   /**
    * TEMP: keep endpoint shape but return empty for now so FE compiles.
    * We'll implement real community search next.
