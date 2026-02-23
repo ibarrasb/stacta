@@ -5,11 +5,7 @@
 Thumbs.db
 
 # VS Code
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
-!.vscode/launch.json
-!.vscode/tasks.json
+.vscode/
 
 # IntelliJ / JetBrains
 .idea/
@@ -92,4 +88,3 @@ services/api/.project
 
 # IDE junk
 services/api/.settings/
-
