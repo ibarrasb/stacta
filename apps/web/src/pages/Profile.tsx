@@ -671,11 +671,18 @@ export default function ProfilePage() {
                               className="w-full rounded-2xl border border-amber-300/30 bg-gradient-to-b from-amber-300/15 via-white/5 to-black/20 p-3 shadow-[0_12px_30px_rgba(251,191,36,0.18)] sm:w-[220px]"
                             >
                               <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/90">Top {idx + 1}</div>
-                              {item.imageUrl ? (
-                                <img src={item.imageUrl} alt={item.name} className="h-28 w-full rounded-xl border border-white/15 object-cover" loading="lazy" />
-                              ) : (
-                                <div className="h-28 w-full rounded-xl border border-white/15 bg-white/5" />
-                              )}
+                              <img
+                                src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                                alt={item.name}
+                                className="h-28 w-full rounded-xl border border-white/15 object-cover bg-white/5"
+                                loading="lazy"
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  if (img.dataset.fallbackApplied === "1") return;
+                                  img.dataset.fallbackApplied = "1";
+                                  img.src = FALLBACK_FRAGRANCE_IMG;
+                                }}
+                              />
                               <div className="mt-2 truncate text-sm font-semibold text-white/95">{item.name}</div>
                               <div className="truncate text-xs text-white/70">{item.brand || "—"}</div>
                             </button>
@@ -704,16 +711,18 @@ export default function ProfilePage() {
                             <div key={`${item.source}:${item.externalId}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                                 <div className="flex min-w-0 items-center gap-3">
-                                  {item.imageUrl ? (
-                                    <img
-                                      src={item.imageUrl}
-                                      alt={item.name}
-                                      className="h-14 w-14 rounded-xl border border-white/10 object-cover"
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <div className="h-14 w-14 rounded-xl border border-white/10 bg-white/5" />
-                                  )}
+                                  <img
+                                    src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                                    alt={item.name}
+                                    className="h-14 w-14 rounded-xl border border-white/10 object-cover bg-white/5"
+                                    loading="lazy"
+                                    onError={(e) => {
+                                      const img = e.currentTarget;
+                                      if (img.dataset.fallbackApplied === "1") return;
+                                      img.dataset.fallbackApplied = "1";
+                                      img.src = FALLBACK_FRAGRANCE_IMG;
+                                    }}
+                                  />
                                   <div className="min-w-0">
                                     <div className="truncate text-sm font-semibold text-white/90">{item.name}</div>
                                     <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>

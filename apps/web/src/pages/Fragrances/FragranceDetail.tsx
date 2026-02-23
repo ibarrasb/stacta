@@ -27,7 +27,7 @@ import {
 } from "@/lib/api/fragrances";
 import { addToCollection as addCollectionItem } from "@/lib/api/collection";
 import { getMe } from "@/lib/api/me";
-import { reportCommunityFragrance, reportNote } from "@/lib/api/note-moderation";
+import { reportCommunityFragrance } from "@/lib/api/note-moderation";
 import { getCreatorRatingSummary, rateCreator } from "@/lib/api/users";
 
 import fragrancePlaceholder from "@/assets/illustrations/NotFound.png";
@@ -65,7 +65,6 @@ const COMMUNITY_PRICE_OPTIONS = [
 ] as const;
 const COMMUNITY_LONGEVITY_LEVEL_LABELS = ["", "Fleeting", "Weak", "Moderate", "Long lasting", "Endless"] as const;
 const COMMUNITY_SILLAGE_LEVEL_LABELS = ["", "Skin scent", "Weak", "Moderate", "Strong", "Nuclear"] as const;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -167,10 +166,6 @@ function sliderIndexFromLabel(label: any, labels: readonly string[]) {
   if (!v) return 0;
   const idx = labels.findIndex((x) => normalizeLabel(x) === v);
   return idx < 0 ? 0 : idx;
-}
-
-function isUuid(value: string | null | undefined) {
-  return UUID_RE.test(String(value ?? "").trim());
 }
 
 function mapAccordsForEdit(fragrance: FragranceSearchResult | null): AccordDraft[] {
@@ -309,9 +304,8 @@ function VibeChip({ text }: { text: string }) {
   );
 }
 
-function NoteTile({ note, onReport }: { note: Note; onReport?: (note: Note) => void }) {
+function NoteTile({ note }: { note: Note }) {
   const [src, setSrc] = useState(note.imageUrl || DEFAULT_NOTE_IMG);
-  const canReport = Boolean(onReport && isUuid(note.id));
 
   useEffect(() => {
     setSrc(note.imageUrl || DEFAULT_NOTE_IMG);
@@ -332,20 +326,11 @@ function NoteTile({ note, onReport }: { note: Note; onReport?: (note: Note) => v
         />
       </div>
       <div className="w-full truncate text-center text-xs text-white/85">{note.name}</div>
-      {canReport ? (
-        <button
-          type="button"
-          className="rounded-lg border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-white/70 hover:bg-white/10 hover:text-white"
-          onClick={() => onReport?.(note)}
-        >
-          Report
-        </button>
-      ) : null}
     </div>
   );
 }
 
-function PyramidRow({ title, notes, onReport }: { title: string; notes: Note[]; onReport?: (note: Note) => void }) {
+function PyramidRow({ title, notes }: { title: string; notes: Note[] }) {
   return (
     <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -358,7 +343,7 @@ function PyramidRow({ title, notes, onReport }: { title: string; notes: Note[]; 
       {notes.length ? (
         <div className="flex flex-wrap justify-center gap-4">
           {notes.map((n, i) => (
-            <NoteTile key={`${n.name}-${i}`} note={n} onReport={onReport} />
+            <NoteTile key={`${n.name}-${i}`} note={n} />
           ))}
         </div>
       ) : (
@@ -437,17 +422,17 @@ function RankingCard({
             const voteKey = toVoteKey(it.name);
             const userStars = Math.max(0, Math.min(5, userStarsByKey?.[voteKey] ?? 0));
             return (
-              <div key={`${it.name}-${it.score}`} className="space-y-2 rounded-xl border border-white/8 bg-white/[0.02] p-3 sm:grid sm:grid-cols-[90px_1fr_130px] sm:items-center sm:gap-3 sm:space-y-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0">
+              <div key={`${it.name}-${it.score}`} className="space-y-2 rounded-xl border border-white/8 bg-white/[0.02] p-3 sm:grid sm:grid-cols-[90px_1fr_148px] sm:items-center sm:gap-4 sm:space-y-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0">
                 <div className="text-xs text-white/80 capitalize sm:truncate">{it.name}</div>
 
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10 sm:mr-1">
                   <div className="h-full rounded-full" style={{ width: pct(v01), ...getBarFillStyle(v01) }} />
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
+                <div className="flex flex-nowrap items-center justify-between gap-2 sm:justify-end">
                   <div className="text-[11px] tabular-nums text-white/65">{it.score.toFixed(2)}</div>
                   {onVote ? (
-                    <div className="inline-flex items-center gap-1">
+                    <div className="inline-flex shrink-0 items-center gap-0.5 sm:gap-0.5">
                       {Array.from({ length: 5 }).map((_, i) => {
                         const n = i + 1;
                         const lit = n <= userStars;
@@ -456,7 +441,7 @@ function RankingCard({
                             key={`${voteKey}-${n}`}
                             type="button"
                             className={cx(
-                              "grid h-9 w-9 place-items-center rounded-md text-lg leading-none transition touch-manipulation",
+                              "grid h-6 w-6 place-items-center rounded-md text-[13px] leading-none transition touch-manipulation sm:h-6 sm:w-6 sm:text-[13px]",
                               lit ? "text-amber-200" : "text-white/25 hover:text-white/60"
                             )}
                             onClick={() => onVote(it.name, userStars === n ? 0 : n)}
@@ -552,11 +537,6 @@ export default function FragranceDetailPage() {
   const forceRefreshRef = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTitle, setNoticeTitle] = useState("Notice");
-  const [reportDialogOpen, setReportDialogOpen] = useState(false);
-  const [reportingNoteId, setReportingNoteId] = useState<string | null>(null);
-  const [reportingNoteName, setReportingNoteName] = useState("");
-  const [reportReason, setReportReason] = useState<"SPAM" | "INAPPROPRIATE" | "DUPLICATE" | "OTHER">("INAPPROPRIATE");
-  const [reportDetails, setReportDetails] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportFragranceDialogOpen, setReportFragranceDialogOpen] = useState(false);
   const [reportFragranceReason, setReportFragranceReason] = useState<"SPAM" | "INAPPROPRIATE" | "OTHER">("INAPPROPRIATE");
@@ -1006,35 +986,6 @@ export default function FragranceDetailPage() {
     setNoticeTitle("Review");
     setNotice("Review flow (wire backend endpoint next).");
   }, []);
-
-  const onReportNote = useCallback((note: Note) => {
-    const noteId = String(note.id ?? "").trim();
-    if (!isUuid(noteId)) return;
-    setReportingNoteId(noteId);
-    setReportingNoteName(note.name);
-    setReportReason("INAPPROPRIATE");
-    setReportDetails("");
-    setReportDialogOpen(true);
-  }, []);
-
-  const submitReportNote = useCallback(async () => {
-    if (!reportingNoteId || !isUuid(reportingNoteId)) return;
-    setReportSubmitting(true);
-    try {
-      await reportNote(reportingNoteId, {
-        reason: reportReason,
-        details: reportDetails.trim() || null,
-      });
-      setReportDialogOpen(false);
-      setNoticeTitle("Report submitted");
-      setNotice("Thanks. Our moderators will review this note.");
-    } catch (e: any) {
-      setNoticeTitle("Report failed");
-      setNotice(e?.message || "Could not submit note report.");
-    } finally {
-      setReportSubmitting(false);
-    }
-  }, [reportDetails, reportReason, reportingNoteId]);
 
   const submitReportFragrance = useCallback(async () => {
     const ext = String(fragrance?.externalId ?? "").trim();
@@ -2002,7 +1953,7 @@ export default function FragranceDetailPage() {
                             min={1}
                             max={5}
                             step={1}
-                            value={communityLongevityVote ?? 3}
+                            value={communityLongevityVote ?? 1}
                             onChange={(e) => setCommunityLongevityVote(Number(e.target.value))}
                             className="h-9 w-full cursor-pointer accent-cyan-300 touch-pan-y"
                             aria-label="Community longevity vote"
@@ -2029,7 +1980,7 @@ export default function FragranceDetailPage() {
                             min={1}
                             max={5}
                             step={1}
-                            value={communitySillageVote ?? 3}
+                            value={communitySillageVote ?? 1}
                             onChange={(e) => setCommunitySillageVote(Number(e.target.value))}
                             className="h-9 w-full cursor-pointer accent-cyan-300 touch-pan-y"
                             aria-label="Community sillage vote"
@@ -2253,8 +2204,7 @@ export default function FragranceDetailPage() {
                         })}
 
                         <div className="mt-3 text-xs text-white/45">
-                          Fragella’s accord strengths are derived from internal percentages, then returned as labels
-                          (Dominant/Prominent/Moderate) for readability.
+                          Accord strength labels are shown for quick comparison.
                         </div>
                       </div>
                     ) : (
@@ -2383,9 +2333,9 @@ export default function FragranceDetailPage() {
                     </div>
 
                     <div className="grid gap-4">
-                      <PyramidRow title="Top notes" notes={noteGroups.top} onReport={onReportNote} />
-                      <PyramidRow title="Middle notes" notes={noteGroups.middle} onReport={onReportNote} />
-                      <PyramidRow title="Base notes" notes={noteGroups.base} onReport={onReportNote} />
+                      <PyramidRow title="Top notes" notes={noteGroups.top} />
+                      <PyramidRow title="Middle notes" notes={noteGroups.middle} />
+                      <PyramidRow title="Base notes" notes={noteGroups.base} />
                     </div>
                   </div>
                 ) : (
@@ -2413,55 +2363,6 @@ export default function FragranceDetailPage() {
         onCancel={() => setConfirmDeleteOpen(false)}
         onConfirm={onDeleteCommunity}
       />
-
-      <Dialog open={reportDialogOpen} onOpenChange={(next) => !reportSubmitting && setReportDialogOpen(next)}>
-        <DialogContent className="max-w-md rounded-3xl border-white/15 bg-[#090a0f] text-white">
-          <DialogHeader>
-            <DialogTitle>Report Note</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="text-sm text-white/80">
-              Reporting: <span className="font-semibold">{reportingNoteName || "Note"}</span>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-white/60">Reason</div>
-              <select
-                value={reportReason}
-                onChange={(e) => setReportReason(e.target.value as any)}
-                className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none"
-              >
-                <option value="INAPPROPRIATE">Inappropriate</option>
-                <option value="SPAM">Spam</option>
-                <option value="DUPLICATE">Duplicate</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-white/60">Details (optional)</div>
-              <Textarea
-                value={reportDetails}
-                onChange={(e) => setReportDetails(e.target.value)}
-                placeholder="Add context for moderators..."
-                className="min-h-20 rounded-xl border-white/10 bg-white/5 text-white"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20"
-                onClick={() => setReportDialogOpen(false)}
-                disabled={reportSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button type="button" className="h-9 rounded-xl px-4" onClick={submitReportNote} disabled={reportSubmitting}>
-                {reportSubmitting ? "Submitting…" : "Submit report"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={reportFragranceDialogOpen} onOpenChange={(next) => !reportSubmitting && setReportFragranceDialogOpen(next)}>
         <DialogContent className="max-w-md rounded-3xl border-white/15 bg-[#090a0f] text-white">
