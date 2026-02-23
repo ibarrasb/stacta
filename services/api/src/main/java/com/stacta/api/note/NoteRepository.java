@@ -21,4 +21,6 @@ public interface NoteRepository extends JpaRepository<NoteEntity, UUID> {
   List<NoteEntity> searchByNameContains(@Param("q") String q, Pageable pageable);
 
   List<NoteEntity> findAllByOrderByUsageCountDescNameAsc(Pageable pageable);
+
+  List<NoteEntity> findTop40ByNormalizedNameStartingWithOrderByUsageCountDescNameAsc(String prefix);
 }

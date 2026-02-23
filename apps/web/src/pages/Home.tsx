@@ -109,6 +109,12 @@ export default function HomePage() {
     { value: "USER_FOLLOWED_USER", label: "Follows" },
   ];
 
+  const feedHeading = tab === "FOLLOWING" ? "Following activity" : "Popular activity";
+  const feedDescription =
+    tab === "FOLLOWING"
+      ? "Reviews and social activity from people you follow."
+      : "Trending reviews and social activity from the community.";
+
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
       <div className="mx-auto max-w-7xl px-4 pb-10">
@@ -116,8 +122,8 @@ export default function HomePage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Home feed</div>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight">Following activity</h1>
-              <p className="mt-1 text-sm text-white/65">Reviews and social activity from people you follow.</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight">{feedHeading}</h1>
+              <p className="mt-1 text-sm text-white/65">{feedDescription}</p>
             </div>
             <Button
               variant="secondary"
@@ -133,46 +139,73 @@ export default function HomePage() {
             </Button>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
-              className={[
-                "rounded-xl px-3 py-1.5 text-xs font-semibold transition",
-                tab === "FOLLOWING"
-                  ? "border border-amber-200/35 bg-amber-300/20 text-amber-100"
-                  : "border border-white/20 bg-white/8 text-white/75 hover:bg-white/14",
-              ].join(" ")}
-              onClick={() => setTab("FOLLOWING")}
-            >
-              Following
-            </button>
-            <button
-              className={[
-                "rounded-xl px-3 py-1.5 text-xs font-semibold transition",
-                tab === "POPULAR"
-                  ? "border border-amber-200/35 bg-amber-300/20 text-amber-100"
-                  : "border border-white/20 bg-white/8 text-white/75 hover:bg-white/14",
-              ].join(" ")}
-              onClick={() => setTab("POPULAR")}
-            >
-              Popular
-            </button>
+          <div className="mt-4 space-y-1">
+            <div className="no-scrollbar overflow-x-auto" role="tablist" aria-label="Feed scope">
+              <div className="flex min-w-max items-center gap-6 border-b border-white/10 px-1">
+                {[
+                  { id: "FOLLOWING" as const, label: "Following" },
+                  { id: "POPULAR" as const, label: "Popular" },
+                ].map((homeTab) => (
+                  <button
+                    key={homeTab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === homeTab.id}
+                    onClick={() => setTab(homeTab.id)}
+                    className={[
+                      "group relative inline-flex items-center gap-2 py-3 text-sm font-medium transition",
+                      tab === homeTab.id ? "text-white" : "text-white/65 hover:text-white",
+                    ].join(" ")}
+                  >
+                    <span className={tab === homeTab.id ? "text-cyan-200" : "text-white/45 group-hover:text-white/75"}>
+                      {homeTab.id === "FOLLOWING" ? (
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM8 13a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM8 14c-2.7 0-5 1.3-5 3v2h10v-2c0-1.7-2.3-3-5-3zM16 12c-2 0-4 1-4 2.5V19h9v-1.5c0-1.5-2.2-2.5-5-2.5z" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M4 19h16M6 15h3M11 11h3M16 7h2" />
+                        </svg>
+                      )}
+                    </span>
+                    <span>{homeTab.label}</span>
+                    <span
+                      className={[
+                        "absolute -bottom-px left-0 right-0 h-[2px] rounded-full transition-all duration-200",
+                        tab === homeTab.id ? "bg-cyan-300/95" : "bg-transparent group-hover:bg-white/30",
+                      ].join(" ")}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
 
-            <div className="mx-1 h-4 w-px bg-white/20" />
-
-            {filterOptions.map((option) => (
-              <button
-                key={option.value}
-                className={[
-                  "rounded-xl px-3 py-1.5 text-xs font-semibold transition",
-                  filter === option.value
-                    ? "border border-cyan-200/35 bg-cyan-300/20 text-cyan-100"
-                    : "border border-white/20 bg-white/8 text-white/75 hover:bg-white/14",
-                ].join(" ")}
-                onClick={() => setFilter(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
+            <div className="no-scrollbar overflow-x-auto" role="tablist" aria-label="Feed event filter">
+              <div className="flex min-w-max items-center gap-6 border-b border-white/10 px-1">
+                {filterOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={filter === option.value}
+                    onClick={() => setFilter(option.value)}
+                    className={[
+                      "group relative inline-flex items-center gap-2 py-3 text-sm font-medium transition",
+                      filter === option.value ? "text-white" : "text-white/65 hover:text-white",
+                    ].join(" ")}
+                  >
+                    <span>{option.label}</span>
+                    <span
+                      className={[
+                        "absolute -bottom-px left-0 right-0 h-[2px] rounded-full transition-all duration-200",
+                        filter === option.value ? "bg-cyan-300/95" : "bg-transparent group-hover:bg-white/30",
+                      ].join(" ")}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="px-1 pt-1 text-[11px] text-white/45 sm:hidden">Swipe right to see more tabs.</div>
           </div>
         </div>
 

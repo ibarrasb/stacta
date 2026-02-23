@@ -243,24 +243,29 @@ export default function NotificationsPage() {
                   <button
                     key={`${item.id}-${idx}`}
                     className="w-full rounded-2xl border border-white/12 bg-black/25 px-4 py-3 text-left transition hover:bg-white/10"
-                    onClick={() =>
+                    onClick={() => {
+                      if (item.type === "MODERATION_STRIKE") return;
                       navigate(`/u/${item.actorUsername}`, {
                         state: { from: { pathname: "/notifications" } },
-                      })
-                    }
+                      });
+                    }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-sm text-white/90">
                           <span className="font-semibold">{item.actorDisplayName || item.actorUsername}</span>{" "}
-                          {item.followedBack ? "followed you back" : "followed you"}
+                          {item.type === "MODERATION_STRIKE"
+                            ? "issued you a moderation strike. Continued violations may lead to account suspension."
+                            : item.followedBack ? "followed you back" : "followed you"}
                         </div>
                         <div className="mt-1 text-xs text-white/55">
-                          @{item.actorUsername} • {when(item.createdAt)}
+                          {item.type === "MODERATION_STRIKE" ? "Moderation" : `@${item.actorUsername}`} • {when(item.createdAt)}
                         </div>
                       </div>
                       <span className="rounded-full border border-amber-200/35 bg-amber-300/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-100">
-                        {item.type === "FOLLOWED_YOU_BACK" ? "Followed back" : "Follow"}
+                        {item.type === "MODERATION_STRIKE"
+                          ? "Strike"
+                          : item.type === "FOLLOWED_YOU_BACK" ? "Followed back" : "Follow"}
                       </span>
                     </div>
                   </button>

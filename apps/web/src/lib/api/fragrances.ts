@@ -53,6 +53,32 @@ export type FragranceRatingSummary = {
   userRating: number | null;
 };
 
+export type CommunityVoteSelection = {
+  longevityScore: number | null;
+  sillageScore: number | null;
+  pricePerception: "GREAT_VALUE" | "FAIR" | "OVERPRICED" | null;
+  seasonVotes: string[];
+  occasionVotes: string[];
+};
+
+export type CommunityVoteSummary = {
+  voters: number;
+  longevityRanking: RankingDto[];
+  sillageRanking: RankingDto[];
+  seasonRanking: RankingDto[];
+  occasionRanking: RankingDto[];
+  priceRanking: RankingDto[];
+  userVote: CommunityVoteSelection | null;
+};
+
+export type UpsertCommunityVoteRequest = {
+  longevityScore?: number | null;
+  sillageScore?: number | null;
+  pricePerception?: "GREAT_VALUE" | "FAIR" | "OVERPRICED" | null;
+  seasonVotes?: string[];
+  occasionVotes?: string[];
+};
+
 export type NoteDictionaryItem = {
   id: string;
   name: string;
@@ -76,6 +102,9 @@ export type CreateCommunityFragranceRequest = {
   topNoteIds?: string[];
   middleNoteIds?: string[];
   baseNoteIds?: string[];
+  topNoteNames?: string[];
+  middleNoteNames?: string[];
+  baseNoteNames?: string[];
 };
 
 /**
@@ -259,4 +288,16 @@ export function getFragranceDetail(
     TTL_DETAIL_MS,
     opts?.signal
   );
+}
+
+export function getCommunityVoteSummary(externalId: string) {
+  return authedFetch<CommunityVoteSummary>(`/api/v1/community-fragrances/${encodeURIComponent(externalId)}/votes`);
+}
+
+export function upsertCommunityVote(externalId: string, body: UpsertCommunityVoteRequest) {
+  return authedFetch<CommunityVoteSummary>(`/api/v1/community-fragrances/${encodeURIComponent(externalId)}/votes`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }

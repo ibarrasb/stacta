@@ -13,6 +13,7 @@ public record MeResponse(
   String bio,
   String avatarUrl,
   boolean isVerified,
+  boolean isAdmin,
   boolean isPrivate,
   long followersCount,
   long followingCount,

@@ -18,6 +18,20 @@ export class ApiError extends Error {
   }
 }
 
+function deriveApiErrorMessage(path: string, status: number, statusText: string, body: unknown) {
+  if (body && typeof body === "object") {
+    const obj = body as Record<string, unknown>;
+    const detail = typeof obj.detail === "string" ? obj.detail.trim() : "";
+    const message = typeof obj.message === "string" ? obj.message.trim() : "";
+    const error = typeof obj.error === "string" ? obj.error.trim() : "";
+    const title = typeof obj.title === "string" ? obj.title.trim() : "";
+    const best = detail || message || error || title;
+    if (best) return best;
+  }
+  if (typeof body === "string" && body.trim()) return body.trim();
+  return `API ${status} ${statusText} for ${path}`;
+}
+
 let cachedSession: Awaited<ReturnType<typeof fetchAuthSession>> | null = null;
 let inflightSessionPromise: Promise<Awaited<ReturnType<typeof fetchAuthSession>>> | null = null;
 
@@ -134,7 +148,7 @@ export async function authedFetch<T = unknown>(
       }
     }
 
-    throw new ApiError(`API ${res.status} ${res.statusText} for ${path}`, res.status, body);
+    throw new ApiError(deriveApiErrorMessage(path, res.status, res.statusText, body), res.status, body);
   }
 
   return body as T;

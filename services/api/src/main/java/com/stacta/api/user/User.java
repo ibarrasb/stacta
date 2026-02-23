@@ -34,6 +34,9 @@ public class User {
   @Column(name = "is_verified", nullable = false)
   private boolean isVerified = false;
 
+  @Column(name = "is_admin", nullable = false)
+  private boolean isAdmin = false;
+
   @Column(name = "notifications_seen_at", nullable = false)
   private Instant notificationsSeenAt = Instant.now();
 
@@ -70,6 +73,8 @@ public class User {
   public void setPrivate(boolean aPrivate) { isPrivate = aPrivate; }
   public boolean isVerified() { return isVerified; }
   public void setVerified(boolean verified) { isVerified = verified; }
+  public boolean isAdmin() { return isAdmin; }
+  public void setAdmin(boolean admin) { isAdmin = admin; }
   public Instant getNotificationsSeenAt() { return notificationsSeenAt; }
   public void setNotificationsSeenAt(Instant notificationsSeenAt) { this.notificationsSeenAt = notificationsSeenAt; }
   public long getFollowersCount() { return followersCount; }

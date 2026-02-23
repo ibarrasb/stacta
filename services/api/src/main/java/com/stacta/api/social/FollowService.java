@@ -2,6 +2,8 @@ package com.stacta.api.social;
 
 import com.stacta.api.config.ApiException;
 import com.stacta.api.social.dto.FollowActionResponse;
+import com.stacta.api.social.dto.FollowConnectionItem;
+import com.stacta.api.social.dto.FollowConnectionsResponse;
 import com.stacta.api.social.dto.NotificationItem;
 import com.stacta.api.social.dto.NotificationsResponse;
 import com.stacta.api.social.dto.PendingFollowRequestItem;
@@ -120,6 +122,76 @@ public class FollowService {
       nextCursor = encodeCursor(last.getRequestedAt(), last.getId());
     }
     return new PendingFollowRequestsResponse(items, nextCursor);
+  }
+
+  @Transactional(readOnly = true)
+  public FollowConnectionsResponse followers(String viewerSub, int limit, String cursor) {
+    User me = getViewer(viewerSub);
+    int safeLimit = Math.max(1, Math.min(limit, 50));
+    CursorToken token = parseCursor(cursor);
+
+    var rows = follows.listFollowers(
+      me.getId(),
+      token == null ? null : token.at(),
+      token == null ? null : token.id(),
+      PageRequest.of(0, safeLimit + 1)
+    );
+
+    boolean hasMore = rows.size() > safeLimit;
+    var pageRows = hasMore ? rows.subList(0, safeLimit) : rows;
+    var items = pageRows.stream()
+      .map(v -> new FollowConnectionItem(
+        v.getUsername(),
+        v.getDisplayName(),
+        v.getAvatarUrl(),
+        Boolean.TRUE.equals(v.getIsPrivate()),
+        Boolean.TRUE.equals(v.getIsFollowing()),
+        Boolean.TRUE.equals(v.getFollowsYou()),
+        v.getFollowedAt()
+      ))
+      .toList();
+
+    String nextCursor = null;
+    if (hasMore && !pageRows.isEmpty()) {
+      var last = pageRows.get(pageRows.size() - 1);
+      nextCursor = encodeCursor(last.getFollowedAt(), last.getId());
+    }
+    return new FollowConnectionsResponse(items, nextCursor);
+  }
+
+  @Transactional(readOnly = true)
+  public FollowConnectionsResponse following(String viewerSub, int limit, String cursor) {
+    User me = getViewer(viewerSub);
+    int safeLimit = Math.max(1, Math.min(limit, 50));
+    CursorToken token = parseCursor(cursor);
+
+    var rows = follows.listFollowing(
+      me.getId(),
+      token == null ? null : token.at(),
+      token == null ? null : token.id(),
+      PageRequest.of(0, safeLimit + 1)
+    );
+
+    boolean hasMore = rows.size() > safeLimit;
+    var pageRows = hasMore ? rows.subList(0, safeLimit) : rows;
+    var items = pageRows.stream()
+      .map(v -> new FollowConnectionItem(
+        v.getUsername(),
+        v.getDisplayName(),
+        v.getAvatarUrl(),
+        Boolean.TRUE.equals(v.getIsPrivate()),
+        Boolean.TRUE.equals(v.getIsFollowing()),
+        Boolean.TRUE.equals(v.getFollowsYou()),
+        v.getFollowedAt()
+      ))
+      .toList();
+
+    String nextCursor = null;
+    if (hasMore && !pageRows.isEmpty()) {
+      var last = pageRows.get(pageRows.size() - 1);
+      nextCursor = encodeCursor(last.getFollowedAt(), last.getId());
+    }
+    return new FollowConnectionsResponse(items, nextCursor);
   }
 
   @Transactional

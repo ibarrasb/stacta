@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { authSignOut } from "@/lib/auth";
+import { useEffect, useState } from "react";
+import { getMe } from "@/lib/api/me";
 
 const ONBOARDED_KEY = "stacta:onboardedSub";
 
@@ -28,11 +30,29 @@ function isActive(pathname: string, to: string) {
 
 export default function Navbar() {
   const { pathname } = useLocation();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((me) => {
+        if (cancelled) return;
+        setIsAdmin(Boolean(me.isAdmin));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsAdmin(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const activeLabel = useMemo(() => {
-    const item = NAV_ITEMS.find((it) => isActive(pathname, it.to));
+    const item = [...NAV_ITEMS, ...(isAdmin ? [{ label: "Admin", to: "/admin/note-reports" as const }] : [])]
+      .find((it) => isActive(pathname, it.to));
     return item?.label ?? "Workspace";
-  }, [pathname]);
+  }, [pathname, isAdmin]);
 
   async function onSignOut() {
     try {
@@ -61,7 +81,7 @@ export default function Navbar() {
         </div>
 
         <div className="no-scrollbar flex w-full items-center gap-1 overflow-x-auto sm:hidden">
-          {MOBILE_NAV_ITEMS.map((item) => {
+          {[...MOBILE_NAV_ITEMS, ...(isAdmin ? [{ label: "Admin", to: "/admin/note-reports" as const }] : [])].map((item) => {
             const active = isActive(pathname, item.to);
             return (
               <Link
@@ -81,7 +101,7 @@ export default function Navbar() {
         </div>
 
         <div className="no-scrollbar hidden w-full items-center gap-1 overflow-x-auto sm:flex sm:w-auto sm:max-w-none">
-          {NAV_ITEMS.map((item) => {
+          {[...NAV_ITEMS, ...(isAdmin ? [{ label: "Admin", to: "/admin/note-reports" as const }] : [])].map((item) => {
             const active = isActive(pathname, item.to);
             return (
               <Link

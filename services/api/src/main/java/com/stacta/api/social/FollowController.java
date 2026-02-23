@@ -1,6 +1,7 @@
 package com.stacta.api.social;
 
 import com.stacta.api.social.dto.FollowActionResponse;
+import com.stacta.api.social.dto.FollowConnectionsResponse;
 import com.stacta.api.social.dto.PendingFollowRequestsResponse;
 import java.util.Map;
 import java.util.UUID;
@@ -49,6 +50,24 @@ public class FollowController {
     @RequestParam(name = "cursor", required = false) String cursor
   ) {
     return followService.pendingRequests(jwt.getSubject(), limit, cursor);
+  }
+
+  @GetMapping("/followers")
+  public FollowConnectionsResponse followers(
+    @AuthenticationPrincipal Jwt jwt,
+    @RequestParam(name = "limit", defaultValue = "20") int limit,
+    @RequestParam(name = "cursor", required = false) String cursor
+  ) {
+    return followService.followers(jwt.getSubject(), limit, cursor);
+  }
+
+  @GetMapping("/following")
+  public FollowConnectionsResponse following(
+    @AuthenticationPrincipal Jwt jwt,
+    @RequestParam(name = "limit", defaultValue = "20") int limit,
+    @RequestParam(name = "cursor", required = false) String cursor
+  ) {
+    return followService.following(jwt.getSubject(), limit, cursor);
   }
 
   @PostMapping("/requests/{requestId}/accept")

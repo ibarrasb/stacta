@@ -8,6 +8,9 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import com.stacta.api.fragrance.dto.CreateCommunityFragranceRequest;
+import com.stacta.api.fragrance.dto.CommunityFragranceVoteRequest;
+import com.stacta.api.fragrance.dto.CommunityFragranceVoteSummaryResponse;
+import com.stacta.api.fragrance.dto.ReportFragranceRequest;
 import com.stacta.api.fragrance.dto.FragranceSearchResult;
 
 @RestController
@@ -15,9 +18,17 @@ import com.stacta.api.fragrance.dto.FragranceSearchResult;
 public class CommunityFragranceController {
 
   private final CommunityFragranceService community;
+  private final CommunityFragranceVoteService votes;
+  private final FragranceModerationService moderation;
 
-  public CommunityFragranceController(CommunityFragranceService community) {
+  public CommunityFragranceController(
+    CommunityFragranceService community,
+    CommunityFragranceVoteService votes,
+    FragranceModerationService moderation
+  ) {
     this.community = community;
+    this.votes = votes;
+    this.moderation = moderation;
   }
 
   @PostMapping
@@ -61,5 +72,31 @@ public List<FragranceSearchResult> search(
   String sub = jwt.getSubject();
   return community.search(q, sub, limit);
 }
+
+  @GetMapping("/{externalId}/votes")
+  public CommunityFragranceVoteSummaryResponse voteSummary(
+    @AuthenticationPrincipal Jwt jwt,
+    @PathVariable("externalId") String externalId
+  ) {
+    return votes.summary(externalId, jwt.getSubject());
+  }
+
+  @PutMapping("/{externalId}/votes")
+  public CommunityFragranceVoteSummaryResponse vote(
+    @AuthenticationPrincipal Jwt jwt,
+    @PathVariable("externalId") String externalId,
+    @Valid @RequestBody CommunityFragranceVoteRequest req
+  ) {
+    return votes.upsert(externalId, jwt.getSubject(), req);
+  }
+
+  @PostMapping("/{externalId}/report")
+  public void report(
+    @AuthenticationPrincipal Jwt jwt,
+    @PathVariable("externalId") String externalId,
+    @Valid @RequestBody ReportFragranceRequest req
+  ) {
+    moderation.reportCommunityFragrance(externalId, req.reason(), req.details(), jwt.getSubject());
+  }
 
 }

@@ -27,10 +27,6 @@ const CONCENTRATION_OPTIONS = [
   "Solid Perfume",
 ] as const;
 
-const LONGEVITY_LABELS = ["", "Very weak", "Weak", "Moderate", "Long lasting", "Very long lasting"] as const;
-const SILLAGE_LABELS = ["", "Intimate", "Soft", "Moderate", "Strong", "Very strong"] as const;
-const CONFIDENCE_LABELS = ["", "Low", "Moderate", "High", "Very High"] as const;
-const POPULARITY_LABELS = ["", "Low", "Moderate", "High", "Very High"] as const;
 const ACCORD_STRENGTH_LABELS = ["Low", "Moderate", "Prominent", "Dominant"] as const;
 
 type Props = {
@@ -49,23 +45,13 @@ type AccordItem = { name: string; strength: number };
 function uniqById(arr: NoteDictionaryItem[]) {
   const map = new Map<string, NoteDictionaryItem>();
   for (const n of arr) {
-    if (n?.id) map.set(n.id, n);
+    const idKey = String(n?.id ?? "").trim();
+    const nameKey = String(n?.name ?? "").trim().toLowerCase();
+    const key = idKey || `name:${nameKey}`;
+    if (!key || key === "name:") continue;
+    map.set(key, n);
   }
   return Array.from(map.values());
-}
-
-function parseScore(vRaw: string): number | null {
-  const v = vRaw.trim();
-  if (!v) return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return Math.max(1, Math.min(5, Math.round(n)));
-}
-
-function toSliderValueFromLabel(label: any, labels: readonly string[]) {
-  const v = String(label ?? "").trim().toLowerCase();
-  const idx = labels.findIndex((x) => x.toLowerCase() === v);
-  return idx < 0 ? 0 : idx;
 }
 
 function parseAccordsFromInitial(fragrance: FragranceSearchResult | null | undefined): AccordItem[] {
@@ -113,11 +99,6 @@ export default function AddCommunityFragranceDialog({
   const [isPublic, setIsPublic] = useState(false);
   const visibility = useMemo<"PRIVATE" | "PUBLIC">(() => (isPublic ? "PUBLIC" : "PRIVATE"), [isPublic]);
 
-  const [longevity, setLongevity] = useState<number | null>(null);
-  const [sillage, setSillage] = useState<number | null>(null);
-  const [confidenceSlider, setConfidenceSlider] = useState(0);
-  const [popularitySlider, setPopularitySlider] = useState(0);
-
   const [accordInput, setAccordInput] = useState("");
   const [accords, setAccords] = useState<AccordItem[]>([]);
 
@@ -144,10 +125,6 @@ export default function AddCommunityFragranceDialog({
       setImageUrl((initialFragrance.imageUrl ?? "").trim());
       setConcentration(initialFragrance.concentration ?? initialFragrance.oilType ?? "");
       setIsPublic(String(initialFragrance.visibility ?? "PRIVATE").toUpperCase() === "PUBLIC");
-      setLongevity(initialFragrance.longevityScore ?? parseScore(String(initialFragrance.longevity ?? "")));
-      setSillage(initialFragrance.sillageScore ?? parseScore(String(initialFragrance.sillage ?? "")));
-      setConfidenceSlider(toSliderValueFromLabel(initialFragrance.confidence, CONFIDENCE_LABELS));
-      setPopularitySlider(toSliderValueFromLabel(initialFragrance.popularity, POPULARITY_LABELS));
       setAccords(parseAccordsFromInitial(initialFragrance));
       setTop((initialFragrance.notes?.top ?? []).map((n, i) => ({ id: n.id || `top-${i}-${n.name}`, name: n.name, imageUrl: n.imageUrl, usageCount: null })));
       setMiddle((initialFragrance.notes?.middle ?? []).map((n, i) => ({ id: n.id || `middle-${i}-${n.name}`, name: n.name, imageUrl: n.imageUrl, usageCount: null })));
@@ -159,10 +136,6 @@ export default function AddCommunityFragranceDialog({
       setImageUrl("");
       setConcentration("");
       setIsPublic(false);
-      setLongevity(null);
-      setSillage(null);
-      setConfidenceSlider(0);
-      setPopularitySlider(0);
       setAccords([]);
       setStage("TOP");
       setTop([]);
@@ -208,10 +181,22 @@ export default function AddCommunityFragranceDialog({
   const canSave = useMemo(() => brand.trim().length > 0 && name.trim().length > 0, [brand, name]);
 
   function addNote(targetStage: StageKey, n: NoteDictionaryItem) {
-    if (!n?.id) return;
     if (targetStage === "TOP") setTop((prev) => uniqById([...prev, n]).slice(0, 20));
     if (targetStage === "MIDDLE") setMiddle((prev) => uniqById([...prev, n]).slice(0, 20));
     if (targetStage === "BASE") setBase((prev) => uniqById([...prev, n]).slice(0, 20));
+  }
+
+  function addCustomNote() {
+    const cleaned = noteSearch.trim();
+    if (!cleaned) return;
+    addNote(stage, {
+      id: `custom-${stage.toLowerCase()}-${Date.now()}`,
+      name: cleaned,
+      imageUrl: null,
+      usageCount: null,
+    });
+    setNoteSearch("");
+    setNoteResults([]);
   }
 
   function removeNote(targetStage: StageKey, id: string) {
@@ -255,22 +240,42 @@ export default function AddCommunityFragranceDialog({
     const middleNoteIds = middle.map((x) => x.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
     const baseNoteIds = base.map((x) => x.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
 
+    const toCustomNames = (items: NoteDictionaryItem[]) => {
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const n of items) {
+        const id = String(n.id ?? "").trim();
+        if (/^[0-9a-f-]{36}$/i.test(id)) continue;
+        const cleaned = String(n.name ?? "").trim();
+        if (!cleaned) continue;
+        const key = cleaned.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(cleaned);
+        if (out.length >= 20) break;
+      }
+      return out;
+    };
+
     const body: CreateCommunityFragranceRequest = {
       name: name.trim(),
       brand: brand.trim(),
       year: year.trim() || null,
       imageUrl: imageUrl.trim() || null,
       concentration: concentration.trim() || null,
-      longevityScore: longevity,
-      sillageScore: sillage,
-      confidence: confidenceSlider > 0 ? CONFIDENCE_LABELS[confidenceSlider] : null,
-      popularity: popularitySlider > 0 ? POPULARITY_LABELS[popularitySlider] : null,
+      longevityScore: null,
+      sillageScore: null,
+      confidence: null,
+      popularity: null,
       mainAccords,
       mainAccordsPercentage,
       visibility,
       topNoteIds: !isEdit || topNoteIds.length ? topNoteIds : undefined,
       middleNoteIds: !isEdit || middleNoteIds.length ? middleNoteIds : undefined,
       baseNoteIds: !isEdit || baseNoteIds.length ? baseNoteIds : undefined,
+      topNoteNames: !isEdit || top.length ? toCustomNames(top) : undefined,
+      middleNoteNames: !isEdit || middle.length ? toCustomNames(middle) : undefined,
+      baseNoteNames: !isEdit || base.length ? toCustomNames(base) : undefined,
     };
 
     setSaving(true);
@@ -347,13 +352,6 @@ export default function AddCommunityFragranceDialog({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SliderField title="Longevity" value={longevity ?? 0} min={0} max={5} onChange={(v) => setLongevity(v <= 0 ? null : v)} label={longevity ? LONGEVITY_LABELS[longevity] : "—"} />
-            <SliderField title="Sillage" value={sillage ?? 0} min={0} max={5} onChange={(v) => setSillage(v <= 0 ? null : v)} label={sillage ? SILLAGE_LABELS[sillage] : "—"} />
-            <SliderField title="Confidence" value={confidenceSlider} min={0} max={4} onChange={setConfidenceSlider} label={CONFIDENCE_LABELS[confidenceSlider] || "—"} />
-            <SliderField title="Popularity" value={popularitySlider} min={0} max={4} onChange={setPopularitySlider} label={POPULARITY_LABELS[popularitySlider] || "—"} />
-          </div>
-
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-medium">Main accords</div>
@@ -400,7 +398,29 @@ export default function AddCommunityFragranceDialog({
             </div>
 
             <div className="mt-3">
-              <Input value={noteSearch} onChange={(e) => setNoteSearch(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="Search notes (e.g. bergamot, amber, vanilla)…" />
+              <div className="flex gap-2">
+                <Input
+                  value={noteSearch}
+                  onChange={(e) => setNoteSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCustomNote();
+                    }
+                  }}
+                  className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
+                  placeholder="Search notes (e.g. bergamot, amber, vanilla)…"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-10 rounded-xl border border-white/12 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                  onClick={addCustomNote}
+                  disabled={!noteSearch.trim()}
+                >
+                  Add custom
+                </Button>
+              </div>
             </div>
 
             {noteResults.length ? (
@@ -452,19 +472,6 @@ export default function AddCommunityFragranceDialog({
         {formBody}
       </DialogContent>
     </Dialog>
-  );
-}
-
-function SliderField({ title, value, min, max, onChange, label }: { title: string; value: number; min: number; max: number; onChange: (v: number) => void; label: string; }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="text-xs text-white/60">{title}</div>
-        <div className="text-xs text-cyan-100">{label}</div>
-      </div>
-      <input type="range" min={min} max={max} step={1} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-cyan-300" />
-      <div className="mt-1 text-[11px] text-white/45">{value > 0 ? `${value}/${max}` : "Not set"}</div>
-    </div>
   );
 }
 

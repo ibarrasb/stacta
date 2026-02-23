@@ -4,6 +4,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import NoticeDialog from "@/components/ui/notice-dialog";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import LoadingSpinner from "@/components/ui/loading-spinner";
@@ -12,16 +14,20 @@ import type { FragranceSearchResult } from "@/lib/api/fragrances";
 import {
   createCommunityFragrance,
   deleteCommunityFragrance,
+  getCommunityVoteSummary,
   getFragranceDetail,
   rateFragrance,
   searchCommunityFragrances,
   searchFragrances,
   searchNotes,
+  upsertCommunityVote,
   updateCommunityFragrance,
+  type CommunityVoteSummary,
   type NoteDictionaryItem,
 } from "@/lib/api/fragrances";
 import { addToCollection as addCollectionItem } from "@/lib/api/collection";
 import { getMe } from "@/lib/api/me";
+import { reportCommunityFragrance, reportNote } from "@/lib/api/note-moderation";
 import { getCreatorRatingSummary, rateCreator } from "@/lib/api/users";
 
 import fragrancePlaceholder from "@/assets/illustrations/NotFound.png";
@@ -52,6 +58,14 @@ const CONCENTRATION_OPTIONS = [
   "Perfume Oil / Attar",
   "Solid Perfume",
 ] as const;
+const COMMUNITY_PRICE_OPTIONS = [
+  { value: "GREAT_VALUE", label: "Great value" },
+  { value: "FAIR", label: "Fair" },
+  { value: "OVERPRICED", label: "Overpriced" },
+] as const;
+const COMMUNITY_LONGEVITY_LEVEL_LABELS = ["", "Fleeting", "Weak", "Moderate", "Long lasting", "Endless"] as const;
+const COMMUNITY_SILLAGE_LEVEL_LABELS = ["", "Skin scent", "Weak", "Moderate", "Strong", "Nuclear"] as const;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -63,6 +77,14 @@ function normalizeLabel(s: any) {
     .toLowerCase()
     .replace(/\s+/g, " ")
     .replace(/_/g, " ");
+}
+
+function toVoteKey(label: string) {
+  return String(label ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function clamp01(n: number) {
@@ -145,6 +167,10 @@ function sliderIndexFromLabel(label: any, labels: readonly string[]) {
   if (!v) return 0;
   const idx = labels.findIndex((x) => normalizeLabel(x) === v);
   return idx < 0 ? 0 : idx;
+}
+
+function isUuid(value: string | null | undefined) {
+  return UUID_RE.test(String(value ?? "").trim());
 }
 
 function mapAccordsForEdit(fragrance: FragranceSearchResult | null): AccordDraft[] {
@@ -283,8 +309,9 @@ function VibeChip({ text }: { text: string }) {
   );
 }
 
-function NoteTile({ note }: { note: Note }) {
+function NoteTile({ note, onReport }: { note: Note; onReport?: (note: Note) => void }) {
   const [src, setSrc] = useState(note.imageUrl || DEFAULT_NOTE_IMG);
+  const canReport = Boolean(onReport && isUuid(note.id));
 
   useEffect(() => {
     setSrc(note.imageUrl || DEFAULT_NOTE_IMG);
@@ -305,11 +332,20 @@ function NoteTile({ note }: { note: Note }) {
         />
       </div>
       <div className="w-full truncate text-center text-xs text-white/85">{note.name}</div>
+      {canReport ? (
+        <button
+          type="button"
+          className="rounded-lg border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-white/70 hover:bg-white/10 hover:text-white"
+          onClick={() => onReport?.(note)}
+        >
+          Report
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function PyramidRow({ title, notes }: { title: string; notes: Note[] }) {
+function PyramidRow({ title, notes, onReport }: { title: string; notes: Note[]; onReport?: (note: Note) => void }) {
   return (
     <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -322,7 +358,7 @@ function PyramidRow({ title, notes }: { title: string; notes: Note[] }) {
       {notes.length ? (
         <div className="flex flex-wrap justify-center gap-4">
           {notes.map((n, i) => (
-            <NoteTile key={`${n.name}-${i}`} note={n} />
+            <NoteTile key={`${n.name}-${i}`} note={n} onReport={onReport} />
           ))}
         </div>
       ) : (
@@ -367,14 +403,26 @@ function EditablePyramidRow({
   );
 }
 
-function RankingCard({ title, items }: { title: string; items: RankingItem[] }) {
+function RankingCard({
+  title,
+  items,
+  userStarsByKey,
+  onVote,
+  rankingNote,
+}: {
+  title: string;
+  items: RankingItem[];
+  userStarsByKey?: Record<string, number>;
+  onVote?: (itemName: string, stars: number) => void;
+  rankingNote?: string;
+}) {
   const clean = (items ?? []).filter((x) => x && typeof x.name === "string" && Number.isFinite(x.score));
   const sorted = clean.slice().sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   const max = Math.max(1, ...sorted.map((x) => x.score || 0));
 
   return (
-    <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
-      <div className="flex items-center justify-between">
+    <div className="rounded-2xl border border-white/15 bg-black/20 p-3 sm:p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-xs font-medium text-white/80">{title}</div>
           <div className="mt-1 text-[11px] text-white/45">model score (compare within this fragrance)</div>
@@ -386,17 +434,42 @@ function RankingCard({ title, items }: { title: string; items: RankingItem[] }) 
         {sorted.length ? (
           sorted.map((it) => {
             const v01 = clamp01((it.score || 0) / max);
+            const voteKey = toVoteKey(it.name);
+            const userStars = Math.max(0, Math.min(5, userStarsByKey?.[voteKey] ?? 0));
             return (
-              <div key={`${it.name}-${it.score}`} className="grid grid-cols-[90px_1fr_130px] items-center gap-3">
-                <div className="text-xs text-white/80 capitalize">{it.name}</div>
+              <div key={`${it.name}-${it.score}`} className="space-y-2 rounded-xl border border-white/8 bg-white/[0.02] p-3 sm:grid sm:grid-cols-[90px_1fr_130px] sm:items-center sm:gap-3 sm:space-y-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0">
+                <div className="text-xs text-white/80 capitalize sm:truncate">{it.name}</div>
 
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
                   <div className="h-full rounded-full" style={{ width: pct(v01), ...getBarFillStyle(v01) }} />
                 </div>
 
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
                   <div className="text-[11px] tabular-nums text-white/65">{it.score.toFixed(2)}</div>
-                  <Stars value01={v01} />
+                  {onVote ? (
+                    <div className="inline-flex items-center gap-1">
+                      {Array.from({ length: 5 }).map((_, i) => {
+                        const n = i + 1;
+                        const lit = n <= userStars;
+                        return (
+                          <button
+                            key={`${voteKey}-${n}`}
+                            type="button"
+                            className={cx(
+                              "grid h-9 w-9 place-items-center rounded-md text-lg leading-none transition touch-manipulation",
+                              lit ? "text-amber-200" : "text-white/25 hover:text-white/60"
+                            )}
+                            onClick={() => onVote(it.name, userStars === n ? 0 : n)}
+                            aria-label={`Rate ${it.name} ${n} star${n > 1 ? "s" : ""}`}
+                          >
+                            ★
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <Stars value01={v01} />
+                  )}
                 </div>
               </div>
             );
@@ -407,8 +480,7 @@ function RankingCard({ title, items }: { title: string; items: RankingItem[] }) 
       </div>
 
       <div className="mt-4 text-xs text-white/45">
-        These are algorithmic suitability scores (notes + accords). Use them to compare options within this fragrance—not as
-        an absolute 0–5 scale, and not as a global comparison across different fragrances.
+        {rankingNote ?? "These are algorithmic suitability scores (notes + accords). Use them to compare options within this fragrance—not as an absolute 0–5 scale, and not as a global comparison across different fragrances."}
       </div>
     </div>
   );
@@ -480,6 +552,15 @@ export default function FragranceDetailPage() {
   const forceRefreshRef = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTitle, setNoticeTitle] = useState("Notice");
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [reportingNoteId, setReportingNoteId] = useState<string | null>(null);
+  const [reportingNoteName, setReportingNoteName] = useState("");
+  const [reportReason, setReportReason] = useState<"SPAM" | "INAPPROPRIATE" | "DUPLICATE" | "OTHER">("INAPPROPRIATE");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportFragranceDialogOpen, setReportFragranceDialogOpen] = useState(false);
+  const [reportFragranceReason, setReportFragranceReason] = useState<"SPAM" | "INAPPROPRIATE" | "OTHER">("INAPPROPRIATE");
+  const [reportFragranceDetails, setReportFragranceDetails] = useState("");
   const [addingToCollection, setAddingToCollection] = useState(false);
   const [editingCommunity, setEditingCommunity] = useState(false);
   const [deletingCommunity, setDeletingCommunity] = useState(false);
@@ -489,6 +570,17 @@ export default function FragranceDetailPage() {
   const [ratingBusy, setRatingBusy] = useState(false);
   const [creatorRatingState, setCreatorRatingState] = useState<{ average: number; count: number; userRating: number | null } | null>(null);
   const [creatorRatingBusy, setCreatorRatingBusy] = useState(false);
+  const [communityVoteSummary, setCommunityVoteSummary] = useState<CommunityVoteSummary | null>(null);
+  const [communityVoteSaving, setCommunityVoteSaving] = useState(false);
+  const [communityLongevityVote, setCommunityLongevityVote] = useState<number | null>(null);
+  const [communitySillageVote, setCommunitySillageVote] = useState<number | null>(null);
+  const [communityPriceVote, setCommunityPriceVote] = useState<"GREAT_VALUE" | "FAIR" | "OVERPRICED" | null>(null);
+  const [communitySeasonVotes, setCommunitySeasonVotes] = useState<string[]>([]);
+  const [communityOccasionVotes, setCommunityOccasionVotes] = useState<string[]>([]);
+  const communityVoteAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const communityVoteLastSavedRef = useRef<string>("{}");
+  const communityVoteHydratingRef = useRef(false);
+  const communityVoteHydratedExternalIdRef = useRef<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [draftAccordInput, setDraftAccordInput] = useState("");
   const [draftNoteSearch, setDraftNoteSearch] = useState("");
@@ -782,6 +874,60 @@ export default function FragranceDetailPage() {
       .filter((x: any) => x.name && Number.isFinite(x.score));
   }, [fragrance]);
 
+  const communityLongevityBars = useMemo(() => {
+    const rows = communityVoteSummary?.longevityRanking ?? [];
+    const total = Math.max(1, Number(communityVoteSummary?.voters ?? 0));
+    return rows.map((r) => ({ name: r.name, count: Number(r.score ?? 0), ratio: Number(r.score ?? 0) / total }));
+  }, [communityVoteSummary]);
+  const communitySillageBars = useMemo(() => {
+    const rows = communityVoteSummary?.sillageRanking ?? [];
+    const total = Math.max(1, Number(communityVoteSummary?.voters ?? 0));
+    return rows.map((r) => ({ name: r.name, count: Number(r.score ?? 0), ratio: Number(r.score ?? 0) / total }));
+  }, [communityVoteSummary]);
+  const communityPriceBars = useMemo(() => {
+    const rows = communityVoteSummary?.priceRanking ?? [];
+    const total = Math.max(1, Number(communityVoteSummary?.voters ?? 0));
+    return rows.map((r) => ({ name: r.name, count: Number(r.score ?? 0), ratio: Number(r.score ?? 0) / total }));
+  }, [communityVoteSummary]);
+  const communityLongevity01 = useMemo(() => {
+    if (!communityLongevityBars.length) return 0;
+    const idx: Record<string, number> = {
+      fleeting: 1,
+      weak: 2,
+      moderate: 3,
+      "long lasting": 4,
+      endless: 5,
+    };
+    let weighted = 0;
+    let total = 0;
+    for (const row of communityLongevityBars) {
+      const key = row.name.trim().toLowerCase();
+      const stars = idx[key] ?? 0;
+      weighted += stars * row.count;
+      total += row.count;
+    }
+    return total > 0 ? clamp01((weighted / total) / 5) : 0;
+  }, [communityLongevityBars]);
+  const communitySillage01 = useMemo(() => {
+    if (!communitySillageBars.length) return 0;
+    const idx: Record<string, number> = {
+      "skin scent": 1,
+      weak: 2,
+      moderate: 3,
+      strong: 4,
+      nuclear: 5,
+    };
+    let weighted = 0;
+    let total = 0;
+    for (const row of communitySillageBars) {
+      const key = row.name.trim().toLowerCase();
+      const stars = idx[key] ?? 0;
+      weighted += stars * row.count;
+      total += row.count;
+    }
+    return total > 0 ? clamp01((weighted / total) / 5) : 0;
+  }, [communitySillageBars]);
+
   const addToCollection = useCallback(async () => {
     const normalizedSource = String(fragrance?.source ?? inferPreferredSource(routeExternalId || "") ?? "FRAGELLA")
       .trim()
@@ -860,6 +1006,56 @@ export default function FragranceDetailPage() {
     setNoticeTitle("Review");
     setNotice("Review flow (wire backend endpoint next).");
   }, []);
+
+  const onReportNote = useCallback((note: Note) => {
+    const noteId = String(note.id ?? "").trim();
+    if (!isUuid(noteId)) return;
+    setReportingNoteId(noteId);
+    setReportingNoteName(note.name);
+    setReportReason("INAPPROPRIATE");
+    setReportDetails("");
+    setReportDialogOpen(true);
+  }, []);
+
+  const submitReportNote = useCallback(async () => {
+    if (!reportingNoteId || !isUuid(reportingNoteId)) return;
+    setReportSubmitting(true);
+    try {
+      await reportNote(reportingNoteId, {
+        reason: reportReason,
+        details: reportDetails.trim() || null,
+      });
+      setReportDialogOpen(false);
+      setNoticeTitle("Report submitted");
+      setNotice("Thanks. Our moderators will review this note.");
+    } catch (e: any) {
+      setNoticeTitle("Report failed");
+      setNotice(e?.message || "Could not submit note report.");
+    } finally {
+      setReportSubmitting(false);
+    }
+  }, [reportDetails, reportReason, reportingNoteId]);
+
+  const submitReportFragrance = useCallback(async () => {
+    const ext = String(fragrance?.externalId ?? "").trim();
+    const isCommunity = String(fragrance?.source ?? "").toUpperCase() === "COMMUNITY";
+    if (!isCommunity || !ext) return;
+    setReportSubmitting(true);
+    try {
+      await reportCommunityFragrance(ext, {
+        reason: reportFragranceReason,
+        details: reportFragranceDetails.trim() || null,
+      });
+      setReportFragranceDialogOpen(false);
+      setNoticeTitle("Report submitted");
+      setNotice("Thanks. Our moderators will review this fragrance.");
+    } catch (e: any) {
+      setNoticeTitle("Report failed");
+      setNotice(e?.message || "Could not submit fragrance report.");
+    } finally {
+      setReportSubmitting(false);
+    }
+  }, [fragrance?.externalId, fragrance?.source, reportFragranceDetails, reportFragranceReason]);
 
   const buyDisabled = !fragrance?.purchaseUrl;
 
@@ -975,6 +1171,152 @@ export default function FragranceDetailPage() {
     }
   }, [fragrance]);
   const isCommunityFragrance = String(fragrance?.source ?? "").toUpperCase() === "COMMUNITY";
+  useEffect(() => {
+    if (!isCommunityFragrance || !fragrance?.externalId || isCreateMode) {
+      setCommunityVoteSummary(null);
+      communityVoteHydratedExternalIdRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    getCommunityVoteSummary(fragrance.externalId)
+      .then((summary) => {
+        if (cancelled) return;
+        setCommunityVoteSummary(summary);
+        if (communityVoteHydratedExternalIdRef.current !== fragrance.externalId) {
+          const mine = summary?.userVote;
+          communityVoteHydratingRef.current = true;
+          setCommunityLongevityVote(mine?.longevityScore ?? null);
+          setCommunitySillageVote(mine?.sillageScore ?? null);
+          setCommunityPriceVote(
+            mine?.pricePerception === "GREAT_VALUE" || mine?.pricePerception === "FAIR" || mine?.pricePerception === "OVERPRICED"
+              ? mine.pricePerception
+              : null
+          );
+          setCommunitySeasonVotes(Array.isArray(mine?.seasonVotes) ? mine.seasonVotes : []);
+          setCommunityOccasionVotes(Array.isArray(mine?.occasionVotes) ? mine.occasionVotes : []);
+          communityVoteLastSavedRef.current = JSON.stringify({
+            longevityScore: mine?.longevityScore ?? null,
+            sillageScore: mine?.sillageScore ?? null,
+            pricePerception: mine?.pricePerception ?? null,
+            seasonVotes: Array.isArray(mine?.seasonVotes) ? mine.seasonVotes : [],
+            occasionVotes: Array.isArray(mine?.occasionVotes) ? mine.occasionVotes : [],
+          });
+          communityVoteHydratedExternalIdRef.current = fragrance.externalId;
+          setTimeout(() => {
+            communityVoteHydratingRef.current = false;
+          }, 0);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCommunityVoteSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fragrance?.externalId, isCommunityFragrance, isCreateMode]);
+
+  useEffect(() => {
+    if (!isCommunityFragrance || !fragrance?.externalId || isCreateMode) return;
+    if (communityVoteHydratingRef.current) return;
+
+    const payload = {
+      longevityScore: communityLongevityVote,
+      sillageScore: communitySillageVote,
+      pricePerception: communityPriceVote,
+      seasonVotes: communitySeasonVotes,
+      occasionVotes: communityOccasionVotes,
+    };
+    const hasAny =
+      payload.longevityScore !== null ||
+      payload.sillageScore !== null ||
+      payload.pricePerception !== null ||
+      payload.seasonVotes.length > 0 ||
+      payload.occasionVotes.length > 0;
+    if (!hasAny) return;
+
+    const serialized = JSON.stringify(payload);
+    if (serialized === communityVoteLastSavedRef.current) return;
+
+    if (communityVoteAutoSaveTimerRef.current) {
+      clearTimeout(communityVoteAutoSaveTimerRef.current);
+    }
+
+    communityVoteAutoSaveTimerRef.current = setTimeout(async () => {
+      setCommunityVoteSaving(true);
+      try {
+        const next = await upsertCommunityVote(fragrance.externalId!, payload);
+        communityVoteLastSavedRef.current = JSON.stringify({
+          longevityScore: next.userVote?.longevityScore ?? null,
+          sillageScore: next.userVote?.sillageScore ?? null,
+          pricePerception: next.userVote?.pricePerception ?? null,
+          seasonVotes: next.userVote?.seasonVotes ?? [],
+          occasionVotes: next.userVote?.occasionVotes ?? [],
+        });
+        setCommunityVoteSummary(next);
+      } catch (e: any) {
+        setNoticeTitle("Community vote");
+        setNotice(e?.message || "Failed to submit vote.");
+      } finally {
+        setCommunityVoteSaving(false);
+      }
+    }, 450);
+
+    return () => {
+      if (communityVoteAutoSaveTimerRef.current) {
+        clearTimeout(communityVoteAutoSaveTimerRef.current);
+      }
+    };
+  }, [
+    communityLongevityVote,
+    communityOccasionVotes,
+    communityPriceVote,
+    communitySeasonVotes,
+    communitySillageVote,
+    fragrance?.externalId,
+    isCommunityFragrance,
+    isCreateMode,
+  ]);
+
+  const communitySeasonStarsByKey = useMemo(() => {
+    const out: Record<string, number> = {};
+    communitySeasonVotes.forEach((key) => {
+      const normalized = toVoteKey(key);
+      out[normalized] = (out[normalized] ?? 0) + 1;
+    });
+    return out;
+  }, [communitySeasonVotes]);
+  const communityOccasionStarsByKey = useMemo(() => {
+    const out: Record<string, number> = {};
+    communityOccasionVotes.forEach((key) => {
+      const normalized = toVoteKey(key);
+      out[normalized] = (out[normalized] ?? 0) + 1;
+    });
+    return out;
+  }, [communityOccasionVotes]);
+
+  const onVoteSeason = useCallback((name: string, stars: number) => {
+    const key = toVoteKey(name);
+    const next: string[] = [];
+    Object.entries(communitySeasonStarsByKey).forEach(([k, v]) => {
+      if (k === key) return;
+      for (let i = 0; i < Math.min(5, Math.max(0, v)); i++) next.push(k);
+    });
+    for (let i = 0; i < Math.min(5, Math.max(0, stars)); i++) next.push(key);
+    setCommunitySeasonVotes(next);
+  }, [communitySeasonStarsByKey]);
+
+  const onVoteOccasion = useCallback((name: string, stars: number) => {
+    const key = toVoteKey(name);
+    const next: string[] = [];
+    Object.entries(communityOccasionStarsByKey).forEach(([k, v]) => {
+      if (k === key) return;
+      for (let i = 0; i < Math.min(5, Math.max(0, v)); i++) next.push(k);
+    });
+    for (let i = 0; i < Math.min(5, Math.max(0, stars)); i++) next.push(key);
+    setCommunityOccasionVotes(next);
+  }, [communityOccasionStarsByKey]);
+
   const canRateCreator = Boolean(
     isCommunityFragrance &&
     createdByUsername &&
@@ -1105,6 +1447,19 @@ export default function FragranceDetailPage() {
     if (draftStage === "BASE") setDraftBaseNotes((prev) => dedupe([...prev, mapped]));
   }
 
+  function addCustomDraftNote() {
+    const cleaned = draftNoteSearch.trim();
+    if (!cleaned) return;
+    addDraftNote({
+      id: `custom-${draftStage.toLowerCase()}-${Date.now()}`,
+      name: cleaned,
+      imageUrl: null,
+      usageCount: null,
+    });
+    setDraftNoteSearch("");
+    setDraftNoteResults([]);
+  }
+
   const saveInPlaceEdit = useCallback(async () => {
     if (!fragrance?.externalId) return;
     if (!isCreateMode && !canManageCommunity) return;
@@ -1125,6 +1480,22 @@ export default function FragranceDetailPage() {
       const toIdList = (items: Note[]) => items
         .map((n) => String(n.id ?? "").trim())
         .filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+      const toCustomNameList = (items: Note[]) => {
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const n of items) {
+          const id = String(n.id ?? "").trim();
+          if (/^[0-9a-f-]{36}$/i.test(id)) continue;
+          const name = String(n.name ?? "").trim();
+          if (!name) continue;
+          const key = name.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(name);
+          if (out.length >= 20) break;
+        }
+        return out;
+      };
 
       const body = {
         name: draftName.trim(),
@@ -1132,16 +1503,19 @@ export default function FragranceDetailPage() {
         year: nextYear || null,
         imageUrl: draftImageUrl.trim() || null,
         concentration: draftConcentration.trim() || null,
-        longevityScore: draftLongevity > 0 ? draftLongevity : null,
-        sillageScore: draftSillage > 0 ? draftSillage : null,
-        confidence: draftConfidence > 0 ? SIGNAL_EDIT_LABELS[draftConfidence] : null,
-        popularity: draftPopularity > 0 ? SIGNAL_EDIT_LABELS[draftPopularity] : null,
+        longevityScore: null,
+        sillageScore: null,
+        confidence: null,
+        popularity: null,
         mainAccords,
         mainAccordsPercentage,
         visibility: draftVisibility,
         topNoteIds: toIdList(draftTopNotes),
         middleNoteIds: toIdList(draftMiddleNotes),
         baseNoteIds: toIdList(draftBaseNotes),
+        topNoteNames: toCustomNameList(draftTopNotes),
+        middleNoteNames: toCustomNameList(draftMiddleNotes),
+        baseNoteNames: toCustomNameList(draftBaseNotes),
       };
       const saved = isCreateMode
         ? await createCommunityFragrance(body)
@@ -1286,6 +1660,22 @@ export default function FragranceDetailPage() {
                       : "Sign in to rate creator"}
                   </div>
                 )}
+                {!canManageCommunity ? (
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-8 rounded-xl border border-red-300/30 bg-red-400/12 px-3 text-xs text-red-100 hover:bg-red-400/20"
+                      onClick={() => {
+                        setReportFragranceReason("INAPPROPRIATE");
+                        setReportFragranceDetails("");
+                        setReportFragranceDialogOpen(true);
+                      }}
+                    >
+                      Report fragrance
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             <Button
@@ -1514,7 +1904,7 @@ export default function FragranceDetailPage() {
                     </div>
                   )}
                   {!isCreateMode ? (
-                    <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl border border-white/15 bg-black/20 p-3">
                       <div className="text-[11px] text-white/60">Rating</div>
                       <div className="mt-2 flex flex-col items-center">
@@ -1549,89 +1939,137 @@ export default function FragranceDetailPage() {
 
                     <div className="rounded-2xl border border-white/15 bg-black/20 p-3">
                       <div className="text-[11px] text-white/60">Price</div>
-                      <div className="mt-1 text-sm font-semibold">{fragrance.priceValue ?? fragrance.price ?? "—"}</div>
+                      <div className="mt-1 text-sm font-semibold">{fragrance.priceValue ?? fragrance.price ?? "Not listed"}</div>
+                      {isCommunityFragrance && !isEditingForm ? (
+                        <div className="mt-2 space-y-2">
+                          <div className="flex flex-wrap gap-2">
+                            {COMMUNITY_PRICE_OPTIONS.map((option) => (
+                              <button
+                                key={`price-vote-${option.value}`}
+                                type="button"
+                                className={cx(
+                                  "min-h-9 rounded-full border px-3 py-1 text-xs transition touch-manipulation",
+                                  communityPriceVote === option.value
+                                    ? "border-cyan-300/45 bg-cyan-400/20 text-cyan-100"
+                                    : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
+                                )}
+                                onClick={() => setCommunityPriceVote(communityPriceVote === option.value ? null : option.value)}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                          {communityPriceBars.length ? (
+                            <div className="space-y-1">
+                              {communityPriceBars.map((row) => (
+                                <Bar
+                                  key={`price-bar-${row.name}`}
+                                  label={row.name}
+                                  value01={row.ratio}
+                                  rightText={String(Math.round(row.count))}
+                                />
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                     </div>
                   ) : null}
 
-                  <div className="mt-6 rounded-2xl border border-white/15 bg-black/20 p-4">
+                  <div className="mt-6 rounded-2xl border border-white/15 bg-black/20 p-3 sm:p-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-xs font-medium text-white/80">Performance</div>
                         <div className="mt-1 text-[11px] text-white/45">longevity • sillage • signals</div>
                       </div>
-                      <div className="text-[10px] text-white/45">from provider</div>
                     </div>
 
                     <div className="mt-4 space-y-4">
                       <Bar
                         label="Longevity"
-                        value01={shownLongevity01}
-                        rightText={shownLongevityLabel}
+                        value01={isCommunityFragrance && !isEditingForm && communityVoteSummary ? communityLongevity01 : shownLongevity01}
+                        rightText={
+                          isCommunityFragrance && !isEditingForm
+                            ? (communityLongevityVote ? COMMUNITY_LONGEVITY_LEVEL_LABELS[communityLongevityVote] : "Not voted")
+                            : shownLongevityLabel
+                        }
                       />
-                      {isEditingForm ? (
-                        <input
-                          type="range"
-                          min={0}
-                          max={5}
-                          step={1}
-                          value={draftLongevity}
-                          onChange={(e) => setDraftLongevity(Number(e.target.value))}
-                          className="w-full accent-cyan-300"
-                        />
+                      {isCommunityFragrance && !isEditingForm ? (
+                        <>
+                          <input
+                            type="range"
+                            min={1}
+                            max={5}
+                            step={1}
+                            value={communityLongevityVote ?? 3}
+                            onChange={(e) => setCommunityLongevityVote(Number(e.target.value))}
+                            className="h-9 w-full cursor-pointer accent-cyan-300 touch-pan-y"
+                            aria-label="Community longevity vote"
+                          />
+                          <div className="mt-1 flex items-center justify-between text-[10px] text-white/45">
+                            <span>Fleeting</span>
+                            <span>Endless</span>
+                          </div>
+                        </>
                       ) : null}
                       <Bar
                         label="Sillage"
-                        value01={shownSillage01}
-                        rightText={shownSillageLabel}
+                        value01={isCommunityFragrance && !isEditingForm && communityVoteSummary ? communitySillage01 : shownSillage01}
+                        rightText={
+                          isCommunityFragrance && !isEditingForm
+                            ? (communitySillageVote ? COMMUNITY_SILLAGE_LEVEL_LABELS[communitySillageVote] : "Not voted")
+                            : shownSillageLabel
+                        }
                       />
-                      {isEditingForm ? (
-                        <input
-                          type="range"
-                          min={0}
-                          max={5}
-                          step={1}
-                          value={draftSillage}
-                          onChange={(e) => setDraftSillage(Number(e.target.value))}
-                          className="w-full accent-cyan-300"
-                        />
+                      {isCommunityFragrance && !isEditingForm ? (
+                        <>
+                          <input
+                            type="range"
+                            min={1}
+                            max={5}
+                            step={1}
+                            value={communitySillageVote ?? 3}
+                            onChange={(e) => setCommunitySillageVote(Number(e.target.value))}
+                            className="h-9 w-full cursor-pointer accent-cyan-300 touch-pan-y"
+                            aria-label="Community sillage vote"
+                          />
+                          <div className="mt-1 flex items-center justify-between text-[10px] text-white/45">
+                            <span>Skin scent</span>
+                            <span>Nuclear</span>
+                          </div>
+                        </>
                       ) : null}
-                      <Bar
-                        label="Confidence"
-                        value01={shownConfidence01}
-                        rightText={shownConfidenceLabel}
-                      />
-                      {isEditingForm ? (
-                        <input
-                          type="range"
-                          min={0}
-                          max={4}
-                          step={1}
-                          value={draftConfidence}
-                          onChange={(e) => setDraftConfidence(Number(e.target.value))}
-                          className="w-full accent-cyan-300"
-                        />
+                      {!isCommunityFragrance ? (
+                        <>
+                          <Bar
+                            label="Confidence"
+                            value01={shownConfidence01}
+                            rightText={shownConfidenceLabel}
+                          />
+                          <Bar
+                            label="Popularity"
+                            value01={shownPopularity01}
+                            rightText={shownPopularityLabel}
+                          />
+                        </>
                       ) : null}
-                      <Bar
-                        label="Popularity"
-                        value01={shownPopularity01}
-                        rightText={shownPopularityLabel}
-                      />
-                      {isEditingForm ? (
-                        <input
-                          type="range"
-                          min={0}
-                          max={4}
-                          step={1}
-                          value={draftPopularity}
-                          onChange={(e) => setDraftPopularity(Number(e.target.value))}
-                          className="w-full accent-cyan-300"
-                        />
+                      {isCommunityFragrance && !isEditingForm ? (
+                        <div className="min-h-5 text-xs text-white/70">
+                          {communityVoteSaving ? (
+                            <span className="inline-flex items-center gap-2">
+                              <InlineSpinner />
+                              <span>Saving votes…</span>
+                            </span>
+                          ) : <span className="text-white/45">Votes save automatically.</span>}
+                        </div>
                       ) : null}
                     </div>
 
                     <div className="mt-4 text-xs text-white/45">
-                      Confidence/Popularity are categorical provider labels (not verified by us).
+                      {isCommunityFragrance
+                        ? "Community bars are calculated from member votes."
+                        : "Confidence and popularity are categorical labels."}
                     </div>
                   </div>
                 </div>
@@ -1843,8 +2281,28 @@ export default function FragranceDetailPage() {
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-2">
-                  <RankingCard title="Season ranking" items={seasonRanking} />
-                  <RankingCard title="Occasion ranking" items={occasionRanking} />
+                  <RankingCard
+                    title="Season ranking"
+                    items={isCommunityFragrance && communityVoteSummary
+                      ? communityVoteSummary.seasonRanking.map((x) => ({ name: x.name, score: Number(x.score ?? 0) }))
+                      : seasonRanking}
+                    userStarsByKey={isCommunityFragrance ? communitySeasonStarsByKey : undefined}
+                    onVote={isCommunityFragrance && !isEditingForm ? onVoteSeason : undefined}
+                    rankingNote={isCommunityFragrance
+                      ? "Community voting bars are based on total star weight for each season."
+                      : undefined}
+                  />
+                  <RankingCard
+                    title="Occasion ranking"
+                    items={isCommunityFragrance && communityVoteSummary
+                      ? communityVoteSummary.occasionRanking.map((x) => ({ name: x.name, score: Number(x.score ?? 0) }))
+                      : occasionRanking}
+                    userStarsByKey={isCommunityFragrance ? communityOccasionStarsByKey : undefined}
+                    onVote={isCommunityFragrance && !isEditingForm ? onVoteOccasion : undefined}
+                    rankingNote={isCommunityFragrance
+                      ? "Community voting bars are based on total star weight for each occasion."
+                      : undefined}
+                  />
                 </div>
 
                 {isEditingForm ? (
@@ -1876,9 +2334,24 @@ export default function FragranceDetailPage() {
                         <input
                           value={draftNoteSearch}
                           onChange={(e) => setDraftNoteSearch(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addCustomDraftNote();
+                            }
+                          }}
                           placeholder="Search note (e.g. bergamot)"
                           className="h-9 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none"
                         />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-9 rounded-xl border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                          onClick={addCustomDraftNote}
+                          disabled={!draftNoteSearch.trim()}
+                        >
+                          Add custom
+                        </Button>
                       </div>
                       {draftNoteResults.length ? (
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -1910,9 +2383,9 @@ export default function FragranceDetailPage() {
                     </div>
 
                     <div className="grid gap-4">
-                      <PyramidRow title="Top notes" notes={noteGroups.top} />
-                      <PyramidRow title="Middle notes" notes={noteGroups.middle} />
-                      <PyramidRow title="Base notes" notes={noteGroups.base} />
+                      <PyramidRow title="Top notes" notes={noteGroups.top} onReport={onReportNote} />
+                      <PyramidRow title="Middle notes" notes={noteGroups.middle} onReport={onReportNote} />
+                      <PyramidRow title="Base notes" notes={noteGroups.base} onReport={onReportNote} />
                     </div>
                   </div>
                 ) : (
@@ -1940,6 +2413,103 @@ export default function FragranceDetailPage() {
         onCancel={() => setConfirmDeleteOpen(false)}
         onConfirm={onDeleteCommunity}
       />
+
+      <Dialog open={reportDialogOpen} onOpenChange={(next) => !reportSubmitting && setReportDialogOpen(next)}>
+        <DialogContent className="max-w-md rounded-3xl border-white/15 bg-[#090a0f] text-white">
+          <DialogHeader>
+            <DialogTitle>Report Note</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-white/80">
+              Reporting: <span className="font-semibold">{reportingNoteName || "Note"}</span>
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-white/60">Reason</div>
+              <select
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value as any)}
+                className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none"
+              >
+                <option value="INAPPROPRIATE">Inappropriate</option>
+                <option value="SPAM">Spam</option>
+                <option value="DUPLICATE">Duplicate</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-white/60">Details (optional)</div>
+              <Textarea
+                value={reportDetails}
+                onChange={(e) => setReportDetails(e.target.value)}
+                placeholder="Add context for moderators..."
+                className="min-h-20 rounded-xl border-white/10 bg-white/5 text-white"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20"
+                onClick={() => setReportDialogOpen(false)}
+                disabled={reportSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button type="button" className="h-9 rounded-xl px-4" onClick={submitReportNote} disabled={reportSubmitting}>
+                {reportSubmitting ? "Submitting…" : "Submit report"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reportFragranceDialogOpen} onOpenChange={(next) => !reportSubmitting && setReportFragranceDialogOpen(next)}>
+        <DialogContent className="max-w-md rounded-3xl border-white/15 bg-[#090a0f] text-white">
+          <DialogHeader>
+            <DialogTitle>Report Fragrance</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-white/80">
+              Reporting: <span className="font-semibold">{fragrance?.brand} {fragrance?.name}</span>
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-white/60">Reason</div>
+              <select
+                value={reportFragranceReason}
+                onChange={(e) => setReportFragranceReason(e.target.value as any)}
+                className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none"
+              >
+                <option value="INAPPROPRIATE">Inappropriate</option>
+                <option value="SPAM">Spam</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-white/60">Details (optional)</div>
+              <Textarea
+                value={reportFragranceDetails}
+                onChange={(e) => setReportFragranceDetails(e.target.value)}
+                placeholder="Add context for moderators..."
+                className="min-h-20 rounded-xl border-white/10 bg-white/5 text-white"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20"
+                onClick={() => setReportFragranceDialogOpen(false)}
+                disabled={reportSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button type="button" className="h-9 rounded-xl px-4" onClick={submitReportFragrance} disabled={reportSubmitting}>
+                {reportSubmitting ? "Submitting…" : "Submit report"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <NoticeDialog
         open={Boolean(notice)}

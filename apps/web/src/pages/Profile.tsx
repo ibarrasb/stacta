@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Lock, LockOpen, Repeat2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -10,7 +13,8 @@ import ProfilePhotoPicker from "@/components/profile/ProfilePhotoPicker";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { getMe, updateMe } from "@/lib/api/me";
 import { addTopFragrance, removeFromCollection, removeTopFragrance } from "@/lib/api/collection";
-import type { MeResponse } from "@/lib/api/types";
+import { listFollowers, listFollowing, unfollowUser } from "@/lib/api/follows";
+import type { FollowConnectionItem, MeResponse } from "@/lib/api/types";
 import fragranceFallbackImg from "@/assets/illustrations/NotFound.png";
 
 const FALLBACK_FRAGRANCE_IMG = fragranceFallbackImg;
@@ -82,6 +86,7 @@ function PrivacyToggle({
 }
 
 type ProfileTab = "overview" | "reviews" | "wishlist" | "community";
+type ConnectionsView = "followers" | "following";
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -98,6 +103,14 @@ export default function ProfilePage() {
   const [draftBio, setDraftBio] = useState("");
   const [draftIsPrivate, setDraftIsPrivate] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
+  const [connectionsView, setConnectionsView] = useState<ConnectionsView>("followers");
+  const [connections, setConnections] = useState<FollowConnectionItem[]>([]);
+  const [connectionsCursor, setConnectionsCursor] = useState<string | null>(null);
+  const [connectionsLoading, setConnectionsLoading] = useState(false);
+  const [connectionsLoadingMore, setConnectionsLoadingMore] = useState(false);
+  const [unfollowingUsername, setUnfollowingUsername] = useState<string | null>(null);
+  const [pendingUnfollowUsername, setPendingUnfollowUsername] = useState<string | null>(null);
+  const [showConnections, setShowConnections] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +139,84 @@ export default function ProfilePage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!showConnections) return;
+    let cancelled = false;
+
+    async function loadConnections() {
+      setConnectionsLoading(true);
+      setConnections([]);
+      setConnectionsCursor(null);
+      setError(null);
+      try {
+        const page = connectionsView === "followers"
+          ? await listFollowers({ limit: 20 })
+          : await listFollowing({ limit: 20 });
+        if (cancelled) return;
+        setConnections(page.items);
+        setConnectionsCursor(page.nextCursor);
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.message || "Failed to load connections.");
+        setConnections([]);
+        setConnectionsCursor(null);
+      } finally {
+        if (!cancelled) setConnectionsLoading(false);
+      }
+    }
+
+    loadConnections();
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionsView, showConnections]);
+
+  async function onLoadMoreConnections() {
+    if (!connectionsCursor || connectionsLoadingMore) return;
+    setConnectionsLoadingMore(true);
+    setError(null);
+    try {
+      const page = connectionsView === "followers"
+        ? await listFollowers({ limit: 20, cursor: connectionsCursor })
+        : await listFollowing({ limit: 20, cursor: connectionsCursor });
+      setConnections((prev) => [...prev, ...page.items]);
+      setConnectionsCursor(page.nextCursor);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load more connections.");
+    } finally {
+      setConnectionsLoadingMore(false);
+    }
+  }
+
+  async function onUnfollowFromConnections(username: string) {
+    setUnfollowingUsername(username);
+    setError(null);
+    try {
+      await unfollowUser(username);
+      setConnections((prev) => {
+        if (connectionsView === "following") {
+          return prev.filter((item) => item.username.toLowerCase() !== username.toLowerCase());
+        }
+        return prev.map((item) => (
+          item.username.toLowerCase() === username.toLowerCase()
+            ? { ...item, isFollowing: false }
+            : item
+        ));
+      });
+      setMe((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          followingCount: Math.max(0, prev.followingCount - 1),
+        };
+      });
+    } catch (e: any) {
+      setError(e?.message || "Failed to unfollow user.");
+    } finally {
+      setUnfollowingUsername(null);
+    }
+  }
 
   const usernameLabel = useMemo(() => {
     if (!me?.username) return "—";
@@ -347,8 +438,26 @@ export default function ProfilePage() {
                             )}
                           </div>
                           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
-                            <div className="text-white/80"><span className="font-semibold text-white">{compactCount(me.followersCount)}</span> followers</div>
-                            <div className="text-white/80"><span className="font-semibold text-white">{compactCount(me.followingCount)}</span> following</div>
+                            <button
+                              type="button"
+                              className="text-white/80 hover:text-white"
+                              onClick={() => {
+                                setConnectionsView("followers");
+                                setShowConnections(true);
+                              }}
+                            >
+                              <span className="font-semibold text-white">{compactCount(me.followersCount)}</span> followers
+                            </button>
+                            <button
+                              type="button"
+                              className="text-white/80 hover:text-white"
+                              onClick={() => {
+                                setConnectionsView("following");
+                                setShowConnections(true);
+                              }}
+                            >
+                              <span className="font-semibold text-white">{compactCount(me.followingCount)}</span> following
+                            </button>
                           </div>
                           <div className="mt-3 hidden items-center gap-2 rounded-full border border-white/12 bg-white/6 px-3 py-1.5 sm:inline-flex">
                             <span className="text-xs text-white/65">Stacta rep</span>
@@ -541,6 +650,7 @@ export default function ProfilePage() {
                     ))}
                   </div>
                 </div>
+                <div className="px-1 pt-1 text-[11px] text-white/45 sm:hidden">Swipe right to see more tabs.</div>
 
                 {activeTab === "overview" ? (
                   <div className="space-y-6">
@@ -748,6 +858,149 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 ) : null}
+
+                <Dialog open={showConnections} onOpenChange={setShowConnections}>
+                  <DialogContent className="w-[calc(100vw-24px)] max-w-3xl rounded-3xl border-white/15 bg-[#090a0f] p-0">
+                    <DialogHeader className="border-b border-white/10 px-5 py-4">
+                      <DialogTitle className="text-base text-white">Connections</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-4 p-5">
+                      <div className="inline-flex rounded-xl border border-white/15 bg-black/25 p-1">
+                        <button
+                          type="button"
+                          onClick={() => setConnectionsView("followers")}
+                          className={[
+                            "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                            connectionsView === "followers"
+                              ? "bg-cyan-300/25 text-cyan-100"
+                              : "text-white/70 hover:bg-white/10 hover:text-white",
+                          ].join(" ")}
+                        >
+                          Followers {compactCount(me.followersCount)}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConnectionsView("following")}
+                          className={[
+                            "rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                            connectionsView === "following"
+                              ? "bg-cyan-300/25 text-cyan-100"
+                              : "text-white/70 hover:bg-white/10 hover:text-white",
+                          ].join(" ")}
+                        >
+                          Following {compactCount(me.followingCount)}
+                        </button>
+                      </div>
+
+                      {connectionsLoading ? (
+                        <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                          <LoadingSpinner label="Loading connections..." />
+                        </div>
+                      ) : !connections.length ? (
+                        <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                          {connectionsView === "followers" ? "No followers yet." : "You are not following anyone yet."}
+                        </div>
+                      ) : (
+                        <div className="max-h-[55dvh] space-y-2 overflow-y-auto pr-1">
+                          {connections.map((item) => (
+                            <div key={`${connectionsView}:${item.username}`} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowConnections(false);
+                                    navigate(`/u/${item.username}`, { state: { from: { pathname: "/profile" } } });
+                                  }}
+                                  className="flex min-w-0 items-center gap-3 text-left"
+                                >
+                                  {item.avatarUrl ? (
+                                    <img src={item.avatarUrl} alt={`${item.username} avatar`} className="h-10 w-10 rounded-full border border-white/15 object-cover" />
+                                  ) : (
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xs font-semibold text-white/75">
+                                      {initials(item.displayName || item.username)}
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <div className="break-words text-sm font-semibold text-white">{item.displayName || item.username}</div>
+                                    <div className="mt-0.5 break-all text-xs text-white/60">@{item.username}</div>
+                                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-white/70">
+                                        {item.isPrivate ? <Lock className="h-3 w-3" /> : <LockOpen className="h-3 w-3" />}
+                                        <span>{item.isPrivate ? "Private" : "Public"}</span>
+                                      </span>
+                                      {item.followsYou ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/35 bg-cyan-300/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-cyan-100">
+                                          <Repeat2 className="h-3 w-3" />
+                                          <span>Follows you</span>
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </button>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  {item.isFollowing ? (
+                                    <Button
+                                      variant="secondary"
+                                      className="h-8 rounded-lg border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                                      disabled={unfollowingUsername === item.username}
+                                      onClick={() => setPendingUnfollowUsername(item.username)}
+                                    >
+                                      {unfollowingUsername === item.username ? (
+                                        <span className="inline-flex items-center gap-1.5">
+                                          <InlineSpinner className="h-3 w-3" />
+                                          <span>Unfollowing</span>
+                                        </span>
+                                      ) : "Unfollow"}
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {connectionsCursor ? (
+                        <Button
+                          variant="secondary"
+                          className="h-9 w-full rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                          onClick={onLoadMoreConnections}
+                          disabled={connectionsLoadingMore}
+                        >
+                          {connectionsLoadingMore ? (
+                            <span className="inline-flex items-center gap-2">
+                              <InlineSpinner />
+                              <span>Loading</span>
+                            </span>
+                          ) : "Load more"}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                <ConfirmDialog
+                  open={Boolean(pendingUnfollowUsername)}
+                  title="Unfollow user?"
+                  description={
+                    pendingUnfollowUsername
+                      ? `Are you sure you want to unfollow @${pendingUnfollowUsername}?`
+                      : ""
+                  }
+                  confirmLabel="Unfollow"
+                  cancelLabel="Cancel"
+                  destructive
+                  loading={Boolean(pendingUnfollowUsername && unfollowingUsername === pendingUnfollowUsername)}
+                  onCancel={() => {
+                    if (unfollowingUsername) return;
+                    setPendingUnfollowUsername(null);
+                  }}
+                  onConfirm={() => {
+                    if (!pendingUnfollowUsername) return;
+                    void onUnfollowFromConnections(pendingUnfollowUsername);
+                    setPendingUnfollowUsername(null);
+                  }}
+                />
               </div>
             )}
         </div>

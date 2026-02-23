@@ -26,5 +26,8 @@ public record CreateCommunityFragranceRequest(
   String visibility, // PRIVATE or PUBLIC
   @Size(max = 20) List<UUID> topNoteIds,
   @Size(max = 20) List<UUID> middleNoteIds,
-  @Size(max = 20) List<UUID> baseNoteIds
+  @Size(max = 20) List<UUID> baseNoteIds,
+  @Size(max = 20) List<@Size(max = 80) String> topNoteNames,
+  @Size(max = 20) List<@Size(max = 80) String> middleNoteNames,
+  @Size(max = 20) List<@Size(max = 80) String> baseNoteNames
 ) {}

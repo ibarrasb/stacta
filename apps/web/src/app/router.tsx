@@ -22,6 +22,7 @@ const SettingsPage = lazy(() => import("@/pages/Settings"));
 const UsersSearchPage = lazy(() => import("@/pages/Users/Search"));
 const PublicProfilePage = lazy(() => import("@/pages/Users/PublicProfile"));
 const NotificationsPage = lazy(() => import("@/pages/Notifications"));
+const AdminNoteReportsPage = lazy(() => import("@/pages/Admin/NoteReports"));
 
 export const router = createBrowserRouter([
   {
@@ -133,6 +134,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth>
             <NotificationsPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "/admin/note-reports",
+        element: (
+          <RequireAuth>
+            <AdminNoteReportsPage />
           </RequireAuth>
         ),
       },

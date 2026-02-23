@@ -389,6 +389,7 @@ export default function PublicProfilePage() {
                     ))}
                   </div>
                 </div>
+                <div className="px-1 pt-1 text-[11px] text-white/45 sm:hidden">Swipe right to see more tabs.</div>
 
                 {activeTab === "overview" ? (
                   <div className="space-y-6">

@@ -7,7 +7,9 @@ import com.stacta.api.fragrance.dto.NoteDto;   // IMPORTANT: fragrance.dto.NoteD
 import com.stacta.api.fragrance.dto.NotesDto;  // IMPORTANT: fragrance.dto.NotesDto
 import com.stacta.api.note.NoteEntity;
 import com.stacta.api.note.NoteRepository;
+import com.stacta.api.note.NoteService;
 import com.stacta.api.user.UserRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,6 +27,7 @@ public class CommunityFragranceService {
   private final FragranceRepository fragrances;
   private final UserRepository users;
   private final NoteRepository notes;
+  private final NoteService noteService;
   private final JdbcTemplate jdbc;
   private final ObjectMapper om;
 
@@ -36,12 +39,14 @@ public class CommunityFragranceService {
     FragranceRepository fragrances,
     UserRepository users,
     NoteRepository notes,
+    NoteService noteService,
     JdbcTemplate jdbc,
     ObjectMapper om
   ) {
     this.fragrances = fragrances;
     this.users = users;
     this.notes = notes;
+    this.noteService = noteService;
     this.jdbc = jdbc;
     this.om = om;
   }
@@ -73,9 +78,9 @@ public class CommunityFragranceService {
       (concentration == null ? "" : "|" + normalizeKey(concentration));
 
     // Fetch note entities (preserve order)
-    List<NoteEntity> top    = fetchNotesInOrder(req.topNoteIds());
-    List<NoteEntity> middle = fetchNotesInOrder(req.middleNoteIds());
-    List<NoteEntity> base   = fetchNotesInOrder(req.baseNoteIds());
+    List<NoteEntity> top    = resolveNotes(req.topNoteIds(), req.topNoteNames(), user.getId());
+    List<NoteEntity> middle = resolveNotes(req.middleNoteIds(), req.middleNoteNames(), user.getId());
+    List<NoteEntity> base   = resolveNotes(req.baseNoteIds(), req.baseNoteNames(), user.getId());
 
     // Build response snapshot
     FragranceSearchResult snapshot = buildSnapshot(
@@ -125,7 +130,15 @@ public class CommunityFragranceService {
       f.setSnapshot("{}");
     }
 
-    Fragrance saved = fragrances.saveAndFlush(f);
+    Fragrance saved;
+    try {
+      saved = fragrances.saveAndFlush(f);
+    } catch (DataIntegrityViolationException e) {
+      throw new ResponseStatusException(
+        HttpStatus.CONFLICT,
+        "A community fragrance with the same brand/name/year/concentration already exists."
+      );
+    }
 
     // Insert junction rows + bump usage_count
     insertFragranceNotes(saved.getId(), top, "TOP");
@@ -164,14 +177,14 @@ public class CommunityFragranceService {
     List<String> mainAccords = normalizeAccords(req.mainAccords());
     Map<String, String> mainAccordsPercentage = normalizeAccordStrengths(req.mainAccordsPercentage(), mainAccords);
 
-    boolean topProvided = req.topNoteIds() != null;
-    boolean middleProvided = req.middleNoteIds() != null;
-    boolean baseProvided = req.baseNoteIds() != null;
+    boolean topProvided = req.topNoteIds() != null || req.topNoteNames() != null;
+    boolean middleProvided = req.middleNoteIds() != null || req.middleNoteNames() != null;
+    boolean baseProvided = req.baseNoteIds() != null || req.baseNoteNames() != null;
     boolean anyNotesProvided = topProvided || middleProvided || baseProvided;
 
-    List<NoteEntity> top = topProvided ? fetchNotesInOrder(req.topNoteIds()) : List.of();
-    List<NoteEntity> middle = middleProvided ? fetchNotesInOrder(req.middleNoteIds()) : List.of();
-    List<NoteEntity> base = baseProvided ? fetchNotesInOrder(req.baseNoteIds()) : List.of();
+    List<NoteEntity> top = topProvided ? resolveNotes(req.topNoteIds(), req.topNoteNames(), user.getId()) : List.of();
+    List<NoteEntity> middle = middleProvided ? resolveNotes(req.middleNoteIds(), req.middleNoteNames(), user.getId()) : List.of();
+    List<NoteEntity> base = baseProvided ? resolveNotes(req.baseNoteIds(), req.baseNoteNames(), user.getId()) : List.of();
     NotesDto existingNotes = readNotesFromSnapshot(fragrance.getSnapshot());
 
     List<NoteDto> topDtos = topProvided ? toNoteDtos(top) : (existingNotes == null || existingNotes.top() == null ? List.of() : existingNotes.top());
@@ -248,6 +261,32 @@ public class CommunityFragranceService {
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the creator can delete this fragrance");
     }
 
+    deleteCommunityFragranceAndDependencies(fragrance);
+  }
+
+  @Transactional
+  public void forceDeleteByAdmin(String externalId, String adminSub) {
+    var admin = users.findByCognitoSub(adminSub)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "User not onboarded"));
+    if (!admin.isAdmin()) {
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin access required.");
+    }
+
+    String ext = normalizeKey(externalId);
+    var fragrance = fragrances.findByExternalSourceAndExternalId("COMMUNITY", ext)
+      .orElseGet(() -> fragrances.findByExternalSourceAndExternalId("community", ext)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Community fragrance not found")));
+
+    deleteCommunityFragranceAndDependencies(fragrance);
+  }
+
+  private void deleteCommunityFragranceAndDependencies(Fragrance fragrance) {
+    List<UUID> noteIds = jdbc.query(
+      "SELECT note_id FROM fragrance_note WHERE fragrance_id = ?",
+      (rs, rowNum) -> rs.getObject(1, UUID.class),
+      fragrance.getId()
+    );
+
     // Remove denormalized dependencies keyed by (source, external_id) to prevent orphaned records.
     jdbc.update(
       "DELETE FROM fragrance_rating WHERE LOWER(external_source) = LOWER(?) AND external_id = ?",
@@ -261,6 +300,22 @@ public class CommunityFragranceService {
     );
 
     fragrances.delete(fragrance);
+
+    if (noteIds != null && !noteIds.isEmpty()) {
+      for (UUID noteId : noteIds) {
+        if (noteId == null) continue;
+        jdbc.update(
+          """
+          DELETE FROM note_dictionary n
+          WHERE n.id = ?
+            AND NOT EXISTS (
+              SELECT 1 FROM fragrance_note fn WHERE fn.note_id = n.id
+            )
+          """,
+          noteId
+        );
+      }
+    }
   }
 
   // ✅ NEW: community search from DB (respects visibility via repository query)
@@ -405,6 +460,38 @@ public class CommunityFragranceService {
       if (e != null) out.add(e);
     }
     return out;
+  }
+
+  private List<NoteEntity> resolveNotes(List<UUID> ids, List<String> names, UUID userId) {
+    LinkedHashMap<UUID, NoteEntity> ordered = new LinkedHashMap<>();
+
+    for (NoteEntity note : fetchNotesInOrder(ids)) {
+      ordered.putIfAbsent(note.getId(), note);
+    }
+
+    Set<String> seenNormalized = ordered.values().stream()
+      .map(NoteEntity::getNormalizedName)
+      .filter(Objects::nonNull)
+      .collect(Collectors.toCollection(LinkedHashSet::new));
+
+    if (names != null) {
+      for (String raw : names) {
+        String cleaned = normalizeOptional(raw);
+        if (cleaned == null) continue;
+
+        String normalized = NoteService.normalize(cleaned);
+        if (normalized.isBlank() || seenNormalized.contains(normalized)) continue;
+
+        NoteEntity saved = noteService.upsertFromUserInput(cleaned, userId);
+        if (saved == null || saved.getId() == null) continue;
+
+        ordered.putIfAbsent(saved.getId(), saved);
+        seenNormalized.add(normalized);
+        if (ordered.size() >= 20) break;
+      }
+    }
+
+    return new ArrayList<>(ordered.values());
   }
 
   private static List<NoteDto> toNoteDtos(List<NoteEntity> list) {

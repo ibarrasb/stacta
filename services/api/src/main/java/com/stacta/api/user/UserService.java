@@ -197,6 +197,7 @@ public class UserService {
       u.getBio(),
       u.getAvatarUrl(),
       u.isVerified(),
+      u.isAdmin(),
       u.isPrivate(),
       u.getFollowersCount(),
       u.getFollowingCount(),
