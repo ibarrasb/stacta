@@ -9,8 +9,13 @@ export type AddCollectionItemRequest = {
   imageUrl?: string | null;
 };
 
+export type AddCollectionItemResponse = {
+  item: CollectionItem;
+  status: "ADDED" | "ALREADY_EXISTS";
+};
+
 export function addToCollection(body: AddCollectionItemRequest) {
-  return authedFetch<CollectionItem>("/api/v1/collection", {
+  return authedFetch<AddCollectionItemResponse>("/api/v1/collection", {
     method: "POST",
     body: JSON.stringify(body),
   });

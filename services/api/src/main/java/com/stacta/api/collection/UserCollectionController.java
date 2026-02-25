@@ -1,7 +1,7 @@
 package com.stacta.api.collection;
 
 import com.stacta.api.collection.dto.AddCollectionItemRequest;
-import com.stacta.api.collection.dto.CollectionItemDto;
+import com.stacta.api.collection.dto.AddCollectionItemResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,7 +23,7 @@ public class UserCollectionController {
   }
 
   @PostMapping
-  public CollectionItemDto add(
+  public AddCollectionItemResponse add(
     @AuthenticationPrincipal Jwt jwt,
     @Valid @RequestBody AddCollectionItemRequest req
   ) {

@@ -9,6 +9,7 @@ import com.stacta.api.user.UserRepository;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,6 +59,19 @@ public class ReviewService {
     event.setReviewSeason(toJsonOrNull(season));
     event.setReviewOccasion(toJsonOrNull(occasion));
     activities.save(event);
+  }
+
+  @Transactional
+  public void delete(String viewerSub, UUID reviewId) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    ActivityEvent event = activities.findById(reviewId).orElseThrow(() -> new ApiException("REVIEW_NOT_FOUND"));
+    if (!"REVIEW_POSTED".equalsIgnoreCase(String.valueOf(event.getType()))) {
+      throw new ApiException("REVIEW_NOT_FOUND");
+    }
+    if (!me.getId().equals(event.getActorUserId())) {
+      throw new ApiException("REVIEW_FORBIDDEN");
+    }
+    activities.delete(event);
   }
 
   private Map<String, Integer> normalizeRatingMap(Map<String, Integer> input, int maxEntries) {

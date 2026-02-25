@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
@@ -454,34 +455,51 @@ export default function PublicProfilePage() {
                           No fragrances in this collection yet.
                         </div>
                       ) : (
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          {profile.collectionItems.map((item) => (
-                            <button
-                              type="button"
-                              key={`${item.source}:${item.externalId}`}
-                              onClick={() => openFragranceDetail(item.source, item.externalId)}
-                              className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left"
-                            >
-                              <div className="flex items-center gap-3">
-                                <img
-                                  src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
-                                  alt={item.name}
-                                  className="h-14 w-14 rounded-xl border border-white/10 object-cover bg-white/5"
-                                  loading="lazy"
-                                  onError={(e) => {
-                                    const img = e.currentTarget;
-                                    if (img.dataset.fallbackApplied === "1") return;
-                                    img.dataset.fallbackApplied = "1";
-                                    img.src = FALLBACK_FRAGRANCE_IMG;
-                                  }}
-                                />
-                                <div className="min-w-0">
-                                  <div className="truncate text-sm font-semibold text-white/90">{item.name}</div>
-                                  <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>
+                        <div className="mt-3">
+                          <div className="mb-3 text-[11px] uppercase tracking-[0.12em] text-white/70">Showcase Shelf</div>
+                          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                            {profile.collectionItems.map((item) => (
+                              <div
+                                key={`${item.source}:${item.externalId}`}
+                                className="rounded-2xl border border-white/10 bg-black/20 p-3 text-left"
+                              >
+                                <button
+                                  type="button"
+                                  className="flex w-full items-start gap-3 text-left"
+                                  onClick={() => openFragranceDetail(item.source, item.externalId)}
+                                >
+                                  <img
+                                    src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                                    alt={item.name}
+                                    className="h-20 w-16 rounded-xl border border-white/15 object-cover bg-white/5"
+                                    loading="lazy"
+                                    onError={(e) => {
+                                      const img = e.currentTarget;
+                                      if (img.dataset.fallbackApplied === "1") return;
+                                      img.dataset.fallbackApplied = "1";
+                                      img.src = FALLBACK_FRAGRANCE_IMG;
+                                    }}
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-semibold leading-snug text-white/95 break-words">{item.name}</div>
+                                    <div className="mt-1 text-xs text-white/65 break-words">{item.brand || "—"}</div>
+                                  </div>
+                                </button>
+                                <div className="mt-3 flex justify-center">
+                                  <Button
+                                    variant="secondary"
+                                    className="h-8 rounded-lg border border-white/12 bg-white/8 px-3 text-xs font-medium text-white/90 hover:bg-white/14"
+                                    onClick={() => openFragranceDetail(item.source, item.externalId)}
+                                  >
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <Eye className="h-3.5 w-3.5" />
+                                      <span>View</span>
+                                    </span>
+                                  </Button>
                                 </div>
                               </div>
-                            </button>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -489,7 +507,7 @@ export default function PublicProfilePage() {
                 ) : null}
 
                 {activeTab === "reviews" ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <div>
                     <div className="text-sm font-semibold">Reviews</div>
                     <div className="mt-1 text-xs text-white/60">
                       {profile.isVisible
@@ -503,7 +521,7 @@ export default function PublicProfilePage() {
                 ) : null}
 
                 {activeTab === "wishlist" ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <div>
                     <div className="text-sm font-semibold">Wishlist</div>
                     <div className="mt-1 text-xs text-white/60">
                       {profile.isVisible ? "Fragrances this user wants to try later." : "Follow to view this user's wishlist."}
@@ -519,14 +537,15 @@ export default function PublicProfilePage() {
                     ) : (
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         {profile.wishlistItems.map((item) => (
-                          <button
-                            type="button"
+                          <div
                             key={`${item.source}:${item.externalId}`}
-                            onClick={() => openFragranceDetail(item.source, item.externalId)}
-                            className="group relative overflow-hidden rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-400/12 via-sky-500/8 to-blue-500/10 p-3 text-left shadow-[0_10px_30px_rgba(56,189,248,0.14)]"
+                            className="group rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left"
                           >
-                            <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-cyan-200/10 blur-2xl" />
-                            <div className="relative flex items-center gap-3">
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-3 text-left"
+                              onClick={() => openFragranceDetail(item.source, item.externalId)}
+                            >
                               <img
                                 src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
                                 alt={item.name}
@@ -544,8 +563,20 @@ export default function PublicProfilePage() {
                                 <div className="truncate text-xs text-white/70">{item.brand || "—"}</div>
                                 <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-cyan-100/80">Wishlist</div>
                               </div>
+                            </button>
+                            <div className="relative mt-3 flex justify-center">
+                              <Button
+                                variant="secondary"
+                                className="h-8 rounded-lg border border-white/12 bg-white/8 px-3 text-xs font-medium text-white/90 hover:bg-white/14"
+                                onClick={() => openFragranceDetail(item.source, item.externalId)}
+                              >
+                                <span className="inline-flex items-center gap-1.5">
+                                  <Eye className="h-3.5 w-3.5" />
+                                  <span>View</span>
+                                </span>
+                              </Button>
                             </div>
-                          </button>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -553,7 +584,7 @@ export default function PublicProfilePage() {
                 ) : null}
 
                 {activeTab === "community" ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <div>
                     <div className="text-sm font-semibold">Community Fragrances</div>
                     <div className="mt-1 text-xs text-white/60">
                       {profile.isVisible
@@ -571,13 +602,15 @@ export default function PublicProfilePage() {
                     ) : (
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         {profile.communityFragrances.map((item) => (
-                          <button
-                            type="button"
+                          <div
                             key={`${item.source}:${item.externalId}`}
-                            onClick={() => openFragranceDetail(item.source, item.externalId)}
-                            className="rounded-2xl border border-white/10 bg-black/20 p-3 text-left"
+                            className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left"
                           >
-                            <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-3 text-left"
+                              onClick={() => openFragranceDetail(item.source, item.externalId)}
+                            >
                               <img
                                 src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
                                 alt={item.name}
@@ -594,8 +627,20 @@ export default function PublicProfilePage() {
                                 <div className="truncate text-sm font-semibold text-white/90">{item.name}</div>
                                 <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>
                               </div>
+                            </button>
+                            <div className="mt-3 flex justify-center">
+                              <Button
+                                variant="secondary"
+                                className="h-8 rounded-lg border border-white/12 bg-white/8 px-3 text-xs font-medium text-white/90 hover:bg-white/14"
+                                onClick={() => openFragranceDetail(item.source, item.externalId)}
+                              >
+                                <span className="inline-flex items-center gap-1.5">
+                                  <Eye className="h-3.5 w-3.5" />
+                                  <span>View</span>
+                                </span>
+                              </Button>
                             </div>
-                          </button>
+                          </div>
                         ))}
                       </div>
                     )}

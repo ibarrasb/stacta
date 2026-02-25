@@ -19,3 +19,9 @@ export function submitReview(body: SubmitReviewRequest) {
     body: JSON.stringify(body),
   });
 }
+
+export function deleteReview(reviewId: string) {
+  return authedFetch<void>(`/api/v1/reviews/${encodeURIComponent(reviewId)}`, {
+    method: "DELETE",
+  });
+}

@@ -9,17 +9,17 @@ const ONBOARDED_KEY = "stacta:onboardedSub";
 
 const NAV_ITEMS = [
   { label: "Home", to: "/home" },
-  { label: "Search", to: "/search" },
-  { label: "Users", to: "/users" },
+  { label: "Fragrances", to: "/search" },
+  { label: "Profiles", to: "/users" },
   { label: "Notifications", to: "/notifications" },
   { label: "Profile", to: "/profile" },
 ] as const;
 
 const MOBILE_NAV_ITEMS = [
   { label: "Home", to: "/home" },
-  { label: "Search", to: "/search" },
+  { label: "Fragrances", to: "/search" },
   { label: "Alerts", to: "/notifications" },
-  { label: "Users", to: "/users" },
+  { label: "Profiles", to: "/users" },
   { label: "Me", to: "/profile" },
 ] as const;
 

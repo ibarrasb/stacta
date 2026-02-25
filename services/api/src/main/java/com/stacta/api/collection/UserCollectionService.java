@@ -1,6 +1,7 @@
 package com.stacta.api.collection;
 
 import com.stacta.api.collection.dto.AddCollectionItemRequest;
+import com.stacta.api.collection.dto.AddCollectionItemResponse;
 import com.stacta.api.collection.dto.CollectionItemDto;
 import com.stacta.api.config.ApiException;
 import com.stacta.api.social.ActivityEvent;
@@ -38,7 +39,7 @@ public class UserCollectionService {
   }
 
   @Transactional
-  public CollectionItemDto add(String sub, AddCollectionItemRequest req) {
+  public AddCollectionItemResponse add(String sub, AddCollectionItemRequest req) {
     User me = users.findByCognitoSub(sub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
 
     String source = normalizeSource(req.source());
@@ -48,6 +49,7 @@ public class UserCollectionService {
       throw new ApiException("INVALID_COLLECTION_ITEM");
     }
 
+    boolean isNew = false;
     UserCollectionItem entity = items.findByUserIdAndFragranceSourceAndFragranceExternalId(me.getId(), source, externalId)
       .orElseGet(() -> {
         UserCollectionItem created = new UserCollectionItem();
@@ -56,12 +58,19 @@ public class UserCollectionService {
         created.setFragranceExternalId(externalId);
         return created;
       });
+    if (entity.getId() == null) {
+      isNew = true;
+    }
 
     entity.setFragranceName(name);
     entity.setFragranceBrand(nullIfBlank(req.brand()));
     entity.setFragranceImageUrl(nullIfBlank(req.imageUrl()));
 
-    return toDto(items.save(entity));
+    var saved = items.save(entity);
+    if (isNew) {
+      appendCollectionActivity(saved);
+    }
+    return new AddCollectionItemResponse(toDto(saved), isNew ? "ADDED" : "ALREADY_EXISTS");
   }
 
   @Transactional(readOnly = true)
@@ -114,7 +123,7 @@ public class UserCollectionService {
     entity.setFragranceImageUrl(nullIfBlank(req.imageUrl()));
     var saved = wishlistItems.save(entity);
     if (isNew) {
-      appendWishlistActivity(me.getId(), saved.getFragranceName());
+      appendWishlistActivity(saved);
     }
     return toDto(saved);
   }
@@ -241,11 +250,25 @@ public class UserCollectionService {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
-  private void appendWishlistActivity(UUID actorUserId, String fragranceName) {
+  private void appendCollectionActivity(UserCollectionItem item) {
     ActivityEvent event = new ActivityEvent();
-    event.setActorUserId(actorUserId);
+    event.setActorUserId(item.getUserId());
+    event.setType("COLLECTION_ITEM_ADDED");
+    event.setFragranceName(item.getFragranceName());
+    event.setFragranceSource(item.getFragranceSource());
+    event.setFragranceExternalId(item.getFragranceExternalId());
+    event.setFragranceImageUrl(item.getFragranceImageUrl());
+    activities.save(event);
+  }
+
+  private void appendWishlistActivity(UserWishlistItem item) {
+    ActivityEvent event = new ActivityEvent();
+    event.setActorUserId(item.getUserId());
     event.setType("WISHLIST_ITEM_ADDED");
-    event.setFragranceName(fragranceName);
+    event.setFragranceName(item.getFragranceName());
+    event.setFragranceSource(item.getFragranceSource());
+    event.setFragranceExternalId(item.getFragranceExternalId());
+    event.setFragranceImageUrl(item.getFragranceImageUrl());
     activities.save(event);
   }
 }

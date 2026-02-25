@@ -24,7 +24,20 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class CommunityFragranceVoteService {
-  private static final Set<String> ALLOWED_PRICE = Set.of("GREAT_VALUE", "FAIR", "OVERPRICED");
+  private static final String VERY_OVERPRICED = "VERY_OVERPRICED";
+  private static final String A_BIT_OVERPRICED = "A_BIT_OVERPRICED";
+  private static final String FAIR = "FAIR";
+  private static final String GOOD_VALUE = "GOOD_VALUE";
+  private static final String EXCELLENT_VALUE = "EXCELLENT_VALUE";
+  private static final Set<String> ALLOWED_PRICE = Set.of(
+    VERY_OVERPRICED,
+    A_BIT_OVERPRICED,
+    FAIR,
+    GOOD_VALUE,
+    EXCELLENT_VALUE,
+    "GREAT_VALUE",
+    "OVERPRICED"
+  );
   private static final Map<String, String> SEASON_LABELS = Map.of(
     "SPRING", "Spring",
     "SUMMER", "Summer",
@@ -55,9 +68,18 @@ public class CommunityFragranceVoteService {
     5, "Nuclear"
   );
   private static final Map<String, String> PRICE_LABELS = Map.of(
-    "GREAT_VALUE", "Great value",
-    "FAIR", "Fair",
-    "OVERPRICED", "Overpriced"
+    VERY_OVERPRICED, "Very overpriced",
+    A_BIT_OVERPRICED, "A bit overpriced",
+    FAIR, "Fair",
+    GOOD_VALUE, "Good value",
+    EXCELLENT_VALUE, "Excellent value"
+  );
+  private static final List<String> PRICE_KEYS = List.of(
+    VERY_OVERPRICED,
+    A_BIT_OVERPRICED,
+    FAIR,
+    GOOD_VALUE,
+    EXCELLENT_VALUE
   );
 
   private final FragranceRepository fragrances;
@@ -159,7 +181,8 @@ public class CommunityFragranceVoteService {
       """,
       fragranceId,
       SEASON_LABELS,
-      List.of("SPRING", "SUMMER", "FALL", "WINTER")
+      List.of("SPRING", "SUMMER", "FALL", "WINTER"),
+      false
     );
 
     List<RankingDto> occasion = listKeyRanking(
@@ -172,7 +195,8 @@ public class CommunityFragranceVoteService {
       """,
       fragranceId,
       OCCASION_LABELS,
-      List.of("DAILY", "OFFICE", "DATE_NIGHT", "EVENING", "FORMAL", "PARTY", "GYM")
+      List.of("DAILY", "OFFICE", "DATE_NIGHT", "EVENING", "FORMAL", "PARTY", "GYM"),
+      false
     );
 
     List<RankingDto> price = listKeyRanking(
@@ -184,7 +208,8 @@ public class CommunityFragranceVoteService {
       """,
       fragranceId,
       PRICE_LABELS,
-      List.of("GREAT_VALUE", "FAIR", "OVERPRICED")
+      PRICE_KEYS,
+      true
     );
 
     CommunityFragranceVoteSelection userVote = jdbc.query(
@@ -198,7 +223,7 @@ public class CommunityFragranceVoteService {
         return new CommunityFragranceVoteSelection(
           (Integer) rs.getObject("longevity_score"),
           (Integer) rs.getObject("sillage_score"),
-          rs.getString("price_perception"),
+          canonicalPriceKey(rs.getString("price_perception")),
           parseJsonList(rs.getString("season_votes_json")),
           parseJsonList(rs.getString("occasion_votes_json"))
         );
@@ -241,11 +266,15 @@ public class CommunityFragranceVoteService {
     String sql,
     UUID fragranceId,
     Map<String, String> labelMap,
-    List<String> orderedKeys
+    List<String> orderedKeys,
+    boolean canonicalizePrice
   ) {
     Map<String, Long> counts = new LinkedHashMap<>();
     jdbc.query(sql, rs -> {
-      counts.put(rs.getString("key"), rs.getLong("cnt"));
+      String rawKey = rs.getString("key");
+      String key = canonicalizePrice ? canonicalPriceKey(rawKey) : rawKey;
+      if (key == null || key.isBlank()) return;
+      counts.put(key, counts.getOrDefault(key, 0L) + rs.getLong("cnt"));
     }, fragranceId);
 
     List<RankingDto> out = new ArrayList<>();
@@ -276,7 +305,18 @@ public class CommunityFragranceVoteService {
     if (!ALLOWED_PRICE.contains(normalized)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid pricePerception");
     }
-    return normalized;
+    return canonicalPriceKey(normalized);
+  }
+
+  private String canonicalPriceKey(String key) {
+    if (key == null || key.isBlank()) return null;
+    String normalized = key.trim().toUpperCase(Locale.ROOT).replace(' ', '_');
+    return switch (normalized) {
+      case "OVERPRICED" -> A_BIT_OVERPRICED;
+      case "GREAT_VALUE" -> GOOD_VALUE;
+      case VERY_OVERPRICED, A_BIT_OVERPRICED, FAIR, GOOD_VALUE, EXCELLENT_VALUE -> normalized;
+      default -> null;
+    };
   }
 
   private List<String> normalizeMulti(List<String> raw, Set<String> allowed, int maxLen) {

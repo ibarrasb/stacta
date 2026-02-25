@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lock, LockOpen, Repeat2 } from "lucide-react";
+import { Crown, Eye, Lock, LockOpen, Repeat2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
@@ -13,6 +13,7 @@ import ReviewCard from "@/components/feed/ReviewCard";
 import ProfilePhotoPicker from "@/components/profile/ProfilePhotoPicker";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { getMe, updateMe } from "@/lib/api/me";
+import { deleteReview } from "@/lib/api/reviews";
 import { addTopFragrance, removeFromCollection, removeFromWishlist, removeTopFragrance } from "@/lib/api/collection";
 import { listFollowers, listFollowing, unfollowUser } from "@/lib/api/follows";
 import { listMyReviewFeed } from "@/lib/api/feed";
@@ -133,6 +134,8 @@ export default function ProfilePage() {
   const [reviewsLoadingMore, setReviewsLoadingMore] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+  const [pendingDeleteReviewId, setPendingDeleteReviewId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,6 +255,22 @@ export default function ProfilePage() {
       setReviewsError(e?.message || "Failed to load more reviews.");
     } finally {
       setReviewsLoadingMore(false);
+    }
+  }
+
+  async function onDeleteReview(reviewId: string) {
+    if (!reviewId) return;
+    setDeletingReviewId(reviewId);
+    setReviewsError(null);
+    try {
+      await deleteReview(reviewId);
+      setReviewItems((prev) => prev.filter((x) => x.id !== reviewId));
+      setMe((prev) => prev ? { ...prev, reviewCount: Math.max(0, prev.reviewCount - 1) } : prev);
+    } catch (e: any) {
+      setReviewsError(e?.message || "Failed to delete review.");
+    } finally {
+      setDeletingReviewId(null);
+      setPendingDeleteReviewId(null);
     }
   }
 
@@ -818,15 +837,24 @@ export default function ProfilePage() {
                           Your collection is empty.
                         </div>
                       ) : (
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div className="mt-3">
+                          <div className="mb-3 text-[11px] uppercase tracking-[0.12em] text-white/70">Showcase Shelf</div>
+                          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                           {me.collectionItems.map((item) => (
-                            <div key={`${item.source}:${item.externalId}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                            <div
+                              key={`${item.source}:${item.externalId}`}
+                              className="rounded-2xl border border-white/10 bg-black/20 p-3"
+                            >
                               <div className="flex flex-col gap-3">
-                                <div className="flex min-w-0 items-start gap-3">
+                                <button
+                                  type="button"
+                                  className="flex min-w-0 items-start gap-3 text-left"
+                                  onClick={() => openFragranceDetail(item.source, item.externalId)}
+                                >
                                   <img
                                     src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
                                     alt={item.name}
-                                    className="h-14 w-14 rounded-xl border border-white/10 object-cover bg-white/5"
+                                    className="h-20 w-16 rounded-xl border border-white/15 object-cover bg-white/5"
                                     loading="lazy"
                                     onError={(e) => {
                                       const img = e.currentTarget;
@@ -836,21 +864,31 @@ export default function ProfilePage() {
                                     }}
                                   />
                                   <div className="min-w-0">
-                                    <div className="text-sm font-semibold leading-snug text-white/90 break-words">{item.name}</div>
-                                    <div className="mt-1 text-xs text-white/60 break-words">{item.brand || "—"}</div>
+                                    <div className="text-sm font-semibold leading-snug text-white/95 break-words">{item.name}</div>
+                                    <div className="mt-1 text-xs text-white/65 break-words">{item.brand || "—"}</div>
+                                    {me.topFragrances.some(
+                                      (x) => x.source.toUpperCase() === item.source.toUpperCase() && x.externalId === item.externalId
+                                    ) ? (
+                                      <div className="mt-1 inline-flex items-center rounded-full border border-amber-300/30 bg-amber-300/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-100">
+                                        Top 3
+                                      </div>
+                                    ) : null}
                                   </div>
-                                </div>
-                                <div className="flex w-full flex-wrap justify-center gap-2">
+                                </button>
+                                <div className="grid w-full grid-cols-2 gap-2">
                                   <Button
                                     variant="secondary"
-                                    className="h-8 rounded-lg border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                                    className="h-8 w-full rounded-lg border border-white/12 bg-white/8 px-3 text-xs font-medium text-white/90 hover:bg-white/14"
                                     onClick={() => openFragranceDetail(item.source, item.externalId)}
                                   >
-                                    View
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <Eye className="h-3.5 w-3.5" />
+                                      <span>View</span>
+                                    </span>
                                   </Button>
                                   <Button
                                     variant="secondary"
-                                    className="h-8 rounded-lg border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                                    className="h-8 w-full rounded-lg border border-red-300/20 bg-red-400/10 px-3 text-xs font-medium text-red-100 hover:bg-red-400/18"
                                     disabled={removingCollectionKey === `${item.source}:${item.externalId}`}
                                     onClick={() => onRemoveCollectionItem(item.source, item.externalId)}
                                   >
@@ -859,11 +897,16 @@ export default function ProfilePage() {
                                         <InlineSpinner className="h-3 w-3" />
                                         <span>Removing</span>
                                       </span>
-                                    ) : "Remove"}
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5">
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                        <span>Remove</span>
+                                      </span>
+                                    )}
                                   </Button>
                                   <Button
                                     variant="secondary"
-                                    className="h-8 rounded-lg border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                                    className="col-span-2 h-8 w-full rounded-lg border border-amber-300/30 bg-amber-300/12 px-3 text-xs font-medium text-amber-100 hover:bg-amber-300/18 disabled:opacity-60"
                                     disabled={
                                       togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ||
                                       (!me.topFragrances.some(
@@ -881,18 +924,29 @@ export default function ProfilePage() {
                                           <InlineSpinner className="h-3 w-3" />
                                           <span>Updating</span>
                                         </span>
-                                      ) : "Remove Top 3")
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1.5">
+                                          <Crown className="h-3.5 w-3.5" />
+                                          <span>In Top 3</span>
+                                        </span>
+                                      ))
                                       : (togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ? (
                                         <span className="inline-flex items-center gap-1.5">
                                           <InlineSpinner className="h-3 w-3" />
                                           <span>Updating</span>
                                         </span>
-                                      ) : "Set Top 3")}
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1.5">
+                                          <Crown className="h-3.5 w-3.5" />
+                                          <span>Set Top 3</span>
+                                        </span>
+                                      ))}
                                   </Button>
                                 </div>
                               </div>
                             </div>
                           ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -900,7 +954,7 @@ export default function ProfilePage() {
                 ) : null}
 
                 {activeTab === "reviews" ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <div>
                     <div className="text-sm font-semibold">Reviews</div>
                     <div className="mt-1 text-xs text-white/60">You have posted {me.reviewCount} review(s).</div>
                     {reviewsError ? (
@@ -925,6 +979,8 @@ export default function ProfilePage() {
                             timeAgo={timeAgo(item.createdAt)}
                             onOpenUser={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/profile" } } })}
                             onOpenFragrance={() => openFeedFragrance(item)}
+                            onDelete={() => setPendingDeleteReviewId(item.id)}
+                            deleting={deletingReviewId === item.id}
                           />
                         ))}
                       </div>
@@ -962,11 +1018,28 @@ export default function ProfilePage() {
                         Discover fragrances to review
                       </Button>
                     </div>
+                    <ConfirmDialog
+                      open={Boolean(pendingDeleteReviewId)}
+                      title="Delete review?"
+                      description="This removes the review from your profile and feed."
+                      confirmLabel="Delete"
+                      cancelLabel="Cancel"
+                      destructive
+                      loading={Boolean(pendingDeleteReviewId && deletingReviewId === pendingDeleteReviewId)}
+                      onCancel={() => {
+                        if (deletingReviewId) return;
+                        setPendingDeleteReviewId(null);
+                      }}
+                      onConfirm={() => {
+                        if (!pendingDeleteReviewId) return;
+                        void onDeleteReview(pendingDeleteReviewId);
+                      }}
+                    />
                   </div>
                 ) : null}
 
                 {activeTab === "wishlist" ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <div>
                     <div className="text-sm font-semibold">Wishlist</div>
                     <div className="mt-1 text-xs text-white/60">Save fragrances you want to try later.</div>
                     {!me.wishlistItems?.length ? (
@@ -978,12 +1051,11 @@ export default function ProfilePage() {
                         {me.wishlistItems.map((item) => (
                           <div
                             key={`${item.source}:${item.externalId}`}
-                            className="group relative overflow-hidden rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-400/12 via-sky-500/8 to-blue-500/10 p-3 shadow-[0_10px_30px_rgba(56,189,248,0.14)]"
+                            className="group rounded-2xl border border-white/10 bg-white/[0.03] p-3"
                           >
-                            <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-cyan-200/10 blur-2xl" />
                             <button
                               type="button"
-                              className="relative flex w-full items-center gap-3 text-left"
+                              className="flex w-full items-center gap-3 text-left"
                               onClick={() => openFragranceDetail(item.source, item.externalId)}
                             >
                               <img
@@ -1007,14 +1079,14 @@ export default function ProfilePage() {
                             <div className="relative mt-3 flex items-center justify-center gap-2">
                               <Button
                                 variant="secondary"
-                                className="h-8 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white hover:bg-white/15"
+                                className="h-8 rounded-lg border border-white/12 bg-white/8 px-2 text-xs text-white hover:bg-white/14"
                                 onClick={() => openFragranceDetail(item.source, item.externalId)}
                               >
                                 View
                               </Button>
                               <Button
                                 variant="secondary"
-                                className="h-8 rounded-lg border border-red-300/25 bg-red-400/12 px-2 text-xs text-red-100 hover:bg-red-400/20"
+                                className="h-8 rounded-lg border border-red-300/20 bg-red-400/10 px-2 text-xs text-red-100 hover:bg-red-400/18"
                                 disabled={removingWishlistKey === `${item.source.toUpperCase()}:${item.externalId}`}
                                 onClick={() => onRemoveWishlistItem(item.source, item.externalId)}
                               >
@@ -1039,7 +1111,7 @@ export default function ProfilePage() {
                 ) : null}
 
                 {activeTab === "community" ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <div>
                     <div className="text-sm font-semibold">Community Fragrances</div>
                     <div className="mt-1 text-xs text-white/60">
                       You have contributed {me.communityFragranceCount} community fragrance(s).
@@ -1051,7 +1123,7 @@ export default function ProfilePage() {
                     ) : (
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         {me.communityFragrances.map((item) => (
-                          <div key={`${item.source}:${item.externalId}`} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                          <div key={`${item.source}:${item.externalId}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                             <div className="flex items-center gap-3">
                               <img
                                 src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
@@ -1071,7 +1143,7 @@ export default function ProfilePage() {
                               </div>
                               <Button
                                 variant="secondary"
-                                className="h-8 rounded-lg border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                                className="h-8 rounded-lg border border-white/12 bg-white/8 px-3 text-xs text-white hover:bg-white/14"
                                 onClick={() => openFragranceDetail(item.source, item.externalId)}
                               >
                                 View

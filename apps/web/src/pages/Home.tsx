@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Heart, MessageCircle, Repeat2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
 import ReviewCard from "@/components/feed/ReviewCard";
+import { getMe } from "@/lib/api/me";
+import { deleteReview } from "@/lib/api/reviews";
 import { getUnreadNotificationsCount } from "@/lib/api/notifications";
 import { listFeed, type FeedFilter, type FeedTab } from "@/lib/api/feed";
 import type { FeedItem } from "@/lib/api/types";
@@ -57,6 +60,9 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewerUsername, setViewerUsername] = useState<string | null>(null);
+  const [pendingDeleteReviewId, setPendingDeleteReviewId] = useState<string | null>(null);
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +72,22 @@ export default function HomePage() {
       })
       .catch(() => {
         if (!cancelled) setUnreadCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((me) => {
+        if (cancelled) return;
+        setViewerUsername(me.username ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setViewerUsername(null);
       });
     return () => {
       cancelled = true;
@@ -104,6 +126,21 @@ export default function HomePage() {
       setError(e?.message || "Failed to load more feed items.");
     } finally {
       setLoadingMore(false);
+    }
+  }
+
+  async function onDeleteReview(reviewId: string) {
+    if (!reviewId) return;
+    setDeletingReviewId(reviewId);
+    setError(null);
+    try {
+      await deleteReview(reviewId);
+      setItems((prev) => prev.filter((x) => x.id !== reviewId));
+    } catch (e: any) {
+      setError(e?.message || "Failed to delete review.");
+    } finally {
+      setDeletingReviewId(null);
+      setPendingDeleteReviewId(null);
     }
   }
 
@@ -259,6 +296,12 @@ export default function HomePage() {
                         },
                       });
                     }}
+                    onDelete={
+                      viewerUsername && item.actorUsername.toLowerCase() === viewerUsername.toLowerCase()
+                        ? () => setPendingDeleteReviewId(item.id)
+                        : undefined
+                    }
+                    deleting={deletingReviewId === item.id}
                   />
                 ) : (
                   <article
@@ -319,7 +362,7 @@ export default function HomePage() {
                           type="button"
                           title="Like"
                           aria-label="Like activity"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/75 transition hover:border-[#3EB489]/60 hover:bg-[#3EB489]/15 hover:text-[#3EB489]"
+                          className="inline-flex h-7 w-7 items-center justify-center text-white/65 transition hover:text-[#3EB489]"
                         >
                           <Heart className="h-4 w-4" />
                         </button>
@@ -327,7 +370,7 @@ export default function HomePage() {
                           type="button"
                           title="Comment"
                           aria-label="Comment on activity"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/75 transition hover:border-[#3EB489]/60 hover:bg-[#3EB489]/15 hover:text-[#3EB489]"
+                          className="inline-flex h-7 w-7 items-center justify-center text-white/65 transition hover:text-[#3EB489]"
                         >
                           <MessageCircle className="h-4 w-4" />
                         </button>
@@ -335,7 +378,7 @@ export default function HomePage() {
                           type="button"
                           title="Repost"
                           aria-label="Repost activity"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/75 transition hover:border-[#3EB489]/60 hover:bg-[#3EB489]/15 hover:text-[#3EB489]"
+                          className="inline-flex h-7 w-7 items-center justify-center text-white/65 transition hover:text-[#3EB489]"
                         >
                           <Repeat2 className="h-4 w-4" />
                         </button>
@@ -402,6 +445,23 @@ export default function HomePage() {
           </aside>
         </div>
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingDeleteReviewId)}
+        title="Delete review?"
+        description="This removes the review from your profile and feed."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        destructive
+        loading={Boolean(pendingDeleteReviewId && deletingReviewId === pendingDeleteReviewId)}
+        onCancel={() => {
+          if (deletingReviewId) return;
+          setPendingDeleteReviewId(null);
+        }}
+        onConfirm={() => {
+          if (!pendingDeleteReviewId) return;
+          void onDeleteReview(pendingDeleteReviewId);
+        }}
+      />
     </div>
   );
 }

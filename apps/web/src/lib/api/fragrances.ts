@@ -56,7 +56,15 @@ export type FragranceRatingSummary = {
 export type CommunityVoteSelection = {
   longevityScore: number | null;
   sillageScore: number | null;
-  pricePerception: "GREAT_VALUE" | "FAIR" | "OVERPRICED" | null;
+  pricePerception:
+    | "VERY_OVERPRICED"
+    | "A_BIT_OVERPRICED"
+    | "FAIR"
+    | "GOOD_VALUE"
+    | "EXCELLENT_VALUE"
+    | "OVERPRICED"
+    | "GREAT_VALUE"
+    | null;
   seasonVotes: string[];
   occasionVotes: string[];
 };
@@ -74,7 +82,15 @@ export type CommunityVoteSummary = {
 export type UpsertCommunityVoteRequest = {
   longevityScore?: number | null;
   sillageScore?: number | null;
-  pricePerception?: "GREAT_VALUE" | "FAIR" | "OVERPRICED" | null;
+  pricePerception?:
+    | "VERY_OVERPRICED"
+    | "A_BIT_OVERPRICED"
+    | "FAIR"
+    | "GOOD_VALUE"
+    | "EXCELLENT_VALUE"
+    | "OVERPRICED"
+    | "GREAT_VALUE"
+    | null;
   seasonVotes?: string[];
   occasionVotes?: string[];
 };

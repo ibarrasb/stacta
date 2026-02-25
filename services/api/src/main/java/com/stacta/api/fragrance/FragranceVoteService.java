@@ -23,7 +23,20 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class FragranceVoteService {
-  private static final Set<String> ALLOWED_PRICE = Set.of("GREAT_VALUE", "FAIR", "OVERPRICED");
+  private static final String VERY_OVERPRICED = "VERY_OVERPRICED";
+  private static final String A_BIT_OVERPRICED = "A_BIT_OVERPRICED";
+  private static final String FAIR = "FAIR";
+  private static final String GOOD_VALUE = "GOOD_VALUE";
+  private static final String EXCELLENT_VALUE = "EXCELLENT_VALUE";
+  private static final Set<String> ALLOWED_PRICE = Set.of(
+    VERY_OVERPRICED,
+    A_BIT_OVERPRICED,
+    FAIR,
+    GOOD_VALUE,
+    EXCELLENT_VALUE,
+    "GREAT_VALUE",
+    "OVERPRICED"
+  );
   private static final Map<String, String> SEASON_LABELS = Map.of(
     "SPRING", "Spring",
     "SUMMER", "Summer",
@@ -56,9 +69,18 @@ public class FragranceVoteService {
     5, "Nuclear"
   );
   private static final Map<String, String> PRICE_LABELS = Map.of(
-    "GREAT_VALUE", "Great value",
-    "FAIR", "Fair",
-    "OVERPRICED", "Overpriced"
+    VERY_OVERPRICED, "Very overpriced",
+    A_BIT_OVERPRICED, "A bit overpriced",
+    FAIR, "Fair",
+    GOOD_VALUE, "Good value",
+    EXCELLENT_VALUE, "Excellent value"
+  );
+  private static final List<String> PRICE_KEYS = List.of(
+    VERY_OVERPRICED,
+    A_BIT_OVERPRICED,
+    FAIR,
+    GOOD_VALUE,
+    EXCELLENT_VALUE
   );
   private static final double PRIOR_LON_SIL_WEIGHT = 320.0;
   private static final double PRIOR_SEASON_OCCASION_WEIGHT = 180.0;
@@ -208,7 +230,8 @@ public class FragranceVoteService {
       """,
       externalId,
       PRICE_LABELS,
-      List.of("GREAT_VALUE", "FAIR", "OVERPRICED")
+      PRICE_KEYS,
+      true
     );
 
     CommunityFragranceVoteSelection userVote = jdbc.query(
@@ -222,7 +245,7 @@ public class FragranceVoteService {
         return new CommunityFragranceVoteSelection(
           (Integer) rs.getObject("longevity_score"),
           (Integer) rs.getObject("sillage_score"),
-          rs.getString("price_perception"),
+          canonicalPriceKey(rs.getString("price_perception")),
           parseJsonList(rs.getString("season_votes_json")),
           parseJsonList(rs.getString("occasion_votes_json"))
         );
@@ -293,13 +316,16 @@ public class FragranceVoteService {
     String sql,
     String externalId,
     Map<String, String> labelMap,
-    List<String> orderedKeys
+    List<String> orderedKeys,
+    boolean canonicalizePrice
   ) {
     Map<String, Double> counts = new LinkedHashMap<>();
     jdbc.queryForList(sql, externalId).forEach((row) -> {
-      String key = String.valueOf(row.get("key"));
+      String rawKey = String.valueOf(row.get("key"));
+      String key = canonicalizePrice ? canonicalPriceKey(rawKey) : rawKey;
+      if (key == null || key.isBlank()) return;
       Number cnt = (Number) row.get("cnt");
-      counts.put(key, cnt == null ? 0.0 : cnt.doubleValue());
+      counts.put(key, counts.getOrDefault(key, 0.0) + (cnt == null ? 0.0 : cnt.doubleValue()));
     });
     List<RankingDto> out = new ArrayList<>();
     for (String key : orderedKeys) {
@@ -384,7 +410,18 @@ public class FragranceVoteService {
     if (!ALLOWED_PRICE.contains(normalized)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid pricePerception");
     }
-    return normalized;
+    return canonicalPriceKey(normalized);
+  }
+
+  private String canonicalPriceKey(String key) {
+    if (key == null || key.isBlank()) return null;
+    String normalized = key.trim().toUpperCase(Locale.ROOT).replace(' ', '_');
+    return switch (normalized) {
+      case "OVERPRICED" -> A_BIT_OVERPRICED;
+      case "GREAT_VALUE" -> GOOD_VALUE;
+      case VERY_OVERPRICED, A_BIT_OVERPRICED, FAIR, GOOD_VALUE, EXCELLENT_VALUE -> normalized;
+      default -> null;
+    };
   }
 
   private List<String> normalizeMulti(List<String> raw, Set<String> allowed, int maxLen) {

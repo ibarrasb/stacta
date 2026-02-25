@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import defaultNoteImg from "@/assets/notes/default-note.png";
 import {
   createCommunityFragrance,
   updateCommunityFragrance,
@@ -13,7 +14,7 @@ import {
   type FragranceSearchResult,
 } from "@/lib/api/fragrances";
 
-const DEFAULT_NOTE_IMG = "/src/assets/notes/download.svg";
+const DEFAULT_NOTE_IMG = defaultNoteImg;
 const CONCENTRATION_OPTIONS = [
   "Eau Fraiche",
   "Eau de Cologne (EdC)",
@@ -113,6 +114,7 @@ export default function AddCommunityFragranceDialog({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noteAddedHint, setNoteAddedHint] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -146,7 +148,14 @@ export default function AddCommunityFragranceDialog({
     setNoteSearch("");
     setNoteResults([]);
     setError(null);
+    setNoteAddedHint(null);
   }, [open, initialBrand, initialName, initialFragrance]);
+
+  useEffect(() => {
+    if (!noteAddedHint) return;
+    const t = window.setTimeout(() => setNoteAddedHint(null), 1400);
+    return () => window.clearTimeout(t);
+  }, [noteAddedHint]);
 
   useEffect(() => {
     if (!open) return;
@@ -184,6 +193,8 @@ export default function AddCommunityFragranceDialog({
     if (targetStage === "TOP") setTop((prev) => uniqById([...prev, n]).slice(0, 20));
     if (targetStage === "MIDDLE") setMiddle((prev) => uniqById([...prev, n]).slice(0, 20));
     if (targetStage === "BASE") setBase((prev) => uniqById([...prev, n]).slice(0, 20));
+    const stageLabel = targetStage === "TOP" ? "Top notes" : targetStage === "MIDDLE" ? "Middle notes" : "Base notes";
+    setNoteAddedHint(`Added to ${stageLabel}`);
   }
 
   function addCustomNote() {
@@ -307,6 +318,12 @@ export default function AddCommunityFragranceDialog({
 
       {error ? <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
 
+        {!isEdit ? (
+          <div className="rounded-2xl border border-amber-200/25 bg-amber-200/10 px-4 py-3 text-xs text-amber-100/95">
+            Draft tip: keep this fragrance private while you build it out. You can switch between private and public anytime while editing.
+          </div>
+        ) : null}
+
         <div className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -398,7 +415,7 @@ export default function AddCommunityFragranceDialog({
             </div>
 
             <div className="mt-3">
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   value={noteSearch}
                   onChange={(e) => setNoteSearch(e.target.value)}
@@ -408,19 +425,22 @@ export default function AddCommunityFragranceDialog({
                       addCustomNote();
                     }
                   }}
-                  className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
+                  className="h-10 w-full rounded-xl border-white/10 bg-white/5 text-white sm:flex-1"
                   placeholder="Search notes (e.g. bergamot, amber, vanilla)…"
                 />
                 <Button
                   type="button"
                   variant="secondary"
-                  className="h-10 rounded-xl border border-white/12 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                  className="h-10 w-full rounded-xl border border-white/12 bg-white/10 px-3 text-xs text-white hover:bg-white/15 sm:w-auto"
                   onClick={addCustomNote}
                   disabled={!noteSearch.trim()}
                 >
                   Add custom
                 </Button>
               </div>
+              {noteAddedHint ? (
+                <div className="mt-2 text-[11px] text-cyan-100/90">{noteAddedHint}</div>
+              ) : null}
             </div>
 
             {noteResults.length ? (
@@ -429,7 +449,12 @@ export default function AddCommunityFragranceDialog({
                   {noteResults.slice(0, 30).map((n) => (
                     <div key={n.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
                       <div className="flex min-w-0 items-center gap-3">
-                        <img src={n.imageUrl || DEFAULT_NOTE_IMG} onError={(e) => { e.currentTarget.src = DEFAULT_NOTE_IMG; }} alt={n.name} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
+                        <img
+                          src={n.imageUrl || DEFAULT_NOTE_IMG}
+                          onError={(e) => { e.currentTarget.src = DEFAULT_NOTE_IMG; }}
+                          alt={n.name}
+                          className={`h-9 w-9 shrink-0 rounded-xl object-cover ${!n.imageUrl ? "scale-[1.30]" : "scale-100"}`}
+                        />
                         <div className="min-w-0">
                           <div className="truncate text-sm">{n.name}</div>
                           <div className="mt-0.5 text-[11px] text-white/50">{typeof n.usageCount === "number" ? `Used ${n.usageCount}` : ""}</div>

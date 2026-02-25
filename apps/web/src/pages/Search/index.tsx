@@ -1,12 +1,22 @@
 // apps/web/src/pages/Search/index.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { Search as SearchIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { searchFragrances, searchCommunityFragrances, type FragranceSearchResult } from "@/lib/api/fragrances";
 import fragrancePlaceholder from "@/assets/illustrations/NotFound.png";
 
 const FALLBACK_IMG = fragrancePlaceholder;
+const RECENT_FRAGRANCE_SEARCHES_KEY = "stacta:recent-fragrance-searches";
+const MAX_RECENT_FRAGRANCE_SEARCHES = 8;
+const QUICK_SEARCH_TERMS = [
+  "Dior Sauvage",
+  "Bleu de Chanel",
+  "YSL Y",
+  "Aventus",
+  "Baccarat Rouge 540",
+];
 
 
 function pickExternalId(item: any): string | null {
@@ -257,6 +267,7 @@ export default function SearchPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
   const [results, setResults] = useState<FragranceSearchResult[]>([]);
   const [visibleCount, setVisibleCount] = useState<number>(() => clampVisible(Number(urlVisible)));
@@ -307,6 +318,22 @@ export default function SearchPage() {
     }
   }, [urlQuery]);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_FRAGRANCE_SEARCHES_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as string[];
+      if (!Array.isArray(parsed)) return;
+      const next = parsed
+        .map((x) => String(x ?? "").trim())
+        .filter(Boolean)
+        .slice(0, MAX_RECENT_FRAGRANCE_SEARCHES);
+      setRecentSearches(next);
+    } catch {
+      setRecentSearches([]);
+    }
+  }, []);
+
   // cleanup any in-flight request on unmount
   useEffect(() => {
     return () => {
@@ -335,10 +362,12 @@ export default function SearchPage() {
   );
 
   const onSearch = useCallback(async () => {
+    const effectiveQuery = query.trim();
+
     setError(null);
     setDidSearch(true);
 
-    if (!canSearch) {
+    if (effectiveQuery.length < 3) {
       setError('Enter at least 3 characters. Example: "Dior Sauvage".');
       return;
     }
@@ -357,8 +386,8 @@ export default function SearchPage() {
     try {
       //requires updated fragrances.ts: searchFragrances(params, { signal })
       const [fragellaData, communityData] = await Promise.all([
-        searchFragrances({ q: query, limit: 50, persist: true }, { signal: ctrl.signal }),
-        searchCommunityFragrances({ q: query, limit: 50 }, { signal: ctrl.signal }),
+        searchFragrances({ q: effectiveQuery, limit: 50, persist: true }, { signal: ctrl.signal }),
+        searchCommunityFragrances({ q: effectiveQuery, limit: 50 }, { signal: ctrl.signal }),
       ]);
       
       if (ctrl.signal.aborted) return;
@@ -381,7 +410,7 @@ export default function SearchPage() {
         return true;
       });
       
-      const ranked = rankSearchResults(merged.map(normalize), query);
+      const ranked = rankSearchResults(merged.map(normalize), effectiveQuery);
       const list = ranked.slice(0, 50);
       setResults(list);
       
@@ -390,17 +419,24 @@ export default function SearchPage() {
 
       setParams(
         {
-          q: query,
+          q: effectiveQuery,
           visible: String(nextVisible),
         },
         { replace: true }
       );
 
       saveCache({
-        query,
+        query: effectiveQuery,
         results: list,
         visibleCount: nextVisible,
         scrollY: 0,
+      });
+
+      setRecentSearches((prev) => {
+        const deduped = prev.filter((x) => x.toLowerCase() !== effectiveQuery.toLowerCase());
+        const next = [effectiveQuery, ...deduped].slice(0, MAX_RECENT_FRAGRANCE_SEARCHES);
+        localStorage.setItem(RECENT_FRAGRANCE_SEARCHES_KEY, JSON.stringify(next));
+        return next;
       });
 
       requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" as any }));
@@ -416,7 +452,7 @@ export default function SearchPage() {
         setLoading(false);
       }
     }
-  }, [canSearch, query, saveCache, setParams]);
+  }, [query, saveCache, setParams]);
 
   const visibleResults = useMemo(
     () => results.slice(0, Math.min(visibleCount, 50)),
@@ -479,6 +515,77 @@ export default function SearchPage() {
     });
   }, [navigate, params, query]);
 
+  const runSearchFromValue = useCallback((value: string) => {
+    const next = value.trim();
+    setSearchText(next);
+    setParams(
+      {
+        q: next,
+        visible: "10",
+      },
+      { replace: true }
+    );
+    requestAnimationFrame(() => {
+      void (async () => {
+        searchAbortRef.current?.abort();
+        const ctrl = new AbortController();
+        searchAbortRef.current = ctrl;
+
+        const seq = ++searchSeqRef.current;
+        setError(null);
+        setDidSearch(true);
+
+        if (next.length < 3) {
+          setError('Enter at least 3 characters. Example: "Dior Sauvage".');
+          return;
+        }
+
+        setLoading(true);
+        try {
+          const [fragellaData, communityData] = await Promise.all([
+            searchFragrances({ q: next, limit: 50, persist: true }, { signal: ctrl.signal }),
+            searchCommunityFragrances({ q: next, limit: 50 }, { signal: ctrl.signal }),
+          ]);
+          if (ctrl.signal.aborted || seq !== searchSeqRef.current) return;
+
+          const mergedRaw = [
+            ...(Array.isArray(communityData) ? communityData : []),
+            ...(Array.isArray(fragellaData) ? fragellaData : []),
+          ];
+          const seen = new Set<string>();
+          const merged = mergedRaw.filter((item: any) => {
+            const src = String(item?.source ?? "fragella").toLowerCase();
+            const id = String(item?.externalId ?? item?.external_id ?? "").trim();
+            if (!id) return true;
+            const key = `${src}:${id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          const ranked = rankSearchResults(merged.map(normalize), next);
+          const list = ranked.slice(0, 50);
+          setResults(list);
+          setVisibleCount(10);
+          if (list.length === 0) setError("No results found. Try a different spelling.");
+          saveCache({ query: next, results: list, visibleCount: 10, scrollY: 0 });
+          setRecentSearches((prev) => {
+            const deduped = prev.filter((x) => x.toLowerCase() !== next.toLowerCase());
+            const updated = [next, ...deduped].slice(0, MAX_RECENT_FRAGRANCE_SEARCHES);
+            localStorage.setItem(RECENT_FRAGRANCE_SEARCHES_KEY, JSON.stringify(updated));
+            return updated;
+          });
+          requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" as any }));
+        } catch (e: any) {
+          if (ctrl.signal.aborted || seq !== searchSeqRef.current) return;
+          setResults([]);
+          setError(e?.message || "Search failed.");
+        } finally {
+          if (!ctrl.signal.aborted && seq === searchSeqRef.current) setLoading(false);
+        }
+      })();
+    });
+  }, [saveCache, setParams]);
+
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
       <div className="mx-auto max-w-6xl px-4 pb-10">
@@ -498,24 +605,85 @@ export default function SearchPage() {
           </Button>
         </div>
 
-        <div className="rounded-3xl border border-white/15 bg-white/6 p-6">
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-            <div>
-              <div className="mb-1 text-xs font-medium uppercase tracking-[0.12em] text-white/60">Search query</div>
-              <Input
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-                className="h-11 rounded-xl border-white/10 bg-black/20 text-white placeholder:text-white/40"
-                placeholder="Dior Sauvage"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") onSearch();
-                }}
-              />
+        <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-white/6 p-6">
+          <div className="pointer-events-none absolute -right-20 -top-16 h-44 w-44 rounded-full bg-[#3EB489]/15 blur-3xl" />
+          <div className="pointer-events-none absolute -left-16 -bottom-20 h-40 w-40 rounded-full bg-cyan-300/10 blur-3xl" />
+          <div className="relative">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-xs font-medium uppercase tracking-[0.12em] text-white/60">Search query</div>
+              <div className="text-[11px] text-white/45">Min 3 characters</div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="group relative rounded-2xl border border-white/12 bg-[#0f1118]/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_12px_28px_rgba(0,0,0,0.3)] transition focus-within:border-amber-200/55 focus-within:shadow-[0_0_0_1px_rgba(253,230,138,0.45),0_12px_28px_rgba(0,0,0,0.35)]">
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45 transition group-focus-within:text-amber-100" />
+                <Input
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="h-12 border-transparent bg-transparent pl-10 pr-10 text-white placeholder:text-white/38 focus-visible:ring-0"
+                  placeholder="Dior Sauvage, Bleu de Chanel, Layton..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") onSearch();
+                  }}
+                />
+                {searchText.trim() ? (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setSearchText("")}
+                    className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/10 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+
+              <Button className="h-12 rounded-2xl border border-white/20 bg-white/10 px-6 text-white shadow-[0_10px_24px_rgba(0,0,0,0.28)] hover:bg-white/16" onClick={onSearch} disabled={loading || !canSearch}>
+                {loading ? "Searching..." : "Search"}
+              </Button>
             </div>
 
-            <Button className="h-11 rounded-xl bg-white text-black hover:bg-white/90 px-5" onClick={onSearch} disabled={loading || !canSearch}>
-              {loading ? "Searching..." : "Search"}
-            </Button>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {QUICK_SEARCH_TERMS.map((term) => (
+                <button
+                  key={`quick-${term}`}
+                  type="button"
+                  className="rounded-full border border-white/15 bg-black/25 px-3 py-1 text-xs text-white/75 transition hover:border-amber-200/40 hover:bg-amber-200/10 hover:text-white"
+                  onClick={() => runSearchFromValue(term)}
+                >
+                  {term}
+                </button>
+              ))}
+            </div>
+
+            {recentSearches.length > 0 ? (
+              <div className="mt-4 border-t border-white/10 pt-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-white/55">Recent searches</div>
+                  <button
+                    type="button"
+                    className="text-xs text-white/50 transition hover:text-white"
+                    onClick={() => {
+                      setRecentSearches([]);
+                      localStorage.setItem(RECENT_FRAGRANCE_SEARCHES_KEY, JSON.stringify([]));
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {recentSearches.map((term) => (
+                    <button
+                      key={`recent-${term}`}
+                      type="button"
+                      className="rounded-full border border-white/12 bg-white/[0.03] px-3 py-1 text-xs text-white/72 transition hover:border-white/25 hover:bg-white/[0.08] hover:text-white"
+                      onClick={() => runSearchFromValue(term)}
+                    >
+                      {term}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {error && (

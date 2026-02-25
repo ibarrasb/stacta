@@ -1,6 +1,7 @@
 // apps/web/src/pages/Fragrances/FragranceDetail.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { BookmarkPlus, Check, ChevronDown, PenSquare, Plus, ShoppingBag } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -33,7 +34,7 @@ import { submitReview } from "@/lib/api/reviews";
 import { getCreatorRatingSummary, rateCreator } from "@/lib/api/users";
 
 import fragrancePlaceholder from "@/assets/illustrations/NotFound.png";
-import defaultNoteImg from "@/assets/notes/download.svg";
+import defaultNoteImg from "@/assets/notes/default-note.png";
 
 const DEFAULT_NOTE_IMG = defaultNoteImg;
 const FALLBACK_FRAGRANCE_IMG = fragrancePlaceholder;
@@ -60,13 +61,23 @@ const CONCENTRATION_OPTIONS = [
   "Perfume Oil / Attar",
   "Solid Perfume",
 ] as const;
-const COMMUNITY_PRICE_OPTIONS = [
-  { value: "GREAT_VALUE", label: "Great value" },
-  { value: "FAIR", label: "Fair" },
-  { value: "OVERPRICED", label: "Overpriced" },
+const REVIEW_PRICE_OPTIONS = [
+  { value: 1, label: "Very overpriced" },
+  { value: 2, label: "A bit overpriced" },
+  { value: 3, label: "Fair" },
+  { value: 4, label: "Good value" },
+  { value: 5, label: "Excellent value" },
 ] as const;
 const COMMUNITY_LONGEVITY_LEVEL_LABELS = ["", "Fleeting", "Weak", "Moderate", "Long lasting", "Endless"] as const;
 const COMMUNITY_SILLAGE_LEVEL_LABELS = ["", "Skin scent", "Weak", "Moderate", "Strong", "Nuclear"] as const;
+type PriceVoteValue =
+  | "VERY_OVERPRICED"
+  | "A_BIT_OVERPRICED"
+  | "FAIR"
+  | "GOOD_VALUE"
+  | "EXCELLENT_VALUE"
+  | "OVERPRICED"
+  | "GREAT_VALUE";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -108,6 +119,56 @@ function levelLabelFrom01(value01: number, labels: readonly string[]) {
   if (safe <= 0) return "—";
   const idx = Math.max(1, Math.min(5, Math.round(safe * 5)));
   return labels[idx] ?? "—";
+}
+
+function priceVoteToScore(value: PriceVoteValue | null) {
+  if (value === "VERY_OVERPRICED") return 1;
+  if (value === "A_BIT_OVERPRICED") return 2;
+  if (value === "FAIR") return 3;
+  if (value === "GOOD_VALUE") return 4;
+  if (value === "EXCELLENT_VALUE") return 5;
+  if (value === "OVERPRICED") return 2;
+  if (value === "GREAT_VALUE") return 4;
+  return null;
+}
+
+function reviewPriceToCommunityVote(value: number | null): PriceVoteValue | null {
+  if (value === null) return null;
+  if (value <= 1) return "VERY_OVERPRICED";
+  if (value === 2) return "A_BIT_OVERPRICED";
+  if (value === 3) return "FAIR";
+  if (value === 4) return "GOOD_VALUE";
+  return "EXCELLENT_VALUE";
+}
+
+function reviewPriceLabel(value: number | null) {
+  if (value === 1) return "Very overpriced";
+  if (value === 2) return "A bit overpriced";
+  if (value === 3) return "Fair";
+  if (value === 4) return "Good value";
+  if (value === 5) return "Excellent value";
+  return null;
+}
+
+function reviewPriceToneClasses(value: number | null, active = false) {
+  if (value === 1) return active
+    ? "border-red-400/65 bg-red-500/22 text-red-100"
+    : "border-red-300/30 bg-red-500/10 text-red-100/90 hover:bg-red-500/16";
+  if (value === 2) return active
+    ? "border-orange-300/65 bg-orange-400/20 text-orange-100"
+    : "border-orange-300/30 bg-orange-500/10 text-orange-100/90 hover:bg-orange-500/16";
+  if (value === 3) return active
+    ? "border-white/45 bg-white/20 text-white"
+    : "border-white/20 bg-white/10 text-white/85 hover:bg-white/15";
+  if (value === 4) return active
+    ? "border-emerald-300/65 bg-emerald-400/20 text-emerald-100"
+    : "border-emerald-300/30 bg-emerald-500/10 text-emerald-100/90 hover:bg-emerald-500/16";
+  if (value === 5) return active
+    ? "border-green-300/70 bg-green-400/22 text-green-100"
+    : "border-green-300/35 bg-green-500/10 text-green-100/90 hover:bg-green-500/16";
+  return active
+    ? "border-[#3EB489]/60 bg-[#3EB489]/20 text-[#9de2ca]"
+    : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white";
 }
 
 function getBarFillStyle(value01: number) {
@@ -313,9 +374,9 @@ function VibeChip({ text }: { text: string }) {
   const dotG = BAR_GRADIENTS[idx];
 
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/25 px-3 py-1 text-xs text-white/85 shadow-[0_1px_0_rgba(255,255,255,0.05)]">
+    <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/15 bg-black/25 px-3 py-1 text-xs text-white/85 shadow-[0_1px_0_rgba(255,255,255,0.05)]">
       <span className={cx("h-2 w-2 rounded-full bg-gradient-to-r", dotG)} />
-      <span className="capitalize">{text}</span>
+      <span className="truncate capitalize">{text}</span>
     </span>
   );
 }
@@ -328,12 +389,15 @@ function NoteTile({ note }: { note: Note }) {
   }, [note.imageUrl]);
 
   return (
-    <div className="group flex w-[104px] flex-col items-center gap-2">
+    <div className="group flex w-[92px] flex-col items-center gap-2 sm:w-[104px]">
       <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
         <img
           src={src}
           alt={note.name}
-          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.04]"
+          className={cx(
+            "h-full w-full object-cover transition duration-300",
+            src === DEFAULT_NOTE_IMG ? "scale-[1.30] group-hover:scale-[1.38]" : "scale-100 group-hover:scale-[1.04]"
+          )}
           loading="lazy"
           decoding="async"
           onError={() => {
@@ -389,8 +453,8 @@ function EditablePyramidRow({
       {notes.length ? (
         <div className="flex flex-wrap gap-2">
           {notes.map((n, i) => (
-            <div key={`${n.id ?? n.name}-${i}`} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-              <span className="text-xs text-white/85">{n.name}</span>
+            <div key={`${n.id ?? n.name}-${i}`} className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+              <span className="max-w-[10rem] truncate text-xs text-white/85 sm:max-w-[14rem]">{n.name}</span>
               <button type="button" className="text-xs text-white/50 hover:text-white" onClick={() => onRemove(i)}>
                 ✕
               </button>
@@ -400,6 +464,85 @@ function EditablePyramidRow({
       ) : (
         <div className="text-xs text-white/50">—</div>
       )}
+    </div>
+  );
+}
+
+function ConcentrationDropdown({
+  value,
+  onChange,
+  options,
+  className,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  options: readonly string[];
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const node = rootRef.current;
+      if (!node) return;
+      const target = event.target as Node | null;
+      if (target && !node.contains(target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className={cx("relative", className)}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-8 w-full items-center justify-between gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="truncate">{value || "Select concentration"}</span>
+        <ChevronDown className={cx("h-3.5 w-3.5 text-white/65 transition", open ? "rotate-180" : "")} />
+      </button>
+      {open ? (
+        <div className="absolute left-0 right-0 z-30 mt-2 max-h-56 overflow-auto rounded-xl border border-white/12 bg-[#0f1118]/96 p-1 shadow-[0_14px_28px_rgba(0,0,0,0.45)] backdrop-blur sm:right-auto sm:min-w-[240px]">
+          <button
+            type="button"
+            role="option"
+            aria-selected={!value}
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs text-white/80 transition hover:bg-white/10"
+            onClick={() => {
+              onChange("");
+              setOpen(false);
+            }}
+          >
+            <span>Select concentration</span>
+            {!value ? <Check className="h-3.5 w-3.5 text-cyan-100" /> : null}
+          </button>
+          {options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="option"
+              aria-selected={value === option}
+              className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs text-white/85 transition hover:bg-white/10"
+              onClick={() => {
+                onChange(option);
+                setOpen(false);
+              }}
+            >
+              <span className="truncate">{option}</span>
+              {value === option ? <Check className="h-3.5 w-3.5 text-cyan-100" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -440,16 +583,16 @@ function RankingCard({
             return (
               <div key={`${it.name}-${it.score}`} className="space-y-2 rounded-xl border border-white/8 bg-white/[0.02] p-3 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0">
                 <div className="flex items-center gap-3">
-                  <div className="w-20 shrink-0 text-xs text-white/80 capitalize sm:w-24 sm:truncate">{it.name}</div>
+                  <div className="w-20 shrink-0 truncate text-xs text-white/80 capitalize sm:w-24">{it.name}</div>
                   <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
                     <div className="h-full rounded-full" style={{ width: pct(v01), ...getBarFillStyle(v01) }} />
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pl-[5.75rem] sm:pl-[6.75rem]">
-                  <div className="shrink-0 min-w-[3.25rem] text-right text-[11px] tabular-nums text-white/65">{it.score.toFixed(2)}</div>
+                <div className="flex flex-wrap items-center justify-end gap-2 pl-0 sm:gap-3 sm:pl-[6.75rem]">
+                  <div className="shrink-0 text-right text-[11px] tabular-nums text-white/65 sm:min-w-[3.25rem]">{it.score.toFixed(2)}</div>
                   {onVote ? (
-                    <div className="inline-flex shrink-0 items-center gap-0.5">
+                    <div className="inline-flex min-w-0 shrink-0 items-center gap-0.5">
                       {Array.from({ length: 5 }).map((_, i) => {
                         const n = i + 1;
                         const lit = n <= userStars;
@@ -514,6 +657,13 @@ function hasUsableExternalId(v: string | null | undefined) {
   return Boolean(id) && !isSyntheticRouteId(id);
 }
 
+function collectionKey(source: string | null | undefined, externalId: string | null | undefined) {
+  const s = String(source ?? "").trim().toUpperCase();
+  const e = String(externalId ?? "").trim().toLowerCase();
+  if (!s || !e) return "";
+  return `${s}|${e}`;
+}
+
 function computeFragellaExternalId(
   brand: string | null | undefined,
   name: string | null | undefined,
@@ -561,9 +711,11 @@ export default function FragranceDetailPage() {
   const [reportFragranceReason, setReportFragranceReason] = useState<"SPAM" | "INAPPROPRIATE" | "OTHER">("INAPPROPRIATE");
   const [reportFragranceDetails, setReportFragranceDetails] = useState("");
   const [addingToCollection, setAddingToCollection] = useState(false);
+  const [viewerCollectionKeys, setViewerCollectionKeys] = useState<Set<string>>(new Set());
   const [addingToWishlist, setAddingToWishlist] = useState(false);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [reviewBody, setReviewBody] = useState("");
+  const [reviewPriceValue, setReviewPriceValue] = useState<number | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [editingCommunity, setEditingCommunity] = useState(false);
   const [deletingCommunity, setDeletingCommunity] = useState(false);
@@ -577,7 +729,7 @@ export default function FragranceDetailPage() {
   const [communityVoteSaving, setCommunityVoteSaving] = useState(false);
   const [communityLongevityVote, setCommunityLongevityVote] = useState<number | null>(null);
   const [communitySillageVote, setCommunitySillageVote] = useState<number | null>(null);
-  const [communityPriceVote, setCommunityPriceVote] = useState<"GREAT_VALUE" | "FAIR" | "OVERPRICED" | null>(null);
+  const [communityPriceVote, setCommunityPriceVote] = useState<PriceVoteValue | null>(null);
   const [communitySeasonVotes, setCommunitySeasonVotes] = useState<string[]>([]);
   const [communityOccasionVotes, setCommunityOccasionVotes] = useState<string[]>([]);
   const communityVoteAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -588,6 +740,7 @@ export default function FragranceDetailPage() {
   const [draftAccordInput, setDraftAccordInput] = useState("");
   const [draftNoteSearch, setDraftNoteSearch] = useState("");
   const [draftNoteResults, setDraftNoteResults] = useState<NoteDictionaryItem[]>([]);
+  const [draftNoteAddedHint, setDraftNoteAddedHint] = useState<string | null>(null);
   const [draftStage, setDraftStage] = useState<StageKey>("TOP");
   const [draftBrand, setDraftBrand] = useState("");
   const [draftName, setDraftName] = useState("");
@@ -660,10 +813,17 @@ export default function FragranceDetailPage() {
       .then((me) => {
         if (cancelled) return;
         setViewerUser({ id: me.id ?? null, username: me.username ?? null });
+        const keys = new Set<string>();
+        (me.collectionItems ?? []).forEach((item) => {
+          const key = collectionKey(item.source, item.externalId);
+          if (key) keys.add(key);
+        });
+        setViewerCollectionKeys(keys);
       })
       .catch(() => {
         if (cancelled) return;
         setViewerUser(null);
+        setViewerCollectionKeys(new Set());
       });
     return () => {
       cancelled = true;
@@ -691,6 +851,7 @@ export default function FragranceDetailPage() {
     setDraftAccordInput("");
     setDraftNoteSearch("");
     setDraftNoteResults([]);
+    setDraftNoteAddedHint(null);
     setDraftStage("TOP");
   }, [editingCommunity, fragrance, isCreateMode]);
 
@@ -716,8 +877,15 @@ export default function FragranceDetailPage() {
     setDraftAccordInput("");
     setDraftNoteSearch("");
     setDraftNoteResults([]);
+    setDraftNoteAddedHint(null);
     setDraftStage("TOP");
   }, [isCreateMode, location?.state]);
+
+  useEffect(() => {
+    if (!draftNoteAddedHint) return;
+    const t = window.setTimeout(() => setDraftNoteAddedHint(null), 1400);
+    return () => window.clearTimeout(t);
+  }, [draftNoteAddedHint]);
 
   useEffect(() => {
     if (!editingCommunity) return;
@@ -983,15 +1151,23 @@ export default function FragranceDetailPage() {
 
     setAddingToCollection(true);
     try {
-      await addCollectionItem({
+      const res = await addCollectionItem({
         source,
         externalId: external,
         name,
         brand: fragrance?.brand ?? null,
         imageUrl: fragrance?.imageUrl ?? null,
       });
+      const key = collectionKey(source, external);
+      if (key) {
+        setViewerCollectionKeys((prev) => {
+          const next = new Set(prev);
+          next.add(key);
+          return next;
+        });
+      }
       setNoticeTitle("Collection");
-      setNotice("Added to collection.");
+      setNotice(res.status === "ALREADY_EXISTS" ? "Already in collection." : "Added to collection.");
     } catch (e: any) {
       setNoticeTitle("Collection");
       setNotice(e?.message || "Failed to add fragrance to collection.");
@@ -1070,8 +1246,9 @@ export default function FragranceDetailPage() {
   }, [fragrance, routeExternalId]);
 
   const writeReview = useCallback(async () => {
+    setReviewPriceValue(priceVoteToScore(communityPriceVote));
     setReviewDialogOpen(true);
-  }, []);
+  }, [communityPriceVote]);
 
   const submitReportFragrance = useCallback(async () => {
     const ext = String(fragrance?.externalId ?? "").trim();
@@ -1110,7 +1287,15 @@ export default function FragranceDetailPage() {
         }
 
         const lv = normalizeLabel(v);
-        const map: Record<string, number> = { dominant: 0.92, prominent: 0.75, moderate: 0.55, low: 0.3 };
+        const map: Record<string, number> = {
+          dominant: 0.92,
+          prominent: 0.75,
+          moderate: 0.55,
+          low: 0.3,
+          subtle: 0.18,
+          light: 0.18,
+          faint: 0.14,
+        };
         const n = map[lv] ?? 0;
         return { name: key, value01: n, labelRight: String(v) };
       })
@@ -1249,6 +1434,10 @@ export default function FragranceDetailPage() {
     return hasUsableExternalId(resolved) ? resolved : "";
   }, [fragrance, isCreateMode, routeExternalId, voteSource]);
   const canVoteFragrance = Boolean(voteExternalId);
+  const inCollection = useMemo(() => {
+    const key = collectionKey(voteSource, voteExternalId);
+    return key ? viewerCollectionKeys.has(key) : false;
+  }, [viewerCollectionKeys, voteSource, voteExternalId]);
   const ratingExternalId = useMemo(() => {
     const normalizedSource = String(fragrance?.source ?? inferPreferredSource(routeExternalId || "") ?? "FRAGELLA")
       .trim()
@@ -1306,11 +1495,10 @@ export default function FragranceDetailPage() {
           communityVoteHydratingRef.current = true;
           setCommunityLongevityVote(mine?.longevityScore ?? null);
           setCommunitySillageVote(mine?.sillageScore ?? null);
-          setCommunityPriceVote(
-            mine?.pricePerception === "GREAT_VALUE" || mine?.pricePerception === "FAIR" || mine?.pricePerception === "OVERPRICED"
-              ? mine.pricePerception
-              : null
-          );
+          setCommunityPriceVote((mine?.pricePerception as PriceVoteValue) ?? null);
+          setReviewPriceValue(priceVoteToScore(
+            (mine?.pricePerception as PriceVoteValue) ?? null
+          ));
           setCommunitySeasonVotes(Array.isArray(mine?.seasonVotes) ? mine.seasonVotes : []);
           setCommunityOccasionVotes(Array.isArray(mine?.occasionVotes) ? mine.occasionVotes : []);
           communityVoteLastSavedRef.current = JSON.stringify({
@@ -1419,14 +1607,10 @@ export default function FragranceDetailPage() {
 
   const reviewScorecard = useMemo(() => {
     const performance: Array<{ label: string; value: number }> = [];
-    const resolvedLongevity = communityLongevityVote ?? (longevity01 > 0 ? Math.round(longevity01 * 5) : null);
-    const resolvedSillage = communitySillageVote ?? (sillage01 > 0 ? Math.round(sillage01 * 5) : null);
-    const resolvedConfidence = confidence01 > 0 ? Math.round(confidence01 * 5) : null;
-    const resolvedPopularity = popularity01 > 0 ? Math.round(popularity01 * 5) : null;
-    if (resolvedLongevity !== null) performance.push({ label: "Longevity", value: resolvedLongevity });
-    if (resolvedSillage !== null) performance.push({ label: "Sillage", value: resolvedSillage });
-    if (resolvedConfidence !== null) performance.push({ label: "Confidence", value: resolvedConfidence });
-    if (resolvedPopularity !== null) performance.push({ label: "Popularity", value: resolvedPopularity });
+    if (communityLongevityVote !== null) performance.push({ label: "Longevity", value: communityLongevityVote });
+    if (communitySillageVote !== null) performance.push({ label: "Sillage", value: communitySillageVote });
+    const priceScore = reviewPriceValue;
+    const priceLabel = reviewPriceLabel(reviewPriceValue);
 
     const season = Object.entries(communitySeasonStarsByKey)
       .filter(([, stars]) => Number(stars) > 0)
@@ -1438,16 +1622,13 @@ export default function FragranceDetailPage() {
       .map(([key, stars]) => ({ label: fromVoteKey(key), value: Number(stars) }))
       .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
 
-    return { performance, season, occasion };
+    return { performance, season, occasion, priceScore, priceLabel };
   }, [
     communityLongevityVote,
     communityOccasionStarsByKey,
     communitySeasonStarsByKey,
     communitySillageVote,
-    confidence01,
-    longevity01,
-    popularity01,
-    sillage01,
+    reviewPriceValue,
   ]);
 
   const submissionHandler = useCallback(async () => {
@@ -1510,6 +1691,10 @@ export default function FragranceDetailPage() {
 
     setReviewSubmitting(true);
     try {
+      const performancePayload = Object.fromEntries(reviewScorecard.performance.map((it) => [it.label.toLowerCase(), it.value]));
+      if (reviewScorecard.priceScore !== null) {
+        performancePayload.price_perception = reviewScorecard.priceScore;
+      }
       await submitReview({
         source,
         externalId: resolvedExternal,
@@ -1518,7 +1703,7 @@ export default function FragranceDetailPage() {
         fragranceImageUrl: fragrance?.imageUrl ?? null,
         rating,
         excerpt,
-        performance: Object.fromEntries(reviewScorecard.performance.map((it) => [it.label.toLowerCase(), it.value])),
+        performance: performancePayload,
         season: Object.fromEntries(reviewScorecard.season.map((it) => [it.label.toLowerCase(), it.value])),
         occasion: Object.fromEntries(reviewScorecard.occasion.map((it) => [it.label.toLowerCase(), it.value])),
       });
@@ -1645,6 +1830,7 @@ export default function FragranceDetailPage() {
 
   const shownLongevity01 = isEditingForm ? clamp01(draftLongevity / 5) : longevity01;
   const shownSillage01 = isEditingForm ? clamp01(draftSillage / 5) : sillage01;
+  const hideComputedVotingSectionsWhileEditingCommunity = isCommunityFragrance && isEditingForm;
   const shownConfidence01 = isEditingForm ? clamp01(draftConfidence / 4) : confidence01;
   const shownPopularity01 = isEditingForm ? clamp01(draftPopularity / 4) : popularity01;
   const canSaveEdit = draftBrand.trim().length > 0 && draftName.trim().length > 0;
@@ -1684,6 +1870,8 @@ export default function FragranceDetailPage() {
     if (draftStage === "TOP") setDraftTopNotes((prev) => dedupe([...prev, mapped]));
     if (draftStage === "MIDDLE") setDraftMiddleNotes((prev) => dedupe([...prev, mapped]));
     if (draftStage === "BASE") setDraftBaseNotes((prev) => dedupe([...prev, mapped]));
+    const stageLabel = draftStage === "TOP" ? "Top notes" : draftStage === "MIDDLE" ? "Middle notes" : "Base notes";
+    setDraftNoteAddedHint(`Added to ${stageLabel}`);
   }
 
   function addCustomDraftNote() {
@@ -1803,8 +1991,8 @@ export default function FragranceDetailPage() {
   ]);
 
   return (
-    <div className="min-h-screen text-white stacta-fade-rise">
-      <div className="mx-auto max-w-6xl px-4 pb-28 sm:pb-10">
+    <div className="min-h-screen overflow-x-hidden text-white stacta-fade-rise">
+      <div className="mx-auto max-w-6xl overflow-x-hidden px-4 pb-28 sm:pb-10">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/15 bg-black/30 p-5">
           <div>
             <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Fragrance Intelligence</div>
@@ -1857,20 +2045,20 @@ export default function FragranceDetailPage() {
               </Button>
             ) : null}
             {isCommunityFragrance && createdByUsername ? (
-              <div className="w-full rounded-2xl border border-cyan-300/20 bg-cyan-400/8 px-3 py-2 sm:w-auto">
-                <div className="flex items-center justify-center gap-2 sm:justify-start">
-                  <span className="text-[11px] font-medium text-cyan-100/90">Stacta rep</span>
+              <div className="w-full sm:w-auto sm:mr-2">
+                <div className="flex flex-wrap items-center justify-start gap-2 text-xs">
+                  <span className="font-medium text-white/85">Stacta rep</span>
                   <AverageStars value={creatorRatingState?.average ?? 0} />
-                  <span className="text-[11px] text-white/75">
+                  <span className="text-white/70">
                     {creatorRatingState && creatorRatingState.count > 0
                       ? `${creatorRatingState.average.toFixed(2)} • ${creatorRatingState.count}`
                       : "No ratings"}
                   </span>
                 </div>
                 {canRateCreator ? (
-                  <div className="mt-1 flex flex-col items-center gap-1 sm:flex-row sm:items-center sm:gap-2">
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
                     <span className="text-[11px] text-white/55">Rate stacta rep</span>
-                    <div className="inline-flex flex-nowrap items-center gap-1 rounded-full border border-white/15 bg-black/20 px-2 py-1 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1">
                       {Array.from({ length: 5 }).map((_, i) => {
                         const n = i + 1;
                         const lit = n <= (creatorRatingState?.userRating ?? 0);
@@ -1879,7 +2067,7 @@ export default function FragranceDetailPage() {
                             key={`creator-rate-${n}`}
                             type="button"
                             className={cx(
-                              "grid h-8 w-8 place-items-center rounded-md text-base leading-none transition touch-manipulation",
+                              "grid h-7 w-7 place-items-center rounded-md text-base leading-none transition touch-manipulation",
                               lit ? "text-amber-200" : "text-white/30 hover:text-white/70"
                             )}
                             onClick={() => onRateCreator(n)}
@@ -1893,28 +2081,12 @@ export default function FragranceDetailPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-[11px] text-white/55">
+                  <div className="mt-1 text-[11px] text-white/55">
                     {viewerUser?.username && createdByUsername && viewerUser.username.toLowerCase() === createdByUsername.toLowerCase()
                       ? "You can’t rate yourself"
                       : "Sign in to rate creator"}
                   </div>
                 )}
-                {!canManageCommunity ? (
-                  <div className="mt-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="h-8 rounded-xl border border-red-300/30 bg-red-400/12 px-3 text-xs text-red-100 hover:bg-red-400/20"
-                      onClick={() => {
-                        setReportFragranceReason("INAPPROPRIATE");
-                        setReportFragranceDetails("");
-                        setReportFragranceDialogOpen(true);
-                      }}
-                    >
-                      Report fragrance
-                    </Button>
-                  </div>
-                ) : null}
               </div>
             ) : null}
             <Button
@@ -1933,7 +2105,23 @@ export default function FragranceDetailPage() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/15 bg-white/6 p-6">
+        <div className="relative overflow-x-hidden rounded-3xl border border-white/15 bg-white/6 p-4 sm:p-6">
+          {!isCreateMode && isCommunityFragrance && !canManageCommunity ? (
+            <div className="absolute left-4 right-4 top-4 z-10 sm:left-auto sm:right-6 sm:top-6">
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-8 w-full rounded-xl border border-red-300/25 bg-transparent px-3 text-xs text-red-100 hover:bg-red-400/12 sm:w-auto"
+                onClick={() => {
+                  setReportFragranceReason("INAPPROPRIATE");
+                  setReportFragranceDetails("");
+                  setReportFragranceDialogOpen(true);
+                }}
+              >
+                Report fragrance
+              </Button>
+            </div>
+          ) : null}
           {showSkeleton ? (
             <div className="rounded-2xl border border-white/15 bg-black/25 p-8">
               <LoadingSpinner label="Fetching fragrance details..." />
@@ -1967,8 +2155,8 @@ export default function FragranceDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="grid gap-6 lg:grid-cols-[380px_1fr] lg:items-start">
-              <div className="overflow-hidden rounded-3xl border border-white/15 bg-black/25 lg:sticky lg:top-24">
+            <div className="grid min-w-0 gap-6 overflow-x-hidden lg:grid-cols-[380px_1fr] lg:items-start">
+              <div className="min-w-0 overflow-hidden rounded-3xl border border-white/15 bg-black/25 lg:sticky ">
                 <div className="p-4">
                   <div className="mb-4 lg:hidden">
                     {isEditingForm ? (
@@ -1982,21 +2170,20 @@ export default function FragranceDetailPage() {
                         <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
                       </>
                     )}
+                    {isCommunityFragrance && isEditingForm ? (
+                      <div className="mt-2 rounded-xl border border-amber-200/25 bg-amber-200/10 px-3 py-2 text-[11px] text-amber-100/95">
+                        Draft tip: keep this private while you are still building it. You can switch between private and public anytime.
+                      </div>
+                    ) : null}
 
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {isEditingForm ? (
-                        <select
+                        <ConcentrationDropdown
                           value={draftConcentration}
-                          onChange={(e) => setDraftConcentration(e.target.value)}
-                          className="h-8 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
-                        >
-                          <option value="">Select concentration</option>
-                          {CONCENTRATION_OPTIONS.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={setDraftConcentration}
+                          options={CONCENTRATION_OPTIONS}
+                          className="w-full sm:w-auto"
+                        />
                       ) : oilType ? (
                         <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/85">
                           {oilType}
@@ -2026,7 +2213,7 @@ export default function FragranceDetailPage() {
                         </div>
                         {isCommunityFragrance ? (
                           isEditingForm ? (
-                            <div className="flex min-w-[170px] items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                            <div className="flex w-full min-w-0 items-center justify-between gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 sm:w-auto sm:justify-start">
                               <span className="text-[11px] text-white/65">Visibility</span>
                               <Switch
                                 checked={draftVisibility === "PUBLIC"}
@@ -2045,15 +2232,15 @@ export default function FragranceDetailPage() {
                           <button
                             type="button"
                             onClick={() => navigate(`/u/${encodeURIComponent(createdByUsername)}`)}
-                            className="inline-flex items-center rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-100/95 hover:bg-cyan-400/20"
+                            className="inline-flex min-w-0 max-w-full items-center rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-100/95 hover:bg-cyan-400/20"
                           >
-                            Created by @{createdByUsername}
+                            <span className="truncate">Created by @{createdByUsername}</span>
                           </button>
                         ) : null}
 
                     </div>
                     {isEditingForm ? (
-                      <div className="mt-2 flex items-center gap-2">
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
                         <label className="inline-flex cursor-pointer items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10">
                           Upload image
                           <input
@@ -2067,7 +2254,7 @@ export default function FragranceDetailPage() {
                           value={draftImageLabel}
                           readOnly
                           placeholder="No image selected"
-                          className="h-8 flex-1 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                          className="h-8 w-full rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none sm:w-auto sm:flex-1"
                         />
                         <Button
                           type="button"
@@ -2105,45 +2292,73 @@ export default function FragranceDetailPage() {
 
                 <div className="border-t border-white/15 bg-gradient-to-b from-white/8 to-black/10 p-4">
                   {!isCreateMode ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button className="h-10 rounded-xl px-5" onClick={addToCollection} disabled={addingToCollection}>
-                        {addingToCollection ? (
-                          <span className="inline-flex items-center gap-2">
-                            <InlineSpinner />
-                            <span>Adding</span>
+                    <div className="rounded-2xl border border-white/12 bg-white/4 p-3">
+                      <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/55">Quick Actions</div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <Button
+                          variant="secondary"
+                          className="h-11 w-full rounded-full border border-[#3EB489]/40 bg-[#3EB489]/14 px-4 text-[13px] font-medium text-[#b0ecd7] hover:bg-[#3EB489]/22"
+                          onClick={writeReview}
+                        >
+                          <span className="inline-flex items-center justify-center gap-1.5 leading-none">
+                            <PenSquare className="h-3.5 w-3.5" />
+                            <span>Review</span>
                           </span>
-                        ) : "Add to collection"}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-                        disabled={addingToWishlist}
-                        onClick={addToWishlist}
-                      >
-                        {addingToWishlist ? (
-                          <span className="inline-flex items-center gap-2">
-                            <InlineSpinner />
-                            <span>Adding</span>
+                        </Button>
+                        <Button
+                          className="h-11 w-full rounded-full border border-white/15 bg-white/10 px-4 text-[13px] font-medium text-white hover:bg-white/16"
+                          onClick={addToCollection}
+                          disabled={addingToCollection || inCollection}
+                        >
+                          {addingToCollection ? (
+                            <span className="inline-flex items-center gap-2">
+                              <InlineSpinner />
+                              <span>Adding</span>
+                            </span>
+                          ) : inCollection ? (
+                            <span className="inline-flex items-center justify-center gap-1.5 leading-none text-[#9de2ca]">
+                              <Check className="h-3.5 w-3.5" />
+                              <span>In Collection</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center gap-1.5 leading-none">
+                              <Plus className="h-3.5 w-3.5" />
+                              <span>Add Collection</span>
+                            </span>
+                          )}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className="h-11 w-full rounded-full border border-white/15 bg-white/8 px-4 text-[13px] font-medium text-white/90 hover:bg-white/14"
+                          disabled={addingToWishlist}
+                          onClick={addToWishlist}
+                        >
+                          {addingToWishlist ? (
+                            <span className="inline-flex items-center gap-2">
+                              <InlineSpinner />
+                              <span>Adding</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center gap-1.5 leading-none">
+                              <BookmarkPlus className="h-3.5 w-3.5" />
+                              <span>Add Wishlist</span>
+                            </span>
+                          )}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className="h-11 w-full rounded-full border border-white/15 bg-white/8 px-4 text-[13px] font-medium text-white/90 hover:bg-white/14 disabled:opacity-50"
+                          disabled={buyDisabled}
+                          onClick={() => {
+                            if (fragrance.purchaseUrl) window.open(fragrance.purchaseUrl, "_blank");
+                          }}
+                        >
+                          <span className="inline-flex items-center justify-center gap-1.5 leading-none">
+                            <ShoppingBag className="h-3.5 w-3.5" />
+                            <span>Buy</span>
                           </span>
-                        ) : "Add to wishlist"}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-                        onClick={writeReview}
-                      >
-                        Review
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-                        disabled={buyDisabled}
-                        onClick={() => {
-                          if (fragrance.purchaseUrl) window.open(fragrance.purchaseUrl, "_blank");
-                        }}
-                      >
-                        Buy
-                      </Button>
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <div className="text-xs text-cyan-100/85">
@@ -2190,17 +2405,19 @@ export default function FragranceDetailPage() {
                       {canVoteFragrance && !isEditingForm ? (
                         <div className="mt-2 space-y-2">
                           <div className="flex flex-wrap gap-2">
-                            {COMMUNITY_PRICE_OPTIONS.map((option) => (
+                            {REVIEW_PRICE_OPTIONS.map((option) => (
                               <button
                                 key={`price-vote-${option.value}`}
                                 type="button"
                                 className={cx(
                                   "min-h-9 rounded-full border px-3 py-1 text-xs transition touch-manipulation",
-                                  communityPriceVote === option.value
-                                    ? "border-cyan-300/45 bg-cyan-400/20 text-cyan-100"
-                                    : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
+                                  reviewPriceToneClasses(option.value, reviewPriceValue === option.value)
                                 )}
-                                onClick={() => setCommunityPriceVote(communityPriceVote === option.value ? null : option.value)}
+                                onClick={() => {
+                                  const next = reviewPriceValue === option.value ? null : option.value;
+                                  setReviewPriceValue(next);
+                                  setCommunityPriceVote(reviewPriceToCommunityVote(next));
+                                }}
                               >
                                 {option.label}
                               </button>
@@ -2224,6 +2441,7 @@ export default function FragranceDetailPage() {
                     </div>
                   ) : null}
 
+                  {!hideComputedVotingSectionsWhileEditingCommunity ? (
                   <div className="mt-6 rounded-2xl border border-white/15 bg-black/20 p-3 sm:p-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -2327,10 +2545,11 @@ export default function FragranceDetailPage() {
                         : "Confidence and popularity are categorical labels."}
                     </div>
                   </div>
+                  ) : null}
                 </div>
               </div>
 
-              <div className="space-y-5">
+              <div className="min-w-0 space-y-5 [&>*]:min-w-0">
                 <div className="hidden lg:block">
                   {isEditingForm ? (
                     <div className="space-y-2">
@@ -2343,21 +2562,20 @@ export default function FragranceDetailPage() {
                       <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
                     </>
                   )}
+                  {isCommunityFragrance && isEditingForm ? (
+                    <div className="mt-2 max-w-2xl rounded-xl border border-amber-200/25 bg-amber-200/10 px-3 py-2 text-[11px] text-amber-100/95">
+                      Draft tip: keep this private while you are still building it. You can switch between private and public anytime.
+                    </div>
+                  ) : null}
 
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {isEditingForm ? (
-                      <select
+                      <ConcentrationDropdown
                         value={draftConcentration}
-                        onChange={(e) => setDraftConcentration(e.target.value)}
-                        className="h-8 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
-                      >
-                        <option value="">Select concentration</option>
-                        {CONCENTRATION_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setDraftConcentration}
+                        options={CONCENTRATION_OPTIONS}
+                        className="w-full max-w-md sm:w-auto"
+                      />
                     ) : oilType ? (
                       <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/85">
                         {oilType}
@@ -2387,7 +2605,7 @@ export default function FragranceDetailPage() {
                       </div>
                       {isCommunityFragrance ? (
                         isEditingForm ? (
-                          <div className="flex min-w-[170px] items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                          <div className="flex w-full min-w-0 items-center justify-between gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 sm:w-auto sm:justify-start">
                             <span className="text-[11px] text-white/65">Visibility</span>
                             <Switch
                               checked={draftVisibility === "PUBLIC"}
@@ -2406,15 +2624,15 @@ export default function FragranceDetailPage() {
                         <button
                           type="button"
                           onClick={() => navigate(`/u/${encodeURIComponent(createdByUsername)}`)}
-                          className="inline-flex items-center rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-100/95 hover:bg-cyan-400/20"
+                          className="inline-flex min-w-0 max-w-full items-center rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-100/95 hover:bg-cyan-400/20"
                         >
-                          Created by @{createdByUsername}
+                          <span className="truncate">Created by @{createdByUsername}</span>
                         </button>
                       ) : null}
 
                   </div>
                   {isEditingForm ? (
-                    <div className="mt-2 flex max-w-2xl items-center gap-2">
+                    <div className="mt-2 flex max-w-2xl flex-wrap items-center gap-2">
                       <label className="inline-flex cursor-pointer items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10">
                         Upload image
                         <input
@@ -2428,7 +2646,7 @@ export default function FragranceDetailPage() {
                         value={draftImageLabel}
                         readOnly
                         placeholder="No image selected"
-                        className="h-8 flex-1 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                        className="h-8 w-full rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none sm:w-auto sm:flex-1"
                       />
                       <Button
                         type="button"
@@ -2536,34 +2754,36 @@ export default function FragranceDetailPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <RankingCard
-                    title="Season ranking"
-                    items={canVoteFragrance && communityVoteSummary
-                      ? communityVoteSummary.seasonRanking.map((x) => ({ name: x.name, score: Number(x.score ?? 0) }))
-                      : seasonRanking}
-                    userStarsByKey={canVoteFragrance ? communitySeasonStarsByKey : undefined}
-                    onVote={canVoteFragrance && !isEditingForm ? onVoteSeason : undefined}
-                    rankingNote={canVoteFragrance
-                      ? (isCommunityFragrance
-                        ? "Community voting bars are based on total star weight for each season."
-                        : "Bars blend Fragella model baseline with community star voting for each season.")
-                      : undefined}
-                  />
-                  <RankingCard
-                    title="Occasion ranking"
-                    items={canVoteFragrance && communityVoteSummary
-                      ? communityVoteSummary.occasionRanking.map((x) => ({ name: x.name, score: Number(x.score ?? 0) }))
-                      : occasionRanking}
-                    userStarsByKey={canVoteFragrance ? communityOccasionStarsByKey : undefined}
-                    onVote={canVoteFragrance && !isEditingForm ? onVoteOccasion : undefined}
-                    rankingNote={canVoteFragrance
-                      ? (isCommunityFragrance
-                        ? "Community voting bars are based on total star weight for each occasion."
-                        : "Bars blend Fragella model baseline with community star voting for each occasion.")
-                      : undefined}
-                  />
-                </div>
+                {!hideComputedVotingSectionsWhileEditingCommunity ? (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <RankingCard
+                      title="Season ranking"
+                      items={canVoteFragrance && communityVoteSummary
+                        ? communityVoteSummary.seasonRanking.map((x) => ({ name: x.name, score: Number(x.score ?? 0) }))
+                        : seasonRanking}
+                      userStarsByKey={canVoteFragrance ? communitySeasonStarsByKey : undefined}
+                      onVote={canVoteFragrance && !isEditingForm ? onVoteSeason : undefined}
+                      rankingNote={canVoteFragrance
+                        ? (isCommunityFragrance
+                          ? "Community voting bars are based on total star weight for each season."
+                          : "Bars blend Fragella model baseline with community star voting for each season.")
+                        : undefined}
+                    />
+                    <RankingCard
+                      title="Occasion ranking"
+                      items={canVoteFragrance && communityVoteSummary
+                        ? communityVoteSummary.occasionRanking.map((x) => ({ name: x.name, score: Number(x.score ?? 0) }))
+                        : occasionRanking}
+                      userStarsByKey={canVoteFragrance ? communityOccasionStarsByKey : undefined}
+                      onVote={canVoteFragrance && !isEditingForm ? onVoteOccasion : undefined}
+                      rankingNote={canVoteFragrance
+                        ? (isCommunityFragrance
+                          ? "Community voting bars are based on total star weight for each occasion."
+                          : "Bars blend Fragella model baseline with community star voting for each occasion.")
+                        : undefined}
+                    />
+                  </div>
+                ) : null}
 
                 {isEditingForm ? (
                   <div className="space-y-4">
@@ -2590,7 +2810,7 @@ export default function FragranceDetailPage() {
                           ))}
                         </div>
                       </div>
-                      <div className="mt-3 flex gap-2">
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <input
                           value={draftNoteSearch}
                           onChange={(e) => setDraftNoteSearch(e.target.value)}
@@ -2601,18 +2821,21 @@ export default function FragranceDetailPage() {
                             }
                           }}
                           placeholder="Search note (e.g. bergamot)"
-                          className="h-9 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none"
+                          className="h-9 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none sm:flex-1"
                         />
                         <Button
                           type="button"
                           variant="secondary"
-                          className="h-9 rounded-xl border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
+                          className="h-9 w-full rounded-xl border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15 sm:w-auto"
                           onClick={addCustomDraftNote}
                           disabled={!draftNoteSearch.trim()}
                         >
                           Add custom
                         </Button>
                       </div>
+                      {draftNoteAddedHint ? (
+                        <div className="mt-2 text-[11px] text-cyan-100/90">{draftNoteAddedHint}</div>
+                      ) : null}
                       {draftNoteResults.length ? (
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
                           {draftNoteResults.slice(0, 12).map((n) => (
@@ -2680,10 +2903,42 @@ export default function FragranceDetailPage() {
             <DialogTitle className="text-base text-white">Submit Review</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 p-5">
+            <div className="rounded-2xl border border-[#3EB489]/30 bg-[#3EB489]/10 px-3 py-2 text-xs text-[#9de2ca]">
+              Add your own votes in fragrance details first. Only your personal inputs are included in this review scorecard.
+            </div>
             <div className="rounded-2xl border border-white/15 bg-white/5 p-4">
               <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#3EB489]">Scorecard Summary</div>
-              <div className="mt-3 text-sm text-white/85">
-                Overall rating: <span className="font-semibold">{ratingState?.userRating ?? "—"} / 5</span>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-white/85">
+                <span>
+                  Overall rating: <span className="font-semibold">{ratingState?.userRating ?? "—"} / 5</span>
+                </span>
+                {reviewScorecard.priceLabel ? (
+                  <span className={cx("rounded-full border px-2 py-0.5 text-[11px] font-semibold", reviewPriceToneClasses(reviewScorecard.priceScore, true))}>
+                    Price: {reviewScorecard.priceLabel}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-3">
+                <div className="mb-2 text-[11px] uppercase tracking-[0.12em] text-white/55">Price Perception</div>
+                <div className="flex flex-wrap gap-2">
+                  {REVIEW_PRICE_OPTIONS.map((option) => (
+                    <button
+                      key={`review-price-${option.value}`}
+                      type="button"
+                      className={cx(
+                        "min-h-9 rounded-full border px-3 py-1 text-xs transition touch-manipulation",
+                        reviewPriceToneClasses(option.value, reviewPriceValue === option.value)
+                      )}
+                      onClick={() => {
+                        const next = reviewPriceValue === option.value ? null : option.value;
+                        setReviewPriceValue(next);
+                        setCommunityPriceVote(reviewPriceToCommunityVote(next));
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               {reviewScorecard.performance.length ? (
                 <div className="mt-3 space-y-2">
@@ -2710,7 +2965,7 @@ export default function FragranceDetailPage() {
                   Occasions: {reviewScorecard.occasion.map((x) => `${x.label} ${"★".repeat(x.value)}`).join(" • ")}
                 </div>
               ) : null}
-              {!reviewScorecard.performance.length && !reviewScorecard.season.length && !reviewScorecard.occasion.length ? (
+              {!reviewScorecard.performance.length && !reviewScorecard.season.length && !reviewScorecard.occasion.length && reviewScorecard.priceScore === null ? (
                 <div className="mt-3 text-xs text-white/55">No detailed selections captured yet. Add season/occasion stars to enrich this review.</div>
               ) : null}
             </div>

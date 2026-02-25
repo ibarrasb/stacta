@@ -7,17 +7,75 @@ import { searchUsers } from "@/lib/api/users";
 import type { UserSearchItem } from "@/lib/api/types";
 
 const DEBOUNCE_MS = 220;
+const RECENT_USERS_KEY = "stacta:recent-user-searches";
+const MAX_RECENT_USERS = 8;
+
+type RecentUserSearch = {
+  username: string;
+  displayName: string;
+  isPrivate: boolean;
+};
 
 export default function UsersSearchPage() {
   const navigate = useNavigate();
   const [searchText, setSearchText] = useState("");
   const [results, setResults] = useState<UserSearchItem[]>([]);
+  const [recentSearches, setRecentSearches] = useState<RecentUserSearch[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const seqRef = useRef(0);
 
   const query = useMemo(() => searchText.trim(), [searchText]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_USERS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as RecentUserSearch[];
+      if (!Array.isArray(parsed)) return;
+      const clean = parsed
+        .filter((item) => item && typeof item.username === "string" && item.username.trim())
+        .slice(0, MAX_RECENT_USERS)
+        .map((item) => ({
+          username: String(item.username).trim(),
+          displayName: String(item.displayName || item.username).trim(),
+          isPrivate: Boolean(item.isPrivate),
+        }));
+      setRecentSearches(clean);
+    } catch {
+      setRecentSearches([]);
+    }
+  }, []);
+
+  function persistRecentSearches(next: RecentUserSearch[]) {
+    setRecentSearches(next);
+    localStorage.setItem(RECENT_USERS_KEY, JSON.stringify(next));
+  }
+
+  function saveRecentSearch(user: Pick<UserSearchItem, "username" | "displayName" | "isPrivate">) {
+    const next: RecentUserSearch = {
+      username: user.username.trim(),
+      displayName: (user.displayName || user.username).trim(),
+      isPrivate: Boolean(user.isPrivate),
+    };
+    if (!next.username) return;
+    setRecentSearches((prev) => {
+      const withoutCurrent = prev.filter((item) => item.username.toLowerCase() !== next.username.toLowerCase());
+      const updated = [next, ...withoutCurrent].slice(0, MAX_RECENT_USERS);
+      localStorage.setItem(RECENT_USERS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }
+
+  function openUserProfile(user: Pick<UserSearchItem, "username" | "displayName" | "isPrivate">) {
+    saveRecentSearch(user);
+    navigate(`/u/${user.username}`);
+  }
+
+  function removeRecentSearch(username: string) {
+    persistRecentSearches(recentSearches.filter((item) => item.username.toLowerCase() !== username.toLowerCase()));
+  }
 
   useEffect(() => {
     if (!query) {
@@ -110,7 +168,7 @@ export default function UsersSearchPage() {
                 <button
                   key={user.username}
                   className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition hover:bg-white/[0.07]"
-                  onClick={() => navigate(`/u/${user.username}`)}
+                  onClick={() => openUserProfile(user)}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -127,6 +185,48 @@ export default function UsersSearchPage() {
                   </div>
                 </button>
               ))}
+            </div>
+          )}
+
+          {recentSearches.length > 0 && (
+            <div className="mt-5 border-t border-white/10 pt-4">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-white/60">Recent</div>
+                <button
+                  type="button"
+                  className="text-xs text-white/55 transition hover:text-white"
+                  onClick={() => persistRecentSearches([])}
+                >
+                  Clear all
+                </button>
+              </div>
+              <div className="space-y-2">
+                {recentSearches.map((user) => (
+                  <div
+                    key={`recent-${user.username}`}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2"
+                  >
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openUserProfile(user)}>
+                      <div className="truncate text-sm text-white">{user.displayName || user.username}</div>
+                      <div className="truncate text-xs text-white/60">@{user.username}</div>
+                    </button>
+                    <div className="flex items-center gap-2">
+                      {user.isPrivate ? (
+                        <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/75">
+                          Private
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="text-xs text-white/50 transition hover:text-white"
+                        onClick={() => removeRecentSearch(user.username)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
