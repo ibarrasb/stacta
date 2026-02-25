@@ -15,9 +15,12 @@ import com.stacta.api.fragrance.dto.FragranceSearchResult;
 import com.stacta.api.integrations.fragella.FragellaClient;
 import com.stacta.api.integrations.fragella.FragellaDtos;
 import com.stacta.api.user.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class FragellaSearchService {
+  private static final Logger log = LoggerFactory.getLogger(FragellaSearchService.class);
 
   private final FragellaClient client;
   private final FragellaMapper mapper;
@@ -28,6 +31,7 @@ public class FragellaSearchService {
   private final FragranceRepository fragranceRepository;
   private final UserRepository userRepository;
   private final FragranceRatingService ratingService;
+  private static final double FRAGELLA_RATING_PRIOR_WEIGHT = 220.0;
 
   public FragellaSearchService(
     FragellaClient client,
@@ -240,8 +244,84 @@ public class FragellaSearchService {
 
   public FragranceSearchResult attachRatings(FragranceSearchResult in, String viewerSub) {
     if (in == null) return null;
-    FragranceRatingSummary summary = ratingService.getSummary(viewerSub, in.source(), in.externalId());
+    FragranceRatingSummary summary;
+    if ("fragella".equalsIgnoreCase(in.source())) {
+      String canonical = computeFragellaExternalIdFromResult(in);
+      String zeroAliasExternal = toZeroYearAlias(in.externalId());
+      String zeroAliasCanonical = toZeroYearAlias(canonical);
+      FragranceRatingSummary raw = ratingService.getSummaryAcrossExternalIds(
+        viewerSub,
+        in.source(),
+        List.of(in.externalId(), canonical, zeroAliasExternal, zeroAliasCanonical)
+      );
+      summary = blendFragellaRating(raw, in.rating());
+      log.info(
+        "fragella.attachRatings externalId={} canonicalId={} zeroAliasExternal={} zeroAliasCanonical={} baselineRaw={} rawAvg={} rawCount={} rawUserRating={} blendedAvg={}",
+        in.externalId(),
+        canonical,
+        zeroAliasExternal,
+        zeroAliasCanonical,
+        in.rating(),
+        raw == null ? null : raw.average(),
+        raw == null ? null : raw.count(),
+        raw == null ? null : raw.userRating(),
+        summary == null ? null : summary.average()
+      );
+    } else {
+      summary = ratingService.getSummary(viewerSub, in.source(), in.externalId());
+    }
     return withIds(in, in.source(), in.externalId(), in.createdByUserId(), in.createdByUsername(), summary);
+  }
+
+  private FragranceRatingSummary blendFragellaRating(FragranceRatingSummary community, String baselineRaw) {
+    if (community == null) return null;
+    Double baseline = parseRatingValue(baselineRaw);
+    if (baseline == null) return community;
+
+    long count = Math.max(0L, community.count());
+    double avg = Math.max(0.0, community.average());
+    double blended = count <= 0
+      ? baseline
+      : ((baseline * FRAGELLA_RATING_PRIOR_WEIGHT) + (avg * count)) / (FRAGELLA_RATING_PRIOR_WEIGHT + count);
+    return new FragranceRatingSummary(blended, count, community.userRating());
+  }
+
+  private Double parseRatingValue(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim().replace(',', '.');
+    if (s.isBlank()) return null;
+    java.util.regex.Matcher m = java.util.regex.Pattern.compile("([0-9]+(?:\\.[0-9]+)?)").matcher(s);
+    if (!m.find()) return null;
+    try {
+      double value = Double.parseDouble(m.group(1));
+      if (!Double.isFinite(value)) return null;
+      return Math.max(0.0, Math.min(5.0, value));
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  private String computeFragellaExternalIdFromResult(FragranceSearchResult in) {
+    if (in == null) return "";
+    String brand = nullSafe(in.brand());
+    String name = nullSafe(in.name());
+    String year = nullSafe(in.year());
+    if (year.isBlank()) year = "0";
+    String combined = (brand + "|" + name + "|" + year)
+      .toLowerCase(Locale.ROOT)
+      .replaceAll("\\s+", " ")
+      .trim();
+    if (combined.equals("||0") || combined.equals("||")) return "";
+    return combined;
+  }
+
+  private String toZeroYearAlias(String externalId) {
+    if (externalId == null) return "";
+    String ext = externalId.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+    if (ext.isBlank()) return "";
+    String[] parts = ext.split("\\|", -1);
+    if (parts.length < 2) return "";
+    return (parts[0] + "|" + parts[1] + "|0").trim();
   }
 
   private FragranceSearchResult withIds(

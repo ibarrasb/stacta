@@ -2,6 +2,8 @@ package com.stacta.api.fragrance;
 
 import com.stacta.api.fragrance.dto.FragranceRatingSummary;
 import com.stacta.api.user.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -9,9 +11,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Locale;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 @Service
 public class FragranceRatingService {
+  private static final Logger log = LoggerFactory.getLogger(FragranceRatingService.class);
 
   private final JdbcTemplate jdbc;
   private final UserRepository users;
@@ -28,6 +34,7 @@ public class FragranceRatingService {
 
     String src = normalizeSource(source);
     String ext = normalizeExternalId(externalId);
+    log.info("rating.upsert.begin userId={} source={} externalId={} rating={}", user.getId(), src, ext, rating);
 
     jdbc.update(
       """
@@ -39,7 +46,17 @@ public class FragranceRatingService {
       user.getId(), src, ext, rating
     );
 
-    return getSummary(cognitoSub, src, ext);
+    FragranceRatingSummary summary = getSummary(cognitoSub, src, ext);
+    log.info(
+      "rating.upsert.done userId={} source={} externalId={} avg={} count={} userRating={}",
+      user.getId(),
+      src,
+      ext,
+      summary.average(),
+      summary.count(),
+      summary.userRating()
+    );
+    return summary;
   }
 
   @Transactional(readOnly = true)
@@ -75,7 +92,93 @@ public class FragranceRatingService {
       }
     }
 
-    return new FragranceRatingSummary(avg == null ? 0.0 : avg, count == null ? 0L : count, userRating);
+    FragranceRatingSummary summary = new FragranceRatingSummary(avg == null ? 0.0 : avg, count == null ? 0L : count, userRating);
+    log.info(
+      "rating.summary source={} externalId={} avg={} count={} viewerHasRating={}",
+      src,
+      ext,
+      summary.average(),
+      summary.count(),
+      summary.userRating() != null
+    );
+    return summary;
+  }
+
+  @Transactional(readOnly = true)
+  public FragranceRatingSummary getSummaryPreferAlternate(
+    String cognitoSub,
+    String source,
+    String externalId,
+    String alternateExternalId
+  ) {
+    FragranceRatingSummary primary = getSummary(cognitoSub, source, externalId);
+    String alt = normalizeExternalId(alternateExternalId);
+    String ext = normalizeExternalId(externalId);
+    if (alt.isBlank() || alt.equals(ext)) {
+      log.info("rating.summary.alt.skip reason=same_or_blank source={} externalId={} alt={}", source, ext, alt);
+      return primary;
+    }
+    FragranceRatingSummary alternate = getSummary(cognitoSub, source, alt);
+    long pCount = Math.max(0L, primary.count());
+    long aCount = Math.max(0L, alternate.count());
+    long total = pCount + aCount;
+    double mergedAvg = total == 0
+      ? 0.0
+      : ((primary.average() * pCount) + (alternate.average() * aCount)) / total;
+    Integer mergedUserRating = primary.userRating() != null ? primary.userRating() : alternate.userRating();
+    log.info(
+      "rating.summary.alt.merge source={} externalId={} alt={} pCount={} aCount={} mergedCount={} mergedUserRating={}",
+      source,
+      ext,
+      alt,
+      pCount,
+      aCount,
+      total,
+      mergedUserRating
+    );
+    return new FragranceRatingSummary(mergedAvg, total, mergedUserRating);
+  }
+
+  @Transactional(readOnly = true)
+  public FragranceRatingSummary getSummaryAcrossExternalIds(
+    String cognitoSub,
+    String source,
+    List<String> externalIds
+  ) {
+    String src = normalizeSource(source);
+    Set<String> normalized = new LinkedHashSet<>();
+    if (externalIds != null) {
+      for (String id : externalIds) {
+        String n = normalizeExternalId(id);
+        if (!n.isBlank()) normalized.add(n);
+      }
+    }
+    if (normalized.isEmpty()) {
+      return new FragranceRatingSummary(0.0, 0L, null);
+    }
+
+    long totalCount = 0L;
+    double weighted = 0.0;
+    Integer userRating = null;
+    for (String id : normalized) {
+      FragranceRatingSummary s = getSummary(cognitoSub, src, id);
+      long c = Math.max(0L, s.count());
+      totalCount += c;
+      weighted += s.average() * c;
+      if (userRating == null && s.userRating() != null) {
+        userRating = s.userRating();
+      }
+    }
+
+    double avg = totalCount == 0 ? 0.0 : (weighted / totalCount);
+    log.info(
+      "rating.summary.multi source={} ids={} mergedCount={} mergedUserRating={}",
+      src,
+      normalized,
+      totalCount,
+      userRating
+    );
+    return new FragranceRatingSummary(avg, totalCount, userRating);
   }
 
   private static String normalizeSource(String source) {

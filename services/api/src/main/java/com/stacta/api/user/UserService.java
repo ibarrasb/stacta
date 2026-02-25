@@ -140,6 +140,7 @@ public class UserService {
     long followingCount = target.getFollowingCount();
     CreatorRatingSummary creatorSummary = creatorRatings.getSummaryByCreatorId(viewerSub, target.getId());
     long collectionCount = isVisible ? collectionService.countForUser(target.getId()) : 0;
+    long wishlistCount = isVisible ? collectionService.countWishlistForUser(target.getId()) : 0;
     long reviewCount = isVisible ? activityEvents.countByActorUserIdAndType(target.getId(), "REVIEW_POSTED") : 0;
     long communityFragranceCount = isVisible ? fragrances.countByExternalSourceAndCreatedByUserId("COMMUNITY", target.getId()) : 0;
     List<CollectionItemDto> communityFragrances = isVisible
@@ -147,6 +148,9 @@ public class UserService {
       : List.of();
     List<CollectionItemDto> collectionItems = isVisible
       ? collectionService.listForUser(target.getId())
+      : List.of();
+    List<CollectionItemDto> wishlistItems = isVisible
+      ? collectionService.listWishlistForUser(target.getId())
       : List.of();
     List<CollectionItemDto> topFragrances = isVisible
       ? collectionService.listTopForUser(target.getId())
@@ -167,9 +171,11 @@ public class UserService {
       creatorSummary.count(),
       creatorSummary.userRating(),
       collectionCount,
+      wishlistCount,
       reviewCount,
       communityFragranceCount,
       collectionItems,
+      wishlistItems,
       topFragrances,
       communityFragrances,
       isFollowing,
@@ -204,9 +210,11 @@ public class UserService {
       creatorSummary.average(),
       creatorSummary.count(),
       collectionService.countForUser(u.getId()),
+      collectionService.countWishlistForUser(u.getId()),
       activityEvents.countByActorUserIdAndType(u.getId(), "REVIEW_POSTED"),
       fragrances.countByExternalSourceAndCreatedByUserId("COMMUNITY", u.getId()),
       collectionService.listForUser(u.getId()),
+      collectionService.listWishlistForUser(u.getId()),
       collectionService.listTopForUser(u.getId()),
       listCommunityFragrances(u.getId(), true),
       u.getCreatedAt(),

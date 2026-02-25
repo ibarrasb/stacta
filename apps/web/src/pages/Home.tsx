@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Heart, MessageCircle, Repeat2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
+import ReviewCard from "@/components/feed/ReviewCard";
 import { getUnreadNotificationsCount } from "@/lib/api/notifications";
 import { listFeed, type FeedFilter, type FeedTab } from "@/lib/api/feed";
 import type { FeedItem } from "@/lib/api/types";
@@ -18,6 +20,15 @@ function timeAgo(iso: string) {
   if (hr < 24) return `${hr}h`;
   const day = Math.floor(hr / 24);
   return `${day}d`;
+}
+
+function initials(name?: string | null) {
+  const n = (name || "").trim();
+  if (!n) return "S";
+  const parts = n.split(/\s+/).slice(0, 2);
+  const first = parts[0]?.[0] ?? "";
+  const second = parts[1]?.[0] ?? "";
+  return (first + second).toUpperCase() || "S";
 }
 
 function eventLabel(item: FeedItem) {
@@ -225,52 +236,113 @@ export default function HomePage() {
               </div>
             ) : (
               items.map((item, idx) => (
-                <article
-                  key={item.id}
-                  className="rounded-3xl border border-white/15 bg-black/25 p-4"
-                  style={{ animationDelay: `${Math.min(idx * 28, 260)}ms` }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <button
-                      className="min-w-0 text-left"
-                      onClick={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/home" } } })}
-                    >
-                      <div className="truncate text-sm font-semibold text-white">{item.actorDisplayName || item.actorUsername}</div>
-                      <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>
-                    </button>
-                    <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">
-                      {kindPill(item.type)}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 text-sm text-white/85">
-                    <span className="font-semibold">{item.actorDisplayName || item.actorUsername}</span> {eventLabel(item)}{" "}
-                    {item.type === "USER_FOLLOWED_USER" ? (
+                item.type === "REVIEW_POSTED" ? (
+                  <ReviewCard
+                    key={item.id}
+                    item={item}
+                    timeAgo={timeAgo(item.createdAt)}
+                    onOpenUser={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/home" } } })}
+                    onOpenFragrance={() => {
+                      const source = String(item.fragranceSource ?? "FRAGELLA").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+                      const externalId = String(item.fragranceExternalId ?? "").trim();
+                      if (!externalId) return;
+                      navigate(`/fragrances/${encodeURIComponent(externalId)}?source=${source}`, {
+                        state: {
+                          fragrance: {
+                            source,
+                            externalId,
+                            name: item.fragranceName,
+                            brand: null,
+                            imageUrl: item.fragranceImageUrl,
+                          },
+                          from: { pathname: "/home" },
+                        },
+                      });
+                    }}
+                  />
+                ) : (
+                  <article
+                    key={item.id}
+                    className="rounded-3xl border border-white/15 bg-black/25 p-4"
+                    style={{ animationDelay: `${Math.min(idx * 28, 260)}ms` }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
                       <button
-                        className="font-semibold text-cyan-200 hover:underline"
-                        onClick={() => item.targetUsername && navigate(`/u/${item.targetUsername}`, { state: { from: { pathname: "/home" } } })}
+                        className="flex min-w-0 items-center gap-2 text-left"
+                        onClick={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/home" } } })}
                       >
-                        {item.targetDisplayName || item.targetUsername || "user"}
+                        {item.actorAvatarUrl ? (
+                          <img
+                            src={item.actorAvatarUrl}
+                            alt={`${item.actorUsername} avatar`}
+                            className="h-9 w-9 rounded-full border border-white/15 object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xs font-semibold text-white/75">
+                            {initials(item.actorDisplayName || item.actorUsername)}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-white">{item.actorDisplayName || item.actorUsername}</div>
+                          <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>
+                        </div>
                       </button>
-                    ) : (
-                      <span className="font-semibold text-amber-100">{item.fragranceName || "a fragrance"}</span>
-                    )}
-                    .
-                  </div>
-
-                  {item.reviewExcerpt ? (
-                    <p className="mt-2 rounded-2xl border border-white/12 bg-white/6 px-3 py-2 text-sm text-white/75">{item.reviewExcerpt}</p>
-                  ) : null}
-
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/55">
-                    <div>{timeAgo(item.createdAt)}</div>
-                    <div className="flex items-center gap-2">
-                      <button className="rounded-lg border border-white/15 bg-white/8 px-2 py-1 text-white/75 hover:bg-white/14">Like {item.likesCount}</button>
-                      <button className="rounded-lg border border-white/15 bg-white/8 px-2 py-1 text-white/75 hover:bg-white/14">Comment {item.commentsCount}</button>
-                      <button className="rounded-lg border border-white/15 bg-white/8 px-2 py-1 text-white/75 hover:bg-white/14">Repost {item.repostsCount}</button>
+                      <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">
+                        {kindPill(item.type)}
+                      </span>
                     </div>
-                  </div>
-                </article>
+
+                    <div className="mt-3 text-sm text-white/85">
+                      <span className="font-semibold">{item.actorDisplayName || item.actorUsername}</span> {eventLabel(item)}{" "}
+                      {item.type === "USER_FOLLOWED_USER" ? (
+                        <button
+                          className="font-semibold text-cyan-200 hover:underline"
+                          onClick={() => item.targetUsername && navigate(`/u/${item.targetUsername}`, { state: { from: { pathname: "/home" } } })}
+                        >
+                          {item.targetDisplayName || item.targetUsername || "user"}
+                        </button>
+                      ) : (
+                        <span className="font-semibold text-amber-100">{item.fragranceName || "a fragrance"}</span>
+                      )}
+                      .
+                    </div>
+
+                    {item.reviewExcerpt ? (
+                      <p className="mt-2 rounded-2xl border border-white/12 bg-white/6 px-3 py-2 text-sm text-white/75">{item.reviewExcerpt}</p>
+                    ) : null}
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/55">
+                      <div>{timeAgo(item.createdAt)}</div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          title="Like"
+                          aria-label="Like activity"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/75 transition hover:border-[#3EB489]/60 hover:bg-[#3EB489]/15 hover:text-[#3EB489]"
+                        >
+                          <Heart className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Comment"
+                          aria-label="Comment on activity"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/75 transition hover:border-[#3EB489]/60 hover:bg-[#3EB489]/15 hover:text-[#3EB489]"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Repost"
+                          aria-label="Repost activity"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/75 transition hover:border-[#3EB489]/60 hover:bg-[#3EB489]/15 hover:text-[#3EB489]"
+                        >
+                          <Repeat2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                )
               ))
             )}
 

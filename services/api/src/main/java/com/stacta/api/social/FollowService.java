@@ -12,6 +12,7 @@ import com.stacta.api.social.dto.UnreadNotificationsResponse;
 import com.stacta.api.user.User;
 import com.stacta.api.user.UserRepository;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -28,6 +29,9 @@ public class FollowService {
   private static final String FOLLOWED_YOU = "FOLLOWED_YOU";
   private static final String FOLLOWED_YOU_BACK = "FOLLOWED_YOU_BACK";
   private static final String USER_FOLLOWED_USER = "USER_FOLLOWED_USER";
+  private static final Duration READ_RETENTION = Duration.ofDays(30);
+  private static final Duration UNREAD_RETENTION = Duration.ofDays(90);
+  private static final Duration SOFT_DELETE_PURGE_AFTER = Duration.ofDays(7);
 
   private final FollowRepository follows;
   private final NotificationEventRepository notifications;
@@ -226,9 +230,10 @@ public class FollowService {
     follows.delete(request);
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public NotificationsResponse notifications(String viewerSub, int limit, String cursor) {
     User me = getViewer(viewerSub);
+    applyNotificationRetention(me);
     int safeLimit = Math.max(1, Math.min(limit, 50));
     CursorToken token = parseCursor(cursor);
 
@@ -268,11 +273,25 @@ public class FollowService {
     users.save(me);
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public UnreadNotificationsResponse unreadCount(String viewerSub) {
     User me = getViewer(viewerSub);
+    applyNotificationRetention(me);
     long unread = notifications.countAfter(me.getId(), me.getNotificationsSeenAt());
     return new UnreadNotificationsResponse(unread);
+  }
+
+  @Transactional
+  public boolean deleteNotification(String viewerSub, UUID notificationId) {
+    User me = getViewer(viewerSub);
+    int changed = notifications.softDeleteByIdForRecipient(me.getId(), notificationId, Instant.now());
+    return changed > 0;
+  }
+
+  @Transactional
+  public int clearReadNotifications(String viewerSub) {
+    User me = getViewer(viewerSub);
+    return notifications.softDeleteAllReadForRecipient(me.getId(), me.getNotificationsSeenAt(), Instant.now());
   }
 
   @Transactional(readOnly = true)
@@ -287,6 +306,20 @@ public class FollowService {
 
   private User getViewer(String viewerSub) {
     return users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+  }
+
+  private void applyNotificationRetention(User me) {
+    Instant now = Instant.now();
+    Instant readCutoff = now.minus(READ_RETENTION);
+    Instant unreadCutoff = now.minus(UNREAD_RETENTION);
+    notifications.softDeleteExpiredForRecipient(
+      me.getId(),
+      me.getNotificationsSeenAt(),
+      readCutoff,
+      unreadCutoff,
+      now
+    );
+    notifications.hardDeleteSoftDeletedBefore(now.minus(SOFT_DELETE_PURGE_AFTER));
   }
 
   private String normalizeUsername(String raw) {

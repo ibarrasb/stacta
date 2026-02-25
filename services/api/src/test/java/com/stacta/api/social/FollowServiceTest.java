@@ -2,6 +2,7 @@ package com.stacta.api.social;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -148,6 +149,29 @@ class FollowServiceTest {
 
     assertEquals(3L, response.count());
     verify(notifications, times(1)).countAfter(eq(viewer.getId()), any());
+  }
+
+  @Test
+  void deleteNotificationShouldSoftDeleteForRecipient() {
+    UUID notificationId = UUID.randomUUID();
+    when(notifications.softDeleteByIdForRecipient(eq(viewer.getId()), eq(notificationId), any())).thenReturn(1);
+
+    boolean deleted = service.deleteNotification(VIEWER_SUB, notificationId);
+
+    assertTrue(deleted);
+    verify(notifications, times(1)).softDeleteByIdForRecipient(eq(viewer.getId()), eq(notificationId), any());
+  }
+
+  @Test
+  void clearReadNotificationsShouldSoftDeleteReadRows() {
+    when(notifications.softDeleteAllReadForRecipient(eq(viewer.getId()), eq(viewer.getNotificationsSeenAt()), any()))
+      .thenReturn(4);
+
+    int cleared = service.clearReadNotifications(VIEWER_SUB);
+
+    assertEquals(4, cleared);
+    verify(notifications, times(1))
+      .softDeleteAllReadForRecipient(eq(viewer.getId()), eq(viewer.getNotificationsSeenAt()), any());
   }
 
   private static User user(UUID id, String sub, String username, boolean isPrivate, Instant seenAt) {

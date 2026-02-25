@@ -3,6 +3,8 @@ package com.stacta.api.fragrance;
 import com.stacta.api.fragrance.dto.FragranceSearchResult;
 import com.stacta.api.fragrance.dto.FragranceRatingSummary;
 import com.stacta.api.fragrance.dto.RateFragranceRequest;
+import com.stacta.api.fragrance.dto.CommunityFragranceVoteRequest;
+import com.stacta.api.fragrance.dto.CommunityFragranceVoteSummaryResponse;
 import com.stacta.api.integrations.fragella.FragellaDtos;
 import com.stacta.api.note.NoteIngestAsyncService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/v1/fragrances")
@@ -22,15 +25,18 @@ public class FragranceController {
   private final FragellaSearchService searchService;
   private final NoteIngestAsyncService noteIngestAsyncService;
   private final FragranceRatingService ratingService;
+  private final FragranceVoteService voteService;
 
   public FragranceController(
     FragellaSearchService searchService,
     NoteIngestAsyncService noteIngestAsyncService,
-    FragranceRatingService ratingService
+    FragranceRatingService ratingService,
+    FragranceVoteService voteService
   ) {
     this.searchService = searchService;
     this.noteIngestAsyncService = noteIngestAsyncService;
     this.ratingService = ratingService;
+    this.voteService = voteService;
   }
 
   @Operation(summary = "Search fragrances via Fragella. Cached when persist=false. When persist=true, does NOT cache and persists NOTES only (async).")
@@ -89,6 +95,56 @@ public class FragranceController {
     if (req == null || req.rating() == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "rating is required");
     }
-    return ratingService.upsertRating(jwt.getSubject(), source, externalId.trim(), req.rating());
+    String normalizedSource = source == null ? "FRAGELLA" : source.trim().toUpperCase(Locale.ROOT);
+    ratingService.upsertRating(jwt.getSubject(), normalizedSource, externalId.trim(), req.rating());
+    return resolveRatingSummary(jwt.getSubject(), normalizedSource, externalId.trim());
+  }
+
+  @GetMapping("/{externalId}/rating")
+  public FragranceRatingSummary getFragranceRating(
+    @PathVariable("externalId") String externalId,
+    @RequestParam(value = "source", defaultValue = "FRAGELLA") String source,
+    @AuthenticationPrincipal Jwt jwt
+  ) {
+    if (externalId == null || externalId.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "externalId is required");
+    }
+    String viewerSub = jwt == null ? null : jwt.getSubject();
+    String normalizedSource = source == null ? "FRAGELLA" : source.trim().toUpperCase(Locale.ROOT);
+    return resolveRatingSummary(viewerSub, normalizedSource, externalId.trim());
+  }
+
+  @GetMapping("/{externalId}/votes")
+  public CommunityFragranceVoteSummaryResponse voteSummary(
+    @PathVariable("externalId") String externalId,
+    @RequestParam(value = "source", defaultValue = "FRAGELLA") String source,
+    @AuthenticationPrincipal Jwt jwt
+  ) {
+    return voteService.summary(source, externalId, jwt.getSubject());
+  }
+
+  @PutMapping("/{externalId}/votes")
+  public CommunityFragranceVoteSummaryResponse vote(
+    @PathVariable("externalId") String externalId,
+    @RequestParam(value = "source", defaultValue = "FRAGELLA") String source,
+    @AuthenticationPrincipal Jwt jwt,
+    @Valid @RequestBody CommunityFragranceVoteRequest req
+  ) {
+    return voteService.upsert(source, externalId, jwt.getSubject(), req);
+  }
+
+  private FragranceRatingSummary resolveRatingSummary(String viewerSub, String source, String externalId) {
+    if ("FRAGELLA".equalsIgnoreCase(source)) {
+      FragranceSearchResult detail = searchService.getPersistedDetail(source, externalId);
+      FragranceSearchResult enriched = searchService.attachRatings(detail, viewerSub);
+      double avg = 0.0;
+      try {
+        avg = enriched.rating() == null ? 0.0 : Double.parseDouble(enriched.rating());
+      } catch (Exception ignore) {}
+      long count = enriched.ratingCount() == null ? 0L : Math.max(0L, enriched.ratingCount());
+      Integer userRating = enriched.userRating();
+      return new FragranceRatingSummary(avg, count, userRating);
+    }
+    return ratingService.getSummary(viewerSub, source, externalId);
   }
 }

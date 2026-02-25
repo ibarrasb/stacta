@@ -28,4 +28,13 @@ public class FeedController {
   ) {
     return feedService.list(jwt.getSubject(), tab, filter, limit, cursor);
   }
+
+  @GetMapping("/me/reviews")
+  public FeedResponse listMineReviews(
+    @AuthenticationPrincipal Jwt jwt,
+    @RequestParam(name = "limit", defaultValue = "20") int limit,
+    @RequestParam(name = "cursor", required = false) String cursor
+  ) {
+    return feedService.listMineReviews(jwt.getSubject(), limit, cursor);
+  }
 }

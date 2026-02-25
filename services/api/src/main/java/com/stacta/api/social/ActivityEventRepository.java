@@ -17,7 +17,14 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
       ae.id AS id,
       ae.type AS type,
       ae.fragrance_name AS fragranceName,
+      ae.fragrance_source AS fragranceSource,
+      ae.fragrance_external_id AS fragranceExternalId,
+      ae.fragrance_image_url AS fragranceImageUrl,
+      ae.review_rating AS reviewRating,
       ae.review_excerpt AS reviewExcerpt,
+      ae.review_performance AS reviewPerformance,
+      ae.review_season AS reviewSeason,
+      ae.review_occasion AS reviewOccasion,
       ae.likes_count AS likesCount,
       ae.comments_count AS commentsCount,
       ae.reposts_count AS repostsCount,
@@ -64,7 +71,58 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
       ae.id AS id,
       ae.type AS type,
       ae.fragrance_name AS fragranceName,
+      ae.fragrance_source AS fragranceSource,
+      ae.fragrance_external_id AS fragranceExternalId,
+      ae.fragrance_image_url AS fragranceImageUrl,
+      ae.review_rating AS reviewRating,
       ae.review_excerpt AS reviewExcerpt,
+      ae.review_performance AS reviewPerformance,
+      ae.review_season AS reviewSeason,
+      ae.review_occasion AS reviewOccasion,
+      ae.likes_count AS likesCount,
+      ae.comments_count AS commentsCount,
+      ae.reposts_count AS repostsCount,
+      ae.created_at AS createdAt,
+      actor.username AS actorUsername,
+      actor.display_name AS actorDisplayName,
+      actor.avatar_url AS actorAvatarUrl,
+      target.username AS targetUsername,
+      target.display_name AS targetDisplayName
+    FROM activity_event ae
+    JOIN users actor ON actor.id = ae.actor_user_id
+    LEFT JOIN users target ON target.id = ae.target_user_id
+    WHERE ae.actor_user_id = :actorUserId
+      AND ae.type = 'REVIEW_POSTED'
+      AND (
+        CAST(:cursorCreatedAt AS timestamptz) IS NULL
+        OR ae.created_at < CAST(:cursorCreatedAt AS timestamptz)
+        OR (
+          ae.created_at = CAST(:cursorCreatedAt AS timestamptz)
+          AND ae.id < CAST(:cursorId AS uuid)
+        )
+      )
+    ORDER BY ae.created_at DESC, ae.id DESC
+    """, nativeQuery = true)
+  List<ActivityFeedView> listMyReviewFeed(
+    @Param("actorUserId") UUID actorUserId,
+    @Param("cursorCreatedAt") Instant cursorCreatedAt,
+    @Param("cursorId") UUID cursorId,
+    Pageable pageable
+  );
+
+  @Query(value = """
+    SELECT
+      ae.id AS id,
+      ae.type AS type,
+      ae.fragrance_name AS fragranceName,
+      ae.fragrance_source AS fragranceSource,
+      ae.fragrance_external_id AS fragranceExternalId,
+      ae.fragrance_image_url AS fragranceImageUrl,
+      ae.review_rating AS reviewRating,
+      ae.review_excerpt AS reviewExcerpt,
+      ae.review_performance AS reviewPerformance,
+      ae.review_season AS reviewSeason,
+      ae.review_occasion AS reviewOccasion,
       ae.likes_count AS likesCount,
       ae.comments_count AS commentsCount,
       ae.reposts_count AS repostsCount,
@@ -117,7 +175,14 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
     UUID getId();
     String getType();
     String getFragranceName();
+    String getFragranceSource();
+    String getFragranceExternalId();
+    String getFragranceImageUrl();
+    Integer getReviewRating();
     String getReviewExcerpt();
+    String getReviewPerformance();
+    String getReviewSeason();
+    String getReviewOccasion();
     int getLikesCount();
     int getCommentsCount();
     int getRepostsCount();

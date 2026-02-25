@@ -144,11 +144,13 @@ export default function PublicProfilePage() {
   function openFragranceDetail(source: string, externalId: string) {
     const normalizedSource = source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
     const encodedExternalId = encodeURIComponent(externalId);
-    const item = profile?.collectionItems.find(
-      (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
-    ) ?? profile?.topFragrances.find(
-      (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
-    );
+  const item = profile?.collectionItems.find(
+    (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
+  ) ?? profile?.topFragrances.find(
+    (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
+  ) ?? profile?.wishlistItems.find(
+    (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
+  );
 
     navigate(`/fragrances/${encodedExternalId}?source=${normalizedSource}`, {
       state: item
@@ -317,8 +319,8 @@ export default function PublicProfilePage() {
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <div className="text-xs text-white/60">Wishlist</div>
-                    <div className="mt-1 text-lg font-semibold">{profile.isVisible ? "—" : "—"}</div>
-                    <div className="mt-1 text-xs text-white/45">Tab is ready, data endpoint pending</div>
+                    <div className="mt-1 text-lg font-semibold">{profile.isVisible ? profile.wishlistCount : "—"}</div>
+                    <div className="mt-1 text-xs text-white/45">Fragrances on wishlist</div>
                   </div>
                 </div>
 
@@ -333,7 +335,7 @@ export default function PublicProfilePage() {
                     {[
                       { id: "overview" as const, label: "Overview", count: profile.isVisible ? profile.collectionCount : undefined },
                       { id: "reviews" as const, label: "Reviews", count: profile.isVisible ? profile.reviewCount : undefined },
-                      { id: "wishlist" as const, label: "Wishlist" },
+                      { id: "wishlist" as const, label: "Wishlist", count: profile.isVisible ? profile.wishlistCount : undefined },
                       { id: "community" as const, label: "Community", count: profile.isVisible ? profile.communityFragranceCount : undefined },
                     ].map((tab) => (
                       <button
@@ -504,11 +506,49 @@ export default function PublicProfilePage() {
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                     <div className="text-sm font-semibold">Wishlist</div>
                     <div className="mt-1 text-xs text-white/60">
-                      {profile.isVisible ? "Wishlist list endpoint is pending." : "Follow to view this user's wishlist."}
+                      {profile.isVisible ? "Fragrances this user wants to try later." : "Follow to view this user's wishlist."}
                     </div>
-                    <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
-                      Wishlist tab is ready and will be populated once the public endpoint is available.
-                    </div>
+                    {!profile.isVisible ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        Wishlist is hidden because the account is private.
+                      </div>
+                    ) : !profile.wishlistItems?.length ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        No fragrances in wishlist yet.
+                      </div>
+                    ) : (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        {profile.wishlistItems.map((item) => (
+                          <button
+                            type="button"
+                            key={`${item.source}:${item.externalId}`}
+                            onClick={() => openFragranceDetail(item.source, item.externalId)}
+                            className="group relative overflow-hidden rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-400/12 via-sky-500/8 to-blue-500/10 p-3 text-left shadow-[0_10px_30px_rgba(56,189,248,0.14)]"
+                          >
+                            <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-cyan-200/10 blur-2xl" />
+                            <div className="relative flex items-center gap-3">
+                              <img
+                                src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                                alt={item.name}
+                                className="h-16 w-16 rounded-xl border border-white/15 object-cover bg-white/5"
+                                loading="lazy"
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  if (img.dataset.fallbackApplied === "1") return;
+                                  img.dataset.fallbackApplied = "1";
+                                  img.src = FALLBACK_FRAGRANCE_IMG;
+                                }}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold text-white/95">{item.name}</div>
+                                <div className="truncate text-xs text-white/70">{item.brand || "—"}</div>
+                                <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-cyan-100/80">Wishlist</div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : null}
 

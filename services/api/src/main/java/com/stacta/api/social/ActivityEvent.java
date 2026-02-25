@@ -29,8 +29,29 @@ public class ActivityEvent {
   @Column(name = "fragrance_name")
   private String fragranceName;
 
+  @Column(name = "fragrance_source")
+  private String fragranceSource;
+
+  @Column(name = "fragrance_external_id")
+  private String fragranceExternalId;
+
+  @Column(name = "fragrance_image_url")
+  private String fragranceImageUrl;
+
+  @Column(name = "review_rating")
+  private Integer reviewRating;
+
   @Column(name = "review_excerpt")
   private String reviewExcerpt;
+
+  @Column(name = "review_performance")
+  private String reviewPerformance;
+
+  @Column(name = "review_season")
+  private String reviewSeason;
+
+  @Column(name = "review_occasion")
+  private String reviewOccasion;
 
   @Column(name = "likes_count", nullable = false)
   private int likesCount = 0;
@@ -61,8 +82,22 @@ public class ActivityEvent {
   public void setType(String type) { this.type = type; }
   public String getFragranceName() { return fragranceName; }
   public void setFragranceName(String fragranceName) { this.fragranceName = fragranceName; }
+  public String getFragranceSource() { return fragranceSource; }
+  public void setFragranceSource(String fragranceSource) { this.fragranceSource = fragranceSource; }
+  public String getFragranceExternalId() { return fragranceExternalId; }
+  public void setFragranceExternalId(String fragranceExternalId) { this.fragranceExternalId = fragranceExternalId; }
+  public String getFragranceImageUrl() { return fragranceImageUrl; }
+  public void setFragranceImageUrl(String fragranceImageUrl) { this.fragranceImageUrl = fragranceImageUrl; }
+  public Integer getReviewRating() { return reviewRating; }
+  public void setReviewRating(Integer reviewRating) { this.reviewRating = reviewRating; }
   public String getReviewExcerpt() { return reviewExcerpt; }
   public void setReviewExcerpt(String reviewExcerpt) { this.reviewExcerpt = reviewExcerpt; }
+  public String getReviewPerformance() { return reviewPerformance; }
+  public void setReviewPerformance(String reviewPerformance) { this.reviewPerformance = reviewPerformance; }
+  public String getReviewSeason() { return reviewSeason; }
+  public void setReviewSeason(String reviewSeason) { this.reviewSeason = reviewSeason; }
+  public String getReviewOccasion() { return reviewOccasion; }
+  public void setReviewOccasion(String reviewOccasion) { this.reviewOccasion = reviewOccasion; }
   public int getLikesCount() { return likesCount; }
   public void setLikesCount(int likesCount) { this.likesCount = likesCount; }
   public int getCommentsCount() { return commentsCount; }

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,6 +22,7 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
     FROM notification_event ne
     JOIN users u ON u.id = ne.actor_user_id
     WHERE ne.recipient_user_id = :recipientUserId
+      AND ne.deleted_at IS NULL
       AND (
         CAST(:cursorEventAt AS timestamptz) IS NULL
         OR ne.created_at < CAST(:cursorEventAt AS timestamptz)
@@ -42,6 +44,7 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
     SELECT COUNT(ne)
     FROM NotificationEvent ne
     WHERE ne.recipientUserId = :recipientUserId
+      AND ne.deletedAt IS NULL
       AND ne.createdAt > :cutoff
   """)
   long countAfter(@Param("recipientUserId") UUID recipientUserId, @Param("cutoff") Instant cutoff);
@@ -54,4 +57,60 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
     String getActorAvatarUrl();
     Instant getCreatedAt();
   }
+
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query("""
+    UPDATE NotificationEvent ne
+    SET ne.deletedAt = :deletedAt
+    WHERE ne.id = :notificationId
+      AND ne.recipientUserId = :recipientUserId
+      AND ne.deletedAt IS NULL
+  """)
+  int softDeleteByIdForRecipient(
+    @Param("recipientUserId") UUID recipientUserId,
+    @Param("notificationId") UUID notificationId,
+    @Param("deletedAt") Instant deletedAt
+  );
+
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query("""
+    UPDATE NotificationEvent ne
+    SET ne.deletedAt = :deletedAt
+    WHERE ne.recipientUserId = :recipientUserId
+      AND ne.deletedAt IS NULL
+      AND ne.createdAt <= :seenAt
+  """)
+  int softDeleteAllReadForRecipient(
+    @Param("recipientUserId") UUID recipientUserId,
+    @Param("seenAt") Instant seenAt,
+    @Param("deletedAt") Instant deletedAt
+  );
+
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query("""
+    UPDATE NotificationEvent ne
+    SET ne.deletedAt = :deletedAt
+    WHERE ne.recipientUserId = :recipientUserId
+      AND ne.deletedAt IS NULL
+      AND ne.type <> 'MODERATION_STRIKE'
+      AND (
+        (ne.createdAt <= :seenAt AND ne.createdAt < :readCutoff)
+        OR (ne.createdAt > :seenAt AND ne.createdAt < :unreadCutoff)
+      )
+  """)
+  int softDeleteExpiredForRecipient(
+    @Param("recipientUserId") UUID recipientUserId,
+    @Param("seenAt") Instant seenAt,
+    @Param("readCutoff") Instant readCutoff,
+    @Param("unreadCutoff") Instant unreadCutoff,
+    @Param("deletedAt") Instant deletedAt
+  );
+
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query("""
+    DELETE FROM NotificationEvent ne
+    WHERE ne.deletedAt IS NOT NULL
+      AND ne.deletedAt < :purgeBefore
+  """)
+  int hardDeleteSoftDeletedBefore(@Param("purgeBefore") Instant purgeBefore);
 }

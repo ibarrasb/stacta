@@ -32,6 +32,9 @@ public class NotificationEvent {
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
+  @Column(name = "deleted_at")
+  private Instant deletedAt;
+
   @PrePersist
   void onCreate() {
     if (createdAt == null) createdAt = Instant.now();
@@ -48,4 +51,6 @@ public class NotificationEvent {
   public void setSourceFollowId(UUID sourceFollowId) { this.sourceFollowId = sourceFollowId; }
   public Instant getCreatedAt() { return createdAt; }
   public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+  public Instant getDeletedAt() { return deletedAt; }
+  public void setDeletedAt(Instant deletedAt) { this.deletedAt = deletedAt; }
 }

@@ -39,3 +39,18 @@ export function removeTopFragrance(params: { source: "FRAGELLA" | "COMMUNITY"; e
     method: "DELETE",
   });
 }
+
+export function addToWishlist(body: AddCollectionItemRequest) {
+  return authedFetch<CollectionItem>("/api/v1/wishlist", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function removeFromWishlist(params: { source: "FRAGELLA" | "COMMUNITY"; externalId: string }) {
+  const source = encodeURIComponent(params.source);
+  const externalId = encodeURIComponent(params.externalId);
+  return authedFetch<void>(`/api/v1/wishlist?source=${source}&externalId=${externalId}`, {
+    method: "DELETE",
+  });
+}

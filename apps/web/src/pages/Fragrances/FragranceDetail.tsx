@@ -14,20 +14,22 @@ import type { FragranceSearchResult } from "@/lib/api/fragrances";
 import {
   createCommunityFragrance,
   deleteCommunityFragrance,
-  getCommunityVoteSummary,
+  getFragranceVoteSummary,
   getFragranceDetail,
+  getFragranceRatingSummary,
   rateFragrance,
   searchCommunityFragrances,
   searchFragrances,
   searchNotes,
-  upsertCommunityVote,
+  upsertFragranceVote,
   updateCommunityFragrance,
   type CommunityVoteSummary,
   type NoteDictionaryItem,
 } from "@/lib/api/fragrances";
-import { addToCollection as addCollectionItem } from "@/lib/api/collection";
+import { addToCollection as addCollectionItem, addToWishlist as addWishlistItem } from "@/lib/api/collection";
 import { getMe } from "@/lib/api/me";
 import { reportCommunityFragrance } from "@/lib/api/note-moderation";
+import { submitReview } from "@/lib/api/reviews";
 import { getCreatorRatingSummary, rateCreator } from "@/lib/api/users";
 
 import fragrancePlaceholder from "@/assets/illustrations/NotFound.png";
@@ -86,12 +88,26 @@ function toVoteKey(label: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+function fromVoteKey(key: string) {
+  return key
+    .split("_")
+    .map((x) => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
 }
 
 function pct(n01: number) {
   return `${Math.round(clamp01(n01) * 100)}%`;
+}
+
+function levelLabelFrom01(value01: number, labels: readonly string[]) {
+  const safe = clamp01(value01);
+  if (safe <= 0) return "—";
+  const idx = Math.max(1, Math.min(5, Math.round(safe * 5)));
+  return labels[idx] ?? "—";
 }
 
 function getBarFillStyle(value01: number) {
@@ -422,17 +438,18 @@ function RankingCard({
             const voteKey = toVoteKey(it.name);
             const userStars = Math.max(0, Math.min(5, userStarsByKey?.[voteKey] ?? 0));
             return (
-              <div key={`${it.name}-${it.score}`} className="space-y-2 rounded-xl border border-white/8 bg-white/[0.02] p-3 sm:grid sm:grid-cols-[90px_1fr_148px] sm:items-center sm:gap-4 sm:space-y-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0">
-                <div className="text-xs text-white/80 capitalize sm:truncate">{it.name}</div>
-
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10 sm:mr-1">
-                  <div className="h-full rounded-full" style={{ width: pct(v01), ...getBarFillStyle(v01) }} />
+              <div key={`${it.name}-${it.score}`} className="space-y-2 rounded-xl border border-white/8 bg-white/[0.02] p-3 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-20 shrink-0 text-xs text-white/80 capitalize sm:w-24 sm:truncate">{it.name}</div>
+                  <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+                    <div className="h-full rounded-full" style={{ width: pct(v01), ...getBarFillStyle(v01) }} />
+                  </div>
                 </div>
 
-                <div className="flex flex-nowrap items-center justify-between gap-2 sm:justify-end">
-                  <div className="text-[11px] tabular-nums text-white/65">{it.score.toFixed(2)}</div>
+                <div className="flex items-center justify-end gap-3 pl-[5.75rem] sm:pl-[6.75rem]">
+                  <div className="shrink-0 min-w-[3.25rem] text-right text-[11px] tabular-nums text-white/65">{it.score.toFixed(2)}</div>
                   {onVote ? (
-                    <div className="inline-flex shrink-0 items-center gap-0.5 sm:gap-0.5">
+                    <div className="inline-flex shrink-0 items-center gap-0.5">
                       {Array.from({ length: 5 }).map((_, i) => {
                         const n = i + 1;
                         const lit = n <= userStars;
@@ -441,7 +458,7 @@ function RankingCard({
                             key={`${voteKey}-${n}`}
                             type="button"
                             className={cx(
-                              "grid h-6 w-6 place-items-center rounded-md text-[13px] leading-none transition touch-manipulation sm:h-6 sm:w-6 sm:text-[13px]",
+                              "grid h-5 w-5 place-items-center rounded-md text-[12px] leading-none transition touch-manipulation sm:h-5 sm:w-5 sm:text-[12px]",
                               lit ? "text-amber-200" : "text-white/25 hover:text-white/60"
                             )}
                             onClick={() => onVote(it.name, userStars === n ? 0 : n)}
@@ -453,7 +470,9 @@ function RankingCard({
                       })}
                     </div>
                   ) : (
-                    <Stars value01={v01} />
+                    <div className="shrink-0">
+                      <Stars value01={v01} />
+                    </div>
                   )}
                 </div>
               </div>
@@ -542,6 +561,10 @@ export default function FragranceDetailPage() {
   const [reportFragranceReason, setReportFragranceReason] = useState<"SPAM" | "INAPPROPRIATE" | "OTHER">("INAPPROPRIATE");
   const [reportFragranceDetails, setReportFragranceDetails] = useState("");
   const [addingToCollection, setAddingToCollection] = useState(false);
+  const [addingToWishlist, setAddingToWishlist] = useState(false);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [reviewBody, setReviewBody] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [editingCommunity, setEditingCommunity] = useState(false);
   const [deletingCommunity, setDeletingCommunity] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -645,7 +668,7 @@ export default function FragranceDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fragrance, routeExternalId]);
 
   useEffect(() => {
     if (isCreateMode) return;
@@ -978,13 +1001,76 @@ export default function FragranceDetailPage() {
   }, [fragrance, routeExternalId]);
 
   const addToWishlist = useCallback(async () => {
-    setNoticeTitle("Wishlist");
-    setNotice("Add to wishlist (wire backend endpoint next).");
-  }, []);
+    const normalizedSource = String(fragrance?.source ?? inferPreferredSource(routeExternalId || "") ?? "FRAGELLA")
+      .trim()
+      .toUpperCase();
+    const source = normalizedSource === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const externalFromFragrance = String(fragrance?.externalId ?? "").trim();
+    const externalFromRoute = String(routeExternalId ?? "").trim();
+    let external = externalFromFragrance || (!isSyntheticRouteId(externalFromRoute) ? externalFromRoute : "");
+    const name = String(fragrance?.name ?? "").trim();
+    const brand = String(fragrance?.brand ?? "").trim();
+
+    if ((!external || isSyntheticRouteId(external)) && source === "FRAGELLA") {
+      const computed = computeFragellaExternalId(brand, name, (fragrance as any)?.year ?? null);
+      if (hasUsableExternalId(computed)) {
+        external = computed;
+      }
+    }
+
+    if ((!external || isSyntheticRouteId(external)) && name) {
+      try {
+        const query = [brand, name].filter(Boolean).join(" ").trim() || name;
+        const candidates = source === "COMMUNITY"
+          ? await searchCommunityFragrances({ q: query, limit: 30 })
+          : await searchFragrances({ q: query, limit: 30, persist: true });
+
+        const targetName = normalizeForMatch(name);
+        const targetBrand = normalizeForMatch(brand);
+
+        const exact = candidates.find((c) =>
+          normalizeForMatch(c.name) === targetName &&
+          normalizeForMatch(c.brand) === targetBrand &&
+          hasUsableExternalId(c.externalId)
+        );
+
+        const byName = candidates.find((c) =>
+          normalizeForMatch(c.name) === targetName && hasUsableExternalId(c.externalId)
+        );
+
+        external = String((exact ?? byName)?.externalId ?? "").trim();
+      } catch {
+        // keep fallback path below
+      }
+    }
+
+    if (!external || isSyntheticRouteId(external) || !name) {
+      setNoticeTitle("Wishlist");
+      setNotice("Could not resolve a stable fragrance ID for this item yet.");
+      return;
+    }
+
+    setAddingToWishlist(true);
+    try {
+      await addWishlistItem({
+        source,
+        externalId: external,
+        name,
+        brand: fragrance?.brand ?? null,
+        imageUrl: fragrance?.imageUrl ?? null,
+      });
+      setNoticeTitle("Wishlist");
+      setNotice("Added to wishlist.");
+    } catch (e: any) {
+      setNoticeTitle("Wishlist");
+      setNotice(e?.message || "Failed to add fragrance to wishlist.");
+    } finally {
+      setAddingToWishlist(false);
+    }
+  }, [fragrance, routeExternalId]);
 
   const writeReview = useCallback(async () => {
-    setNoticeTitle("Review");
-    setNotice("Review flow (wire backend endpoint next).");
+    setReviewDialogOpen(true);
   }, []);
 
   const submitReportFragrance = useCallback(async () => {
@@ -1101,12 +1187,34 @@ export default function FragranceDetailPage() {
   }, [fragrance, ratingValue, ratingCount, currentUserRating]);
 
   const onRateFragrance = useCallback(async (stars: number) => {
-    if (!fragrance?.externalId || stars < 1 || stars > 5) return;
+    if (stars < 1 || stars > 5) return;
+    const normalizedSource = String(fragrance?.source ?? inferPreferredSource(routeExternalId || "") ?? "FRAGELLA")
+      .trim()
+      .toUpperCase();
+    const source = normalizedSource === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const externalFromFragrance = String(fragrance?.externalId ?? "").trim();
+    const externalFromRoute = String(routeExternalId ?? "").trim();
+    let resolvedExternal = externalFromFragrance || (!isSyntheticRouteId(externalFromRoute) ? externalFromRoute : "");
+    if ((!resolvedExternal || isSyntheticRouteId(resolvedExternal)) && source === "FRAGELLA") {
+      const computed = computeFragellaExternalId(
+        String(fragrance?.brand ?? ""),
+        String(fragrance?.name ?? ""),
+        (fragrance as any)?.year ?? null
+      );
+      if (hasUsableExternalId(computed)) {
+        resolvedExternal = computed;
+      }
+    }
+    if (!resolvedExternal || isSyntheticRouteId(resolvedExternal)) {
+      setNoticeTitle("Rating");
+      setNotice("Could not resolve a stable fragrance ID for rating.");
+      return;
+    }
     setRatingBusy(true);
     try {
       const summary = await rateFragrance({
-        source: String(fragrance.source ?? "").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA",
-        externalId: fragrance.externalId,
+        source,
+        externalId: resolvedExternal,
         rating: stars,
       });
       setRatingState({
@@ -1120,20 +1228,80 @@ export default function FragranceDetailPage() {
     } finally {
       setRatingBusy(false);
     }
-  }, [fragrance]);
+  }, [fragrance, routeExternalId]);
   const isCommunityFragrance = String(fragrance?.source ?? "").toUpperCase() === "COMMUNITY";
+  const voteSource = isCommunityFragrance ? "COMMUNITY" : "FRAGELLA";
+  const voteExternalId = useMemo(() => {
+    if (isCreateMode) return "";
+    const externalFromFragrance = String(fragrance?.externalId ?? "").trim();
+    const externalFromRoute = String(routeExternalId ?? "").trim();
+    let resolved = externalFromFragrance || (!isSyntheticRouteId(externalFromRoute) ? externalFromRoute : "");
+    if ((!resolved || isSyntheticRouteId(resolved)) && voteSource === "FRAGELLA") {
+      const computed = computeFragellaExternalId(
+        String(fragrance?.brand ?? ""),
+        String(fragrance?.name ?? ""),
+        (fragrance as any)?.year ?? null
+      );
+      if (hasUsableExternalId(computed)) {
+        resolved = computed;
+      }
+    }
+    return hasUsableExternalId(resolved) ? resolved : "";
+  }, [fragrance, isCreateMode, routeExternalId, voteSource]);
+  const canVoteFragrance = Boolean(voteExternalId);
+  const ratingExternalId = useMemo(() => {
+    const normalizedSource = String(fragrance?.source ?? inferPreferredSource(routeExternalId || "") ?? "FRAGELLA")
+      .trim()
+      .toUpperCase();
+    const source = normalizedSource === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const externalFromFragrance = String(fragrance?.externalId ?? "").trim();
+    const externalFromRoute = String(routeExternalId ?? "").trim();
+    let resolved = externalFromFragrance || (!isSyntheticRouteId(externalFromRoute) ? externalFromRoute : "");
+    if ((!resolved || isSyntheticRouteId(resolved)) && source === "FRAGELLA") {
+      const computed = computeFragellaExternalId(
+        String(fragrance?.brand ?? ""),
+        String(fragrance?.name ?? ""),
+        (fragrance as any)?.year ?? null
+      );
+      if (hasUsableExternalId(computed)) {
+        resolved = computed;
+      }
+    }
+    return hasUsableExternalId(resolved) ? resolved : "";
+  }, [fragrance, routeExternalId]);
+
   useEffect(() => {
-    if (!isCommunityFragrance || !fragrance?.externalId || isCreateMode) {
+    if (!ratingExternalId || !fragrance) return;
+    const source = String(fragrance?.source ?? "").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    let cancelled = false;
+    getFragranceRatingSummary({ source, externalId: ratingExternalId })
+      .then((summary) => {
+        if (cancelled) return;
+        setRatingState((prev) => ({
+          average: Number(summary.average ?? 0),
+          count: Number(summary.count ?? 0),
+          userRating: summary.userRating ?? prev?.userRating ?? null,
+        }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fragrance, ratingExternalId]);
+  useEffect(() => {
+    if (!canVoteFragrance || !voteExternalId) {
       setCommunityVoteSummary(null);
       communityVoteHydratedExternalIdRef.current = null;
       return;
     }
     let cancelled = false;
-    getCommunityVoteSummary(fragrance.externalId)
+    getFragranceVoteSummary({ source: voteSource, externalId: voteExternalId })
       .then((summary) => {
         if (cancelled) return;
         setCommunityVoteSummary(summary);
-        if (communityVoteHydratedExternalIdRef.current !== fragrance.externalId) {
+        if (communityVoteHydratedExternalIdRef.current !== voteExternalId) {
           const mine = summary?.userVote;
           communityVoteHydratingRef.current = true;
           setCommunityLongevityVote(mine?.longevityScore ?? null);
@@ -1152,7 +1320,7 @@ export default function FragranceDetailPage() {
             seasonVotes: Array.isArray(mine?.seasonVotes) ? mine.seasonVotes : [],
             occasionVotes: Array.isArray(mine?.occasionVotes) ? mine.occasionVotes : [],
           });
-          communityVoteHydratedExternalIdRef.current = fragrance.externalId;
+          communityVoteHydratedExternalIdRef.current = voteExternalId;
           setTimeout(() => {
             communityVoteHydratingRef.current = false;
           }, 0);
@@ -1165,10 +1333,10 @@ export default function FragranceDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [fragrance?.externalId, isCommunityFragrance, isCreateMode]);
+  }, [canVoteFragrance, voteExternalId, voteSource]);
 
   useEffect(() => {
-    if (!isCommunityFragrance || !fragrance?.externalId || isCreateMode) return;
+    if (!canVoteFragrance || !voteExternalId) return;
     if (communityVoteHydratingRef.current) return;
 
     const payload = {
@@ -1196,7 +1364,10 @@ export default function FragranceDetailPage() {
     communityVoteAutoSaveTimerRef.current = setTimeout(async () => {
       setCommunityVoteSaving(true);
       try {
-        const next = await upsertCommunityVote(fragrance.externalId!, payload);
+        const next = await upsertFragranceVote(
+          { source: voteSource, externalId: voteExternalId },
+          payload
+        );
         communityVoteLastSavedRef.current = JSON.stringify({
           longevityScore: next.userVote?.longevityScore ?? null,
           sillageScore: next.userVote?.sillageScore ?? null,
@@ -1224,9 +1395,9 @@ export default function FragranceDetailPage() {
     communityPriceVote,
     communitySeasonVotes,
     communitySillageVote,
-    fragrance?.externalId,
-    isCommunityFragrance,
-    isCreateMode,
+    canVoteFragrance,
+    voteExternalId,
+    voteSource,
   ]);
 
   const communitySeasonStarsByKey = useMemo(() => {
@@ -1245,6 +1416,123 @@ export default function FragranceDetailPage() {
     });
     return out;
   }, [communityOccasionVotes]);
+
+  const reviewScorecard = useMemo(() => {
+    const performance: Array<{ label: string; value: number }> = [];
+    const resolvedLongevity = communityLongevityVote ?? (longevity01 > 0 ? Math.round(longevity01 * 5) : null);
+    const resolvedSillage = communitySillageVote ?? (sillage01 > 0 ? Math.round(sillage01 * 5) : null);
+    const resolvedConfidence = confidence01 > 0 ? Math.round(confidence01 * 5) : null;
+    const resolvedPopularity = popularity01 > 0 ? Math.round(popularity01 * 5) : null;
+    if (resolvedLongevity !== null) performance.push({ label: "Longevity", value: resolvedLongevity });
+    if (resolvedSillage !== null) performance.push({ label: "Sillage", value: resolvedSillage });
+    if (resolvedConfidence !== null) performance.push({ label: "Confidence", value: resolvedConfidence });
+    if (resolvedPopularity !== null) performance.push({ label: "Popularity", value: resolvedPopularity });
+
+    const season = Object.entries(communitySeasonStarsByKey)
+      .filter(([, stars]) => Number(stars) > 0)
+      .map(([key, stars]) => ({ label: fromVoteKey(key), value: Number(stars) }))
+      .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+
+    const occasion = Object.entries(communityOccasionStarsByKey)
+      .filter(([, stars]) => Number(stars) > 0)
+      .map(([key, stars]) => ({ label: fromVoteKey(key), value: Number(stars) }))
+      .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+
+    return { performance, season, occasion };
+  }, [
+    communityLongevityVote,
+    communityOccasionStarsByKey,
+    communitySeasonStarsByKey,
+    communitySillageVote,
+    confidence01,
+    longevity01,
+    popularity01,
+    sillage01,
+  ]);
+
+  const submissionHandler = useCallback(async () => {
+    const normalizedSource = String(fragrance?.source ?? inferPreferredSource(routeExternalId || "") ?? "FRAGELLA")
+      .trim()
+      .toUpperCase();
+    const source = normalizedSource === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const externalFromFragrance = String(fragrance?.externalId ?? "").trim();
+    const externalFromRoute = String(routeExternalId ?? "").trim();
+    let resolvedExternal = externalFromFragrance || (!isSyntheticRouteId(externalFromRoute) ? externalFromRoute : "");
+    const name = String(fragrance?.name ?? "").trim();
+    const brand = String(fragrance?.brand ?? "").trim();
+    const rating = Number(ratingState?.userRating ?? 0);
+    const excerpt = reviewBody.trim();
+
+    if ((!resolvedExternal || isSyntheticRouteId(resolvedExternal)) && source === "FRAGELLA") {
+      const computed = computeFragellaExternalId(brand, name, (fragrance as any)?.year ?? null);
+      if (hasUsableExternalId(computed)) {
+        resolvedExternal = computed;
+      }
+    }
+
+    if ((!resolvedExternal || isSyntheticRouteId(resolvedExternal)) && name) {
+      try {
+        const query = [brand, name].filter(Boolean).join(" ").trim() || name;
+        const candidates = source === "COMMUNITY"
+          ? await searchCommunityFragrances({ q: query, limit: 30 })
+          : await searchFragrances({ q: query, limit: 30, persist: true });
+        const targetName = normalizeForMatch(name);
+        const targetBrand = normalizeForMatch(brand);
+        const exact = candidates.find((c) =>
+          normalizeForMatch(c.name) === targetName &&
+          normalizeForMatch(c.brand) === targetBrand &&
+          hasUsableExternalId(c.externalId)
+        );
+        const byName = candidates.find((c) =>
+          normalizeForMatch(c.name) === targetName && hasUsableExternalId(c.externalId)
+        );
+        resolvedExternal = String((exact ?? byName)?.externalId ?? "").trim();
+      } catch {
+        // keep fallback path below
+      }
+    }
+
+    if (!resolvedExternal || isSyntheticRouteId(resolvedExternal)) {
+      setNoticeTitle("Review");
+      setNotice("Could not resolve a stable fragrance ID for review.");
+      return;
+    }
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      setNoticeTitle("Review");
+      setNotice("Please add your star rating first.");
+      return;
+    }
+    if (!excerpt) {
+      setNoticeTitle("Review");
+      setNotice("Please write a short review before submitting.");
+      return;
+    }
+
+    setReviewSubmitting(true);
+    try {
+      await submitReview({
+        source,
+        externalId: resolvedExternal,
+        fragranceName: name || "Fragrance",
+        fragranceBrand: fragrance?.brand ?? null,
+        fragranceImageUrl: fragrance?.imageUrl ?? null,
+        rating,
+        excerpt,
+        performance: Object.fromEntries(reviewScorecard.performance.map((it) => [it.label.toLowerCase(), it.value])),
+        season: Object.fromEntries(reviewScorecard.season.map((it) => [it.label.toLowerCase(), it.value])),
+        occasion: Object.fromEntries(reviewScorecard.occasion.map((it) => [it.label.toLowerCase(), it.value])),
+      });
+      setReviewDialogOpen(false);
+      setReviewBody("");
+      setNoticeTitle("Review");
+      setNotice("Review submitted to feed.");
+    } catch (e: any) {
+      setNoticeTitle("Review");
+      setNotice(e?.message || "Failed to submit review.");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  }, [fragrance, ratingState?.userRating, reviewBody, reviewScorecard, routeExternalId]);
 
   const onVoteSeason = useCallback((name: string, stars: number) => {
     const key = toVoteKey(name);
@@ -1736,21 +2024,23 @@ export default function FragranceDetailPage() {
                             "—"
                           )}
                         </div>
-                        {isEditingForm ? (
-                          <div className="flex min-w-[170px] items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                            <span className="text-[11px] text-white/65">Visibility</span>
-                            <Switch
-                              checked={draftVisibility === "PUBLIC"}
-                              onCheckedChange={(checked) => setDraftVisibility(checked ? "PUBLIC" : "PRIVATE")}
-                              aria-label="Set fragrance visibility"
-                            />
-                            <span className="text-[11px] text-cyan-100">{shownVisibilityLabel}</span>
-                          </div>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
-                            {shownVisibilityLabel}
-                          </span>
-                        )}
+                        {isCommunityFragrance ? (
+                          isEditingForm ? (
+                            <div className="flex min-w-[170px] items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                              <span className="text-[11px] text-white/65">Visibility</span>
+                              <Switch
+                                checked={draftVisibility === "PUBLIC"}
+                                onCheckedChange={(checked) => setDraftVisibility(checked ? "PUBLIC" : "PRIVATE")}
+                                aria-label="Set fragrance visibility"
+                              />
+                              <span className="text-[11px] text-cyan-100">{shownVisibilityLabel}</span>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
+                              {shownVisibilityLabel}
+                            </span>
+                          )
+                        ) : null}
                         {createdByUsername ? (
                           <button
                             type="button"
@@ -1827,9 +2117,15 @@ export default function FragranceDetailPage() {
                       <Button
                         variant="secondary"
                         className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                        disabled={addingToWishlist}
                         onClick={addToWishlist}
                       >
-                        Add to wishlist
+                        {addingToWishlist ? (
+                          <span className="inline-flex items-center gap-2">
+                            <InlineSpinner />
+                            <span>Adding</span>
+                          </span>
+                        ) : "Add to wishlist"}
                       </Button>
                       <Button
                         variant="secondary"
@@ -1891,7 +2187,7 @@ export default function FragranceDetailPage() {
                     <div className="rounded-2xl border border-white/15 bg-black/20 p-3">
                       <div className="text-[11px] text-white/60">Price</div>
                       <div className="mt-1 text-sm font-semibold">{fragrance.priceValue ?? fragrance.price ?? "Not listed"}</div>
-                      {isCommunityFragrance && !isEditingForm ? (
+                      {canVoteFragrance && !isEditingForm ? (
                         <div className="mt-2 space-y-2">
                           <div className="flex flex-wrap gap-2">
                             {COMMUNITY_PRICE_OPTIONS.map((option) => (
@@ -1939,14 +2235,14 @@ export default function FragranceDetailPage() {
                     <div className="mt-4 space-y-4">
                       <Bar
                         label="Longevity"
-                        value01={isCommunityFragrance && !isEditingForm && communityVoteSummary ? communityLongevity01 : shownLongevity01}
+                        value01={canVoteFragrance && !isEditingForm && communityVoteSummary ? communityLongevity01 : shownLongevity01}
                         rightText={
-                          isCommunityFragrance && !isEditingForm
-                            ? (communityLongevityVote ? COMMUNITY_LONGEVITY_LEVEL_LABELS[communityLongevityVote] : "Not voted")
+                          canVoteFragrance && !isEditingForm
+                            ? levelLabelFrom01(communityLongevity01, COMMUNITY_LONGEVITY_LEVEL_LABELS)
                             : shownLongevityLabel
                         }
                       />
-                      {isCommunityFragrance && !isEditingForm ? (
+                      {canVoteFragrance && !isEditingForm ? (
                         <>
                           <input
                             type="range"
@@ -1962,18 +2258,21 @@ export default function FragranceDetailPage() {
                             <span>Fleeting</span>
                             <span>Endless</span>
                           </div>
+                          <div className="text-[11px] text-white/55">
+                            Your vote: {communityLongevityVote ? COMMUNITY_LONGEVITY_LEVEL_LABELS[communityLongevityVote] : "Not voted"}
+                          </div>
                         </>
                       ) : null}
                       <Bar
                         label="Sillage"
-                        value01={isCommunityFragrance && !isEditingForm && communityVoteSummary ? communitySillage01 : shownSillage01}
+                        value01={canVoteFragrance && !isEditingForm && communityVoteSummary ? communitySillage01 : shownSillage01}
                         rightText={
-                          isCommunityFragrance && !isEditingForm
-                            ? (communitySillageVote ? COMMUNITY_SILLAGE_LEVEL_LABELS[communitySillageVote] : "Not voted")
+                          canVoteFragrance && !isEditingForm
+                            ? levelLabelFrom01(communitySillage01, COMMUNITY_SILLAGE_LEVEL_LABELS)
                             : shownSillageLabel
                         }
                       />
-                      {isCommunityFragrance && !isEditingForm ? (
+                      {canVoteFragrance && !isEditingForm ? (
                         <>
                           <input
                             type="range"
@@ -1989,9 +2288,12 @@ export default function FragranceDetailPage() {
                             <span>Skin scent</span>
                             <span>Nuclear</span>
                           </div>
+                          <div className="text-[11px] text-white/55">
+                            Your vote: {communitySillageVote ? COMMUNITY_SILLAGE_LEVEL_LABELS[communitySillageVote] : "Not voted"}
+                          </div>
                         </>
                       ) : null}
-                      {!isCommunityFragrance ? (
+                      {!canVoteFragrance ? (
                         <>
                           <Bar
                             label="Confidence"
@@ -2005,7 +2307,7 @@ export default function FragranceDetailPage() {
                           />
                         </>
                       ) : null}
-                      {isCommunityFragrance && !isEditingForm ? (
+                      {canVoteFragrance && !isEditingForm ? (
                         <div className="min-h-5 text-xs text-white/70">
                           {communityVoteSaving ? (
                             <span className="inline-flex items-center gap-2">
@@ -2018,8 +2320,10 @@ export default function FragranceDetailPage() {
                     </div>
 
                     <div className="mt-4 text-xs text-white/45">
-                      {isCommunityFragrance
-                        ? "Community bars are calculated from member votes."
+                      {canVoteFragrance
+                        ? (isCommunityFragrance
+                          ? "Community bars are calculated from member votes."
+                          : "Bars blend Fragella baseline with community votes.")
                         : "Confidence and popularity are categorical labels."}
                     </div>
                   </div>
@@ -2081,21 +2385,23 @@ export default function FragranceDetailPage() {
                           "—"
                         )}
                       </div>
-                      {isEditingForm ? (
-                        <div className="flex min-w-[170px] items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                          <span className="text-[11px] text-white/65">Visibility</span>
-                          <Switch
-                            checked={draftVisibility === "PUBLIC"}
-                            onCheckedChange={(checked) => setDraftVisibility(checked ? "PUBLIC" : "PRIVATE")}
-                            aria-label="Set fragrance visibility"
-                          />
-                          <span className="text-[11px] text-cyan-100">{shownVisibilityLabel}</span>
-                        </div>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
-                          {shownVisibilityLabel}
-                        </span>
-                      )}
+                      {isCommunityFragrance ? (
+                        isEditingForm ? (
+                          <div className="flex min-w-[170px] items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                            <span className="text-[11px] text-white/65">Visibility</span>
+                            <Switch
+                              checked={draftVisibility === "PUBLIC"}
+                              onCheckedChange={(checked) => setDraftVisibility(checked ? "PUBLIC" : "PRIVATE")}
+                              aria-label="Set fragrance visibility"
+                            />
+                            <span className="text-[11px] text-cyan-100">{shownVisibilityLabel}</span>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
+                            {shownVisibilityLabel}
+                          </span>
+                        )
+                      ) : null}
                       {createdByUsername ? (
                         <button
                           type="button"
@@ -2233,24 +2539,28 @@ export default function FragranceDetailPage() {
                 <div className="grid gap-4 lg:grid-cols-2">
                   <RankingCard
                     title="Season ranking"
-                    items={isCommunityFragrance && communityVoteSummary
+                    items={canVoteFragrance && communityVoteSummary
                       ? communityVoteSummary.seasonRanking.map((x) => ({ name: x.name, score: Number(x.score ?? 0) }))
                       : seasonRanking}
-                    userStarsByKey={isCommunityFragrance ? communitySeasonStarsByKey : undefined}
-                    onVote={isCommunityFragrance && !isEditingForm ? onVoteSeason : undefined}
-                    rankingNote={isCommunityFragrance
-                      ? "Community voting bars are based on total star weight for each season."
+                    userStarsByKey={canVoteFragrance ? communitySeasonStarsByKey : undefined}
+                    onVote={canVoteFragrance && !isEditingForm ? onVoteSeason : undefined}
+                    rankingNote={canVoteFragrance
+                      ? (isCommunityFragrance
+                        ? "Community voting bars are based on total star weight for each season."
+                        : "Bars blend Fragella model baseline with community star voting for each season.")
                       : undefined}
                   />
                   <RankingCard
                     title="Occasion ranking"
-                    items={isCommunityFragrance && communityVoteSummary
+                    items={canVoteFragrance && communityVoteSummary
                       ? communityVoteSummary.occasionRanking.map((x) => ({ name: x.name, score: Number(x.score ?? 0) }))
                       : occasionRanking}
-                    userStarsByKey={isCommunityFragrance ? communityOccasionStarsByKey : undefined}
-                    onVote={isCommunityFragrance && !isEditingForm ? onVoteOccasion : undefined}
-                    rankingNote={isCommunityFragrance
-                      ? "Community voting bars are based on total star weight for each occasion."
+                    userStarsByKey={canVoteFragrance ? communityOccasionStarsByKey : undefined}
+                    onVote={canVoteFragrance && !isEditingForm ? onVoteOccasion : undefined}
+                    rankingNote={canVoteFragrance
+                      ? (isCommunityFragrance
+                        ? "Community voting bars are based on total star weight for each occasion."
+                        : "Bars blend Fragella model baseline with community star voting for each occasion.")
                       : undefined}
                   />
                 </div>
@@ -2363,6 +2673,83 @@ export default function FragranceDetailPage() {
         onCancel={() => setConfirmDeleteOpen(false)}
         onConfirm={onDeleteCommunity}
       />
+
+      <Dialog open={reviewDialogOpen} onOpenChange={(next) => !reviewSubmitting && setReviewDialogOpen(next)}>
+        <DialogContent className="w-[calc(100vw-24px)] max-w-xl rounded-3xl border-white/15 bg-[#121212]/90 p-0 text-white backdrop-blur-xl">
+          <DialogHeader className="border-b border-white/10 px-5 py-4">
+            <DialogTitle className="text-base text-white">Submit Review</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 p-5">
+            <div className="rounded-2xl border border-white/15 bg-white/5 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#3EB489]">Scorecard Summary</div>
+              <div className="mt-3 text-sm text-white/85">
+                Overall rating: <span className="font-semibold">{ratingState?.userRating ?? "—"} / 5</span>
+              </div>
+              {reviewScorecard.performance.length ? (
+                <div className="mt-3 space-y-2">
+                  {reviewScorecard.performance.map((row) => (
+                    <div key={row.label}>
+                      <div className="mb-1 flex items-center justify-between text-xs text-white/75">
+                        <span>{row.label}</span>
+                        <span>{row.value}/5</span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                        <div className="h-full rounded-full bg-[#3EB489]" style={{ width: `${Math.round((row.value / 5) * 100)}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {reviewScorecard.season.length ? (
+                <div className="mt-3 text-xs text-white/80">
+                  Seasons: {reviewScorecard.season.map((x) => `${x.label} ${"★".repeat(x.value)}`).join(" • ")}
+                </div>
+              ) : null}
+              {reviewScorecard.occasion.length ? (
+                <div className="mt-2 text-xs text-white/80">
+                  Occasions: {reviewScorecard.occasion.map((x) => `${x.label} ${"★".repeat(x.value)}`).join(" • ")}
+                </div>
+              ) : null}
+              {!reviewScorecard.performance.length && !reviewScorecard.season.length && !reviewScorecard.occasion.length ? (
+                <div className="mt-3 text-xs text-white/55">No detailed selections captured yet. Add season/occasion stars to enrich this review.</div>
+              ) : null}
+            </div>
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#3EB489]">Written Review</div>
+              <Textarea
+                value={reviewBody}
+                onChange={(e) => setReviewBody(e.target.value)}
+                placeholder="Share what stood out: opening, dry down, projection, and when you’d wear it."
+                className="min-h-[130px] border-white/12 bg-white/5 text-white placeholder:text-white/40"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9 border-white/20 bg-white/10 text-white hover:bg-white/16"
+                onClick={() => setReviewDialogOpen(false)}
+                disabled={reviewSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-9 bg-[#3EB489] text-black hover:bg-[#34a07a]"
+                onClick={submissionHandler}
+                disabled={reviewSubmitting}
+              >
+                {reviewSubmitting ? (
+                  <span className="inline-flex items-center gap-2">
+                    <InlineSpinner />
+                    <span>Submitting</span>
+                  </span>
+                ) : "Submit Review"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={reportFragranceDialogOpen} onOpenChange={(next) => !reportSubmitting && setReportFragranceDialogOpen(next)}>
         <DialogContent className="max-w-md rounded-3xl border-white/15 bg-[#090a0f] text-white">

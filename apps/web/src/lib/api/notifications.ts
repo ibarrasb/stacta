@@ -12,3 +12,11 @@ export function listNotifications(params: { limit?: number; cursor?: string } = 
 export function getUnreadNotificationsCount() {
   return authedFetch<{ count: number }>("/api/v1/notifications/unread-count");
 }
+
+export function deleteNotification(notificationId: string) {
+  return authedFetch<void>(`/api/v1/notifications/${notificationId}`, { method: "DELETE" });
+}
+
+export function clearReadNotifications() {
+  return authedFetch<void>("/api/v1/notifications/read", { method: "DELETE" });
+}

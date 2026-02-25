@@ -251,6 +251,14 @@ export function rateFragrance(
   });
 }
 
+export function getFragranceRatingSummary(
+  params: { source?: "FRAGELLA" | "COMMUNITY"; externalId: string }
+) {
+  const source = params.source ?? "FRAGELLA";
+  const externalId = encodeURIComponent(params.externalId);
+  return authedFetch<FragranceRatingSummary>(`/api/v1/fragrances/${externalId}/rating?source=${source}`);
+}
+
 
 export function searchCommunityFragrances(
   params: { q: string; limit?: number },
@@ -296,6 +304,25 @@ export function getCommunityVoteSummary(externalId: string) {
 
 export function upsertCommunityVote(externalId: string, body: UpsertCommunityVoteRequest) {
   return authedFetch<CommunityVoteSummary>(`/api/v1/community-fragrances/${encodeURIComponent(externalId)}/votes`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function getFragranceVoteSummary(params: { source?: "FRAGELLA" | "COMMUNITY"; externalId: string }) {
+  const source = params.source ?? "FRAGELLA";
+  const externalId = encodeURIComponent(params.externalId);
+  return authedFetch<CommunityVoteSummary>(`/api/v1/fragrances/${externalId}/votes?source=${source}`);
+}
+
+export function upsertFragranceVote(
+  params: { source?: "FRAGELLA" | "COMMUNITY"; externalId: string },
+  body: UpsertCommunityVoteRequest
+) {
+  const source = params.source ?? "FRAGELLA";
+  const externalId = encodeURIComponent(params.externalId);
+  return authedFetch<CommunityVoteSummary>(`/api/v1/fragrances/${externalId}/votes?source=${source}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

@@ -3,6 +3,8 @@ package com.stacta.api.collection;
 import com.stacta.api.collection.dto.AddCollectionItemRequest;
 import com.stacta.api.collection.dto.CollectionItemDto;
 import com.stacta.api.config.ApiException;
+import com.stacta.api.social.ActivityEvent;
+import com.stacta.api.social.ActivityEventRepository;
 import com.stacta.api.user.User;
 import com.stacta.api.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -16,16 +18,22 @@ import java.util.UUID;
 public class UserCollectionService {
 
   private final UserCollectionItemRepository items;
+  private final UserWishlistItemRepository wishlistItems;
   private final UserTopFragranceRepository topFragrances;
+  private final ActivityEventRepository activities;
   private final UserRepository users;
 
   public UserCollectionService(
     UserCollectionItemRepository items,
+    UserWishlistItemRepository wishlistItems,
     UserTopFragranceRepository topFragrances,
+    ActivityEventRepository activities,
     UserRepository users
   ) {
     this.items = items;
+    this.wishlistItems = wishlistItems;
     this.topFragrances = topFragrances;
+    this.activities = activities;
     this.users = users;
   }
 
@@ -75,6 +83,61 @@ public class UserCollectionService {
   @Transactional(readOnly = true)
   public long countForUser(UUID userId) {
     return items.countByUserId(userId);
+  }
+
+  @Transactional
+  public CollectionItemDto addToWishlist(String sub, AddCollectionItemRequest req) {
+    User me = users.findByCognitoSub(sub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+
+    String source = normalizeSource(req.source());
+    String externalId = normalizeExternalId(req.externalId());
+    String name = safeTrim(req.name());
+    if (externalId.isEmpty() || isSyntheticRouteId(externalId) || name.isEmpty()) {
+      throw new ApiException("INVALID_COLLECTION_ITEM");
+    }
+
+    boolean isNew = false;
+    UserWishlistItem entity = wishlistItems.findByUserIdAndFragranceSourceAndFragranceExternalId(me.getId(), source, externalId)
+      .orElseGet(() -> {
+        UserWishlistItem created = new UserWishlistItem();
+        created.setUserId(me.getId());
+        created.setFragranceSource(source);
+        created.setFragranceExternalId(externalId);
+        return created;
+      });
+    if (entity.getId() == null) {
+      isNew = true;
+    }
+
+    entity.setFragranceName(name);
+    entity.setFragranceBrand(nullIfBlank(req.brand()));
+    entity.setFragranceImageUrl(nullIfBlank(req.imageUrl()));
+    var saved = wishlistItems.save(entity);
+    if (isNew) {
+      appendWishlistActivity(me.getId(), saved.getFragranceName());
+    }
+    return toDto(saved);
+  }
+
+  @Transactional
+  public void removeFromWishlist(String sub, String source, String externalId) {
+    User me = users.findByCognitoSub(sub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    String normalizedSource = normalizeSource(source);
+    String normalizedExternalId = normalizeExternalId(externalId);
+    if (normalizedExternalId.isEmpty()) {
+      throw new ApiException("INVALID_COLLECTION_ITEM");
+    }
+    wishlistItems.deleteByUserIdAndFragranceSourceAndFragranceExternalId(me.getId(), normalizedSource, normalizedExternalId);
+  }
+
+  @Transactional(readOnly = true)
+  public List<CollectionItemDto> listWishlistForUser(UUID userId) {
+    return wishlistItems.findByUserIdOrderByAddedAtDesc(userId).stream().map(this::toDto).toList();
+  }
+
+  @Transactional(readOnly = true)
+  public long countWishlistForUser(UUID userId) {
+    return wishlistItems.countByUserId(userId);
   }
 
   @Transactional
@@ -142,6 +205,17 @@ public class UserCollectionService {
     );
   }
 
+  private CollectionItemDto toDto(UserWishlistItem row) {
+    return new CollectionItemDto(
+      row.getFragranceSource(),
+      row.getFragranceExternalId(),
+      row.getFragranceName(),
+      row.getFragranceBrand(),
+      row.getFragranceImageUrl(),
+      row.getAddedAt()
+    );
+  }
+
   private String normalizeSource(String raw) {
     String s = safeTrim(raw).toUpperCase(Locale.ROOT);
     return switch (s) {
@@ -165,5 +239,13 @@ public class UserCollectionService {
   private String nullIfBlank(String raw) {
     String trimmed = safeTrim(raw);
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private void appendWishlistActivity(UUID actorUserId, String fragranceName) {
+    ActivityEvent event = new ActivityEvent();
+    event.setActorUserId(actorUserId);
+    event.setType("WISHLIST_ITEM_ADDED");
+    event.setFragranceName(fragranceName);
+    activities.save(event);
   }
 }

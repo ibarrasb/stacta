@@ -12,3 +12,10 @@ export function listFeed(params: { tab: FeedTab; filter: FeedFilter; limit?: num
   if (params.cursor) query.set("cursor", params.cursor);
   return authedFetch<FeedPage>(`/api/v1/feed?${query.toString()}`);
 }
+
+export function listMyReviewFeed(params?: { limit?: number; cursor?: string }) {
+  const query = new URLSearchParams();
+  query.set("limit", String(params?.limit ?? 20));
+  if (params?.cursor) query.set("cursor", params.cursor);
+  return authedFetch<FeedPage>(`/api/v1/feed/me/reviews?${query.toString()}`);
+}

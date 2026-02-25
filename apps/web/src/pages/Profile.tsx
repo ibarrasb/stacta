@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, LockOpen, Repeat2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
+import ReviewCard from "@/components/feed/ReviewCard";
 import ProfilePhotoPicker from "@/components/profile/ProfilePhotoPicker";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { getMe, updateMe } from "@/lib/api/me";
-import { addTopFragrance, removeFromCollection, removeTopFragrance } from "@/lib/api/collection";
+import { addTopFragrance, removeFromCollection, removeFromWishlist, removeTopFragrance } from "@/lib/api/collection";
 import { listFollowers, listFollowing, unfollowUser } from "@/lib/api/follows";
-import type { FollowConnectionItem, MeResponse } from "@/lib/api/types";
+import { listMyReviewFeed } from "@/lib/api/feed";
+import type { FeedItem, FollowConnectionItem, MeResponse } from "@/lib/api/types";
 import fragranceFallbackImg from "@/assets/illustrations/NotFound.png";
 
 const FALLBACK_FRAGRANCE_IMG = fragranceFallbackImg;
@@ -36,6 +38,19 @@ function compactCount(value: number | null | undefined) {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(n);
+}
+
+function timeAgo(iso: string) {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return iso;
+  const sec = Math.max(1, Math.floor((Date.now() - then) / 1000));
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const day = Math.floor(hr / 24);
+  return `${day}d`;
 }
 
 function StarReputation({ value }: { value: number }) {
@@ -98,6 +113,7 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [removingCollectionKey, setRemovingCollectionKey] = useState<string | null>(null);
+  const [removingWishlistKey, setRemovingWishlistKey] = useState<string | null>(null);
   const [togglingTopKey, setTogglingTopKey] = useState<string | null>(null);
   const [draftDisplayName, setDraftDisplayName] = useState("");
   const [draftBio, setDraftBio] = useState("");
@@ -111,6 +127,12 @@ export default function ProfilePage() {
   const [unfollowingUsername, setUnfollowingUsername] = useState<string | null>(null);
   const [pendingUnfollowUsername, setPendingUnfollowUsername] = useState<string | null>(null);
   const [showConnections, setShowConnections] = useState(false);
+  const [reviewItems, setReviewItems] = useState<FeedItem[]>([]);
+  const [reviewCursor, setReviewCursor] = useState<string | null>(null);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsLoadingMore, setReviewsLoadingMore] = useState(false);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [reviewsLoaded, setReviewsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -172,6 +194,35 @@ export default function ProfilePage() {
     };
   }, [connectionsView, showConnections]);
 
+  useEffect(() => {
+    setReviewItems([]);
+    setReviewCursor(null);
+    setReviewsError(null);
+    setReviewsLoaded(false);
+  }, [me?.reviewCount]);
+
+  const loadReviews = useCallback(async () => {
+    setReviewsLoading(true);
+    setReviewsError(null);
+    try {
+      const page = await listMyReviewFeed({ limit: 20 });
+      setReviewItems(page.items);
+      setReviewCursor(page.nextCursor);
+      setReviewsLoaded(true);
+    } catch (e: any) {
+      setReviewsError(e?.message || "Failed to load your reviews.");
+      setReviewItems([]);
+      setReviewCursor(null);
+    } finally {
+      setReviewsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!me || activeTab !== "reviews" || reviewsLoaded || reviewsLoading) return;
+    void loadReviews();
+  }, [activeTab, loadReviews, me, reviewsLoaded, reviewsLoading]);
+
   async function onLoadMoreConnections() {
     if (!connectionsCursor || connectionsLoadingMore) return;
     setConnectionsLoadingMore(true);
@@ -186,6 +237,21 @@ export default function ProfilePage() {
       setError(e?.message || "Failed to load more connections.");
     } finally {
       setConnectionsLoadingMore(false);
+    }
+  }
+
+  async function onLoadMoreReviews() {
+    if (!reviewCursor || reviewsLoadingMore) return;
+    setReviewsLoadingMore(true);
+    setReviewsError(null);
+    try {
+      const page = await listMyReviewFeed({ limit: 20, cursor: reviewCursor });
+      setReviewItems((prev) => [...prev, ...page.items]);
+      setReviewCursor(page.nextCursor);
+    } catch (e: any) {
+      setReviewsError(e?.message || "Failed to load more reviews.");
+    } finally {
+      setReviewsLoadingMore(false);
     }
   }
 
@@ -333,12 +399,40 @@ export default function ProfilePage() {
     }
   }
 
+  async function onRemoveWishlistItem(source: string, externalId: string) {
+    if (!me) return;
+    const sourceUpper = source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const key = `${sourceUpper}:${externalId}`;
+    setRemovingWishlistKey(key);
+    setError(null);
+    try {
+      await removeFromWishlist({ source: sourceUpper, externalId });
+      setMe((prev) => {
+        if (!prev) return prev;
+        const nextItems = prev.wishlistItems.filter(
+          (x) => !(x.source.toUpperCase() === sourceUpper && x.externalId === externalId)
+        );
+        return {
+          ...prev,
+          wishlistItems: nextItems,
+          wishlistCount: Math.max(0, prev.wishlistCount - 1),
+        };
+      });
+    } catch (e: any) {
+      setError(e?.message || "Failed to remove from wishlist.");
+    } finally {
+      setRemovingWishlistKey(null);
+    }
+  }
+
   function openFragranceDetail(source: string, externalId: string) {
     const normalizedSource = source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
     const encodedExternalId = encodeURIComponent(externalId);
     const item = me?.collectionItems.find(
       (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
     ) ?? me?.topFragrances.find(
+      (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
+    ) ?? me?.wishlistItems.find(
       (x) => x.source.toUpperCase() === normalizedSource && x.externalId === externalId
     );
 
@@ -355,6 +449,24 @@ export default function ProfilePage() {
             from: { pathname: "/profile", search: "" },
           }
         : undefined,
+    });
+  }
+
+  function openFeedFragrance(item: FeedItem) {
+    const source = String(item.fragranceSource ?? "FRAGELLA").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const externalId = String(item.fragranceExternalId ?? "").trim();
+    if (!externalId) return;
+    navigate(`/fragrances/${encodeURIComponent(externalId)}?source=${source}`, {
+      state: {
+        fragrance: {
+          source,
+          externalId,
+          name: item.fragranceName,
+          brand: null,
+          imageUrl: item.fragranceImageUrl,
+        },
+        from: { pathname: "/profile", search: "" },
+      },
     });
   }
 
@@ -578,8 +690,8 @@ export default function ProfilePage() {
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <div className="text-xs text-white/60">Wishlist</div>
-                    <div className="mt-1 text-lg font-semibold">—</div>
-                    <div className="mt-1 text-xs text-white/45">Tab is ready, data endpoint pending</div>
+                    <div className="mt-1 text-lg font-semibold">{me.wishlistCount}</div>
+                    <div className="mt-1 text-xs text-white/45">Fragrances on your wishlist</div>
                   </div>
                 </div>
 
@@ -594,7 +706,7 @@ export default function ProfilePage() {
                     {[
                       { id: "overview" as const, label: "Overview", count: me.collectionCount },
                       { id: "reviews" as const, label: "Reviews", count: me.reviewCount },
-                      { id: "wishlist" as const, label: "Wishlist" },
+                      { id: "wishlist" as const, label: "Wishlist", count: me.wishlistCount },
                       { id: "community" as const, label: "Community", count: me.communityFragranceCount },
                     ].map((tab) => (
                       <button
@@ -709,8 +821,8 @@ export default function ProfilePage() {
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           {me.collectionItems.map((item) => (
                             <div key={`${item.source}:${item.externalId}`} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex flex-col gap-3">
+                                <div className="flex min-w-0 items-start gap-3">
                                   <img
                                     src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
                                     alt={item.name}
@@ -724,21 +836,21 @@ export default function ProfilePage() {
                                     }}
                                   />
                                   <div className="min-w-0">
-                                    <div className="truncate text-sm font-semibold text-white/90">{item.name}</div>
-                                    <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>
+                                    <div className="text-sm font-semibold leading-snug text-white/90 break-words">{item.name}</div>
+                                    <div className="mt-1 text-xs text-white/60 break-words">{item.brand || "—"}</div>
                                   </div>
                                 </div>
-                                <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
+                                <div className="flex w-full flex-wrap justify-center gap-2">
                                   <Button
                                     variant="secondary"
-                                    className="h-8 flex-1 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white hover:bg-white/15 sm:flex-none"
+                                    className="h-8 rounded-lg border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
                                     onClick={() => openFragranceDetail(item.source, item.externalId)}
                                   >
                                     View
                                   </Button>
                                   <Button
                                     variant="secondary"
-                                    className="h-8 flex-1 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white hover:bg-white/15 sm:flex-none"
+                                    className="h-8 rounded-lg border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
                                     disabled={removingCollectionKey === `${item.source}:${item.externalId}`}
                                     onClick={() => onRemoveCollectionItem(item.source, item.externalId)}
                                   >
@@ -751,7 +863,7 @@ export default function ProfilePage() {
                                   </Button>
                                   <Button
                                     variant="secondary"
-                                    className="h-8 flex-1 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white hover:bg-white/15 sm:flex-none"
+                                    className="h-8 rounded-lg border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15"
                                     disabled={
                                       togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ||
                                       (!me.topFragrances.some(
@@ -791,10 +903,61 @@ export default function ProfilePage() {
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                     <div className="text-sm font-semibold">Reviews</div>
                     <div className="mt-1 text-xs text-white/60">You have posted {me.reviewCount} review(s).</div>
-                    <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
-                      Review listing is being wired next. Your review metrics are tracked and this tab is ready.
-                    </div>
+                    {reviewsError ? (
+                      <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                        {reviewsError}
+                      </div>
+                    ) : null}
+                    {reviewsLoading ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                        <LoadingSpinner label="Loading your reviews..." />
+                      </div>
+                    ) : reviewItems.length === 0 ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        No reviews yet. Post one from a fragrance detail page.
+                      </div>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {reviewItems.map((item) => (
+                          <ReviewCard
+                            key={item.id}
+                            item={item}
+                            timeAgo={timeAgo(item.createdAt)}
+                            onOpenUser={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/profile" } } })}
+                            onOpenFragrance={() => openFeedFragrance(item)}
+                          />
+                        ))}
+                      </div>
+                    )}
                     <div className="mt-4 flex flex-wrap gap-2">
+                      {reviewCursor ? (
+                        <Button
+                          variant="secondary"
+                          className="h-9 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                          onClick={onLoadMoreReviews}
+                          disabled={reviewsLoadingMore}
+                        >
+                          {reviewsLoadingMore ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <InlineSpinner className="h-3 w-3" />
+                              <span>Loading</span>
+                            </span>
+                          ) : "Load more reviews"}
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="secondary"
+                        className="h-9 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                        onClick={() => {
+                          setReviewItems([]);
+                          setReviewCursor(null);
+                          setReviewsLoaded(false);
+                          void loadReviews();
+                        }}
+                        disabled={reviewsLoading}
+                      >
+                        Refresh
+                      </Button>
                       <Button className="h-9 rounded-xl px-4" onClick={() => navigate("/search")}>
                         Discover fragrances to review
                       </Button>
@@ -806,9 +969,67 @@ export default function ProfilePage() {
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                     <div className="text-sm font-semibold">Wishlist</div>
                     <div className="mt-1 text-xs text-white/60">Save fragrances you want to try later.</div>
-                    <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
-                      Wishlist UI/data endpoint is the next integration. This tab is now in place for that flow.
-                    </div>
+                    {!me.wishlistItems?.length ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        Your wishlist is empty.
+                      </div>
+                    ) : (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        {me.wishlistItems.map((item) => (
+                          <div
+                            key={`${item.source}:${item.externalId}`}
+                            className="group relative overflow-hidden rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-400/12 via-sky-500/8 to-blue-500/10 p-3 shadow-[0_10px_30px_rgba(56,189,248,0.14)]"
+                          >
+                            <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-cyan-200/10 blur-2xl" />
+                            <button
+                              type="button"
+                              className="relative flex w-full items-center gap-3 text-left"
+                              onClick={() => openFragranceDetail(item.source, item.externalId)}
+                            >
+                              <img
+                                src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                                alt={item.name}
+                                className="h-16 w-16 rounded-xl border border-white/15 object-cover bg-white/5"
+                                loading="lazy"
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  if (img.dataset.fallbackApplied === "1") return;
+                                  img.dataset.fallbackApplied = "1";
+                                  img.src = FALLBACK_FRAGRANCE_IMG;
+                                }}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-semibold leading-snug text-white/95 break-words">{item.name}</div>
+                                <div className="mt-1 text-xs text-white/70 break-words">{item.brand || "—"}</div>
+                                <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-cyan-100/80">Wishlist</div>
+                              </div>
+                            </button>
+                            <div className="relative mt-3 flex items-center justify-center gap-2">
+                              <Button
+                                variant="secondary"
+                                className="h-8 rounded-lg border border-white/15 bg-white/10 px-2 text-xs text-white hover:bg-white/15"
+                                onClick={() => openFragranceDetail(item.source, item.externalId)}
+                              >
+                                View
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                className="h-8 rounded-lg border border-red-300/25 bg-red-400/12 px-2 text-xs text-red-100 hover:bg-red-400/20"
+                                disabled={removingWishlistKey === `${item.source.toUpperCase()}:${item.externalId}`}
+                                onClick={() => onRemoveWishlistItem(item.source, item.externalId)}
+                              >
+                                {removingWishlistKey === `${item.source.toUpperCase()}:${item.externalId}` ? (
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <InlineSpinner className="h-3 w-3" />
+                                    <span>Removing</span>
+                                  </span>
+                                ) : "Remove"}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Button className="h-9 rounded-xl px-4" onClick={() => navigate("/search")}>
                         Browse fragrances

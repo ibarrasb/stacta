@@ -79,6 +79,30 @@ public class FeedService {
     return new FeedResponse(items, nextCursor);
   }
 
+  @Transactional(readOnly = true)
+  public FeedResponse listMineReviews(String viewerSub, int limit, String cursor) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    int safeLimit = Math.max(1, Math.min(limit, 50));
+    var token = parseFollowingCursor(cursor);
+    var rows = activities.listMyReviewFeed(
+      me.getId(),
+      token == null ? null : token.createdAt(),
+      token == null ? null : token.id(),
+      PageRequest.of(0, safeLimit + 1)
+    );
+
+    boolean hasMore = rows.size() > safeLimit;
+    var pageRows = hasMore ? rows.subList(0, safeLimit) : rows;
+    var items = pageRows.stream().map(this::mapView).toList();
+
+    String nextCursor = null;
+    if (hasMore && !pageRows.isEmpty()) {
+      var last = pageRows.get(pageRows.size() - 1);
+      nextCursor = encodeFollowingCursor(last.getCreatedAt(), last.getId());
+    }
+    return new FeedResponse(items, nextCursor);
+  }
+
   private FeedItem mapView(ActivityEventRepository.ActivityFeedView row) {
     return new FeedItem(
       row.getId(),
@@ -89,7 +113,14 @@ public class FeedService {
       row.getTargetUsername(),
       row.getTargetDisplayName(),
       row.getFragranceName(),
+      row.getFragranceSource(),
+      row.getFragranceExternalId(),
+      row.getFragranceImageUrl(),
+      row.getReviewRating(),
       row.getReviewExcerpt(),
+      row.getReviewPerformance(),
+      row.getReviewSeason(),
+      row.getReviewOccasion(),
       row.getLikesCount(),
       row.getCommentsCount(),
       row.getRepostsCount(),

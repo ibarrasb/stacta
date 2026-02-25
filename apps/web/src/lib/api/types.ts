@@ -22,9 +22,11 @@ export type MeResponse = {
     creatorRatingAverage: number;
     creatorRatingCount: number;
     collectionCount: number;
+    wishlistCount: number;
     reviewCount: number;
     communityFragranceCount: number;
     collectionItems: CollectionItem[];
+    wishlistItems: CollectionItem[];
     topFragrances: CollectionItem[];
     communityFragrances: CollectionItem[];
     createdAt: string;     // ISO-8601
@@ -59,9 +61,11 @@ export type UserProfileResponse = {
   creatorRatingCount: number;
   viewerCreatorRating: number | null;
   collectionCount: number;
+  wishlistCount: number;
   reviewCount: number;
   communityFragranceCount: number;
   collectionItems: CollectionItem[];
+  wishlistItems: CollectionItem[];
   topFragrances: CollectionItem[];
   communityFragrances: CollectionItem[];
   isFollowing: boolean;
@@ -183,7 +187,14 @@ export type FeedItem = {
   targetUsername: string | null;
   targetDisplayName: string | null;
   fragranceName: string | null;
+  fragranceSource: "FRAGELLA" | "COMMUNITY" | string | null;
+  fragranceExternalId: string | null;
+  fragranceImageUrl: string | null;
+  reviewRating: number | null;
   reviewExcerpt: string | null;
+  reviewPerformance: string | null;
+  reviewSeason: string | null;
+  reviewOccasion: string | null;
   likesCount: number;
   commentsCount: number;
   repostsCount: number;
