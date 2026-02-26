@@ -14,6 +14,7 @@ public record CreateCommunityFragranceRequest(
   @NotBlank @Size(max = 120) String name,
   @NotBlank @Size(max = 120) String brand,
   @Pattern(regexp = "^\\d{4}$", message = "year must be a 4-digit value") String year,
+  @Size(max = 1024) String imageObjectKey,
   @Size(max = 2000000) String imageUrl,
   @Size(max = 2000) String purchaseUrl,
   @Size(max = 50) String concentration,

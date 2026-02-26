@@ -3,6 +3,13 @@ app:
     allowed-origins: http://localhost:5173,http://192.168.50.190:5173
     allow-credentials: false
 
+aws:
+  region: us-west-1
+  s3:
+    bucket: stacta-images-dev
+  cdn:
+    base-url: ${CDN_BASE_URL:}
+
 spring:
   datasource:
     url: jdbc:postgresql://localhost:15432/stacta

@@ -7,6 +7,7 @@ public record UserProfileResponse(
   String username,
   String displayName,
   String avatarUrl,
+  String avatarObjectKey,
   String bio,
   boolean isVerified,
   boolean isPrivate,

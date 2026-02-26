@@ -28,6 +28,9 @@ public class User {
   @Column(name = "avatar_url")
   private String avatarUrl;
 
+  @Column(name = "avatar_object_key")
+  private String avatarObjectKey;
+
   @Column(name = "is_private", nullable = false)
   private boolean isPrivate = false;
 
@@ -69,6 +72,8 @@ public class User {
   public void setBio(String bio) { this.bio = bio; }
   public String getAvatarUrl() { return avatarUrl; }
   public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+  public String getAvatarObjectKey() { return avatarObjectKey; }
+  public void setAvatarObjectKey(String avatarObjectKey) { this.avatarObjectKey = avatarObjectKey; }
   public boolean isPrivate() { return isPrivate; }
   public void setPrivate(boolean aPrivate) { isPrivate = aPrivate; }
   public boolean isVerified() { return isVerified; }

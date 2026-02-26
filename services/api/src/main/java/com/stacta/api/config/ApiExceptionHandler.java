@@ -20,6 +20,9 @@ public class ApiExceptionHandler {
       case "INVALID_FEED_TAB" -> HttpStatus.BAD_REQUEST;
       case "INVALID_FEED_FILTER" -> HttpStatus.BAD_REQUEST;
       case "INVALID_COLLECTION_ITEM" -> HttpStatus.BAD_REQUEST;
+      case "INVALID_UPLOAD_REQUEST" -> HttpStatus.BAD_REQUEST;
+      case "UPLOAD_UNSUPPORTED_CONTENT_TYPE" -> HttpStatus.BAD_REQUEST;
+      case "UPLOAD_FILE_TOO_LARGE" -> HttpStatus.BAD_REQUEST;
       case "INVALID_REVIEW" -> HttpStatus.BAD_REQUEST;
       case "REVIEW_FORBIDDEN" -> HttpStatus.FORBIDDEN;
       case "TOP_FRAGRANCES_LIMIT_REACHED" -> HttpStatus.BAD_REQUEST;

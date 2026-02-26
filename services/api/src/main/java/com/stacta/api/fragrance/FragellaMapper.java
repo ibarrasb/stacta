@@ -29,6 +29,7 @@ public class FragellaMapper {
         f.brand(),
         f.year(),
         f.imageUrl(),
+        null,
         f.gender(),
         f.rating(),
         f.price(),

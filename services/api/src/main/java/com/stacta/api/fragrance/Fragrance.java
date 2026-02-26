@@ -35,6 +35,9 @@ public class Fragrance {
   @Column(name = "image_url")
   private String imageUrl;
 
+  @Column(name = "image_object_key")
+  private String imageObjectKey;
+
   private String gender;
 
   // Fragella returns these as strings in examples, so keep string for now.
@@ -104,6 +107,8 @@ public class Fragrance {
 
   public String getImageUrl() { return imageUrl; }
   public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+  public String getImageObjectKey() { return imageObjectKey; }
+  public void setImageObjectKey(String imageObjectKey) { this.imageObjectKey = imageObjectKey; }
 
   public String getGender() { return gender; }
   public void setGender(String gender) { this.gender = gender; }

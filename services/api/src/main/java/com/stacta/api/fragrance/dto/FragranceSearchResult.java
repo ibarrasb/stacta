@@ -12,6 +12,7 @@ public record FragranceSearchResult(
   String brand,
   String year,
   String imageUrl,
+  String imageObjectKey,
   String gender,
 
   String rating,

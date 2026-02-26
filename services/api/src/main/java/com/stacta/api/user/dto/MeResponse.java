@@ -12,6 +12,7 @@ public record MeResponse(
   String displayName,
   String bio,
   String avatarUrl,
+  String avatarObjectKey,
   boolean isVerified,
   boolean isAdmin,
   boolean isPrivate,

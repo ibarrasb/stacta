@@ -13,6 +13,7 @@ import {
   type CreateCommunityFragranceRequest,
   type FragranceSearchResult,
 } from "@/lib/api/fragrances";
+import { uploadImageFile, validateImageUploadFile } from "@/lib/api/uploads";
 
 const DEFAULT_NOTE_IMG = defaultNoteImg;
 const CONCENTRATION_OPTIONS = [
@@ -95,6 +96,11 @@ export default function AddCommunityFragranceDialog({
   const [name, setName] = useState(initialName ?? "");
   const [year, setYear] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [imageObjectKey, setImageObjectKey] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [concentration, setConcentration] = useState("");
 
   const [isPublic, setIsPublic] = useState(false);
@@ -125,6 +131,10 @@ export default function AddCommunityFragranceDialog({
       setName(initialFragrance.name ?? "");
       setYear(initialFragrance.year ?? "");
       setImageUrl((initialFragrance.imageUrl ?? "").trim());
+      setImageObjectKey(initialFragrance.imageObjectKey ?? null);
+      setImageFile(null);
+      setImagePreviewUrl(null);
+      setImageError(null);
       setConcentration(initialFragrance.concentration ?? initialFragrance.oilType ?? "");
       setIsPublic(String(initialFragrance.visibility ?? "PRIVATE").toUpperCase() === "PUBLIC");
       setAccords(parseAccordsFromInitial(initialFragrance));
@@ -136,6 +146,10 @@ export default function AddCommunityFragranceDialog({
       setName(initialName ?? "");
       setYear("");
       setImageUrl("");
+      setImageObjectKey(null);
+      setImageFile(null);
+      setImagePreviewUrl(null);
+      setImageError(null);
       setConcentration("");
       setIsPublic(false);
       setAccords([]);
@@ -156,6 +170,14 @@ export default function AddCommunityFragranceDialog({
     const t = window.setTimeout(() => setNoteAddedHint(null), 1400);
     return () => window.clearTimeout(t);
   }, [noteAddedHint]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl && imagePreviewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
 
   useEffect(() => {
     if (!open) return;
@@ -237,7 +259,24 @@ export default function AddCommunityFragranceDialog({
 
   async function onSave() {
     setError(null);
+    setImageError(null);
     if (!canSave) return;
+    let uploadedImageObjectKey = imageObjectKey;
+    let uploadedImageUrl = imageUrl.trim() || null;
+
+    if (imageFile) {
+      setUploadingImage(true);
+      try {
+        const uploaded = await uploadImageFile(imageFile, "FRAGRANCE");
+        uploadedImageObjectKey = uploaded.objectKey;
+        uploadedImageUrl = uploaded.publicUrl;
+      } catch (e: any) {
+        setImageError(e?.message || "Image upload failed.");
+        setUploadingImage(false);
+        return;
+      }
+      setUploadingImage(false);
+    }
 
     const mainAccords = accords.map((x) => x.name);
     const mainAccordsPercentage = accords.length
@@ -272,7 +311,8 @@ export default function AddCommunityFragranceDialog({
       name: name.trim(),
       brand: brand.trim(),
       year: year.trim() || null,
-      imageUrl: imageUrl.trim() || null,
+      imageObjectKey: uploadedImageObjectKey || null,
+      imageUrl: uploadedImageUrl,
       concentration: concentration.trim() || null,
       longevityScore: null,
       sillageScore: null,
@@ -300,6 +340,7 @@ export default function AddCommunityFragranceDialog({
     } catch (e: any) {
       setError(e?.message || `Failed to ${isEdit ? "update" : "create"} fragrance.`);
     } finally {
+      setUploadingImage(false);
       setSaving(false);
     }
   }
@@ -353,8 +394,66 @@ export default function AddCommunityFragranceDialog({
           </div>
 
           <div>
-            <div className="mb-1 text-xs text-white/60">Image URL (optional)</div>
-            <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="https://..." />
+            <div className="mb-1 text-xs text-white/60">Image (optional)</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10">
+                Upload image
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    if (!file) return;
+                    const validationError = validateImageUploadFile(file);
+                    if (validationError) {
+                      setImageError(validationError);
+                      setImageFile(null);
+                      setImagePreviewUrl(null);
+                      return;
+                    }
+                    setImageError(null);
+                    setImageFile(file);
+                    const preview = URL.createObjectURL(file);
+                    setImagePreviewUrl((prev) => {
+                      if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+                      return preview;
+                    });
+                  }}
+                />
+              </label>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-8 rounded-full border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/18"
+                onClick={() => {
+                  setImageFile(null);
+                  setImagePreviewUrl((prev) => {
+                    if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+                    return null;
+                  });
+                  setImageError(null);
+                  setImageObjectKey(null);
+                  setImageUrl("");
+                }}
+                disabled={!imageFile && !imageUrl && !imageObjectKey}
+              >
+                Clear
+              </Button>
+            </div>
+            {imageError ? <div className="mt-2 text-xs text-red-200">{imageError}</div> : null}
+            {(imagePreviewUrl || imageUrl) ? (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-white/15 bg-black/20">
+                <img
+                  src={(imagePreviewUrl || imageUrl) ?? ""}
+                  alt="Fragrance preview"
+                  className="max-h-52 w-full object-contain"
+                  onError={(e) => {
+                    e.currentTarget.src = DEFAULT_NOTE_IMG;
+                  }}
+                />
+              </div>
+            ) : null}
           </div>
 
           <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
@@ -476,7 +575,7 @@ export default function AddCommunityFragranceDialog({
 
         <div className="flex items-center justify-end gap-2">
           <Button type="button" variant="secondary" className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="button" className="h-10 rounded-xl px-5" onClick={onSave} disabled={!canSave || saving}>{saving ? (isEdit ? "Saving…" : "Creating…") : (isEdit ? "Save changes" : "Create")}</Button>
+          <Button type="button" className="h-10 rounded-xl px-5" onClick={onSave} disabled={!canSave || saving || uploadingImage}>{saving || uploadingImage ? (isEdit ? "Saving…" : "Creating…") : (isEdit ? "Save changes" : "Create")}</Button>
         </div>
       </div>
     </>

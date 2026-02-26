@@ -8,6 +8,7 @@ import com.stacta.api.fragrance.dto.NotesDto;  // IMPORTANT: fragrance.dto.Notes
 import com.stacta.api.note.NoteEntity;
 import com.stacta.api.note.NoteRepository;
 import com.stacta.api.note.NoteService;
+import com.stacta.api.upload.UploadImageUrlResolver;
 import com.stacta.api.user.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
@@ -30,6 +31,7 @@ public class CommunityFragranceService {
   private final NoteService noteService;
   private final JdbcTemplate jdbc;
   private final ObjectMapper om;
+  private final UploadImageUrlResolver imageUrlResolver;
 
   private static String scoreLabel(Integer s) {
     return s == null ? null : (s + "/5");
@@ -41,7 +43,8 @@ public class CommunityFragranceService {
     NoteRepository notes,
     NoteService noteService,
     JdbcTemplate jdbc,
-    ObjectMapper om
+    ObjectMapper om,
+    UploadImageUrlResolver imageUrlResolver
   ) {
     this.fragrances = fragrances;
     this.users = users;
@@ -49,6 +52,7 @@ public class CommunityFragranceService {
     this.noteService = noteService;
     this.jdbc = jdbc;
     this.om = om;
+    this.imageUrlResolver = imageUrlResolver;
   }
 
   @Transactional
@@ -67,7 +71,9 @@ public class CommunityFragranceService {
     String concentration = (req.concentration() == null || req.concentration().isBlank())
       ? null
       : req.concentration().trim();
+    String imageObjectKey = normalizeObjectKey(req.imageObjectKey());
     String imageUrl = normalizeImageUrl(req.imageUrl());
+    String resolvedImageUrl = imageUrlResolver.resolveWithFallback(imageObjectKey, imageUrl);
     String purchaseUrl = normalizePurchaseUrl(req.purchaseUrl());
     String confidence = normalizeOptional(req.confidence());
     String popularity = normalizeOptional(req.popularity());
@@ -89,7 +95,8 @@ public class CommunityFragranceService {
       name,
       brand,
       year,
-      imageUrl,
+      resolvedImageUrl,
+      imageObjectKey,
       purchaseUrl,
       concentration,
       req.longevityScore(),
@@ -113,7 +120,8 @@ public class CommunityFragranceService {
     f.setName(name);
     f.setBrand(brand);
     f.setYear(year.equals("0") ? null : year);
-    f.setImageUrl(imageUrl);
+    f.setImageObjectKey(imageObjectKey);
+    f.setImageUrl(resolvedImageUrl);
 
     f.setCreatedByUserId(user.getId());
     f.setVisibility(visibility);
@@ -173,7 +181,9 @@ public class CommunityFragranceService {
     String year = (req.year() == null || req.year().isBlank()) ? "0" : req.year().trim();
     String visibility = normalizeVisibility(req.visibility());
     String concentration = normalizeOptional(req.concentration());
+    String imageObjectKey = normalizeObjectKey(req.imageObjectKey());
     String imageUrl = normalizeImageUrl(req.imageUrl());
+    String resolvedImageUrl = imageUrlResolver.resolveWithFallback(imageObjectKey, imageUrl);
     String purchaseUrl = normalizePurchaseUrl(req.purchaseUrl());
     String confidence = normalizeOptional(req.confidence());
     String popularity = normalizeOptional(req.popularity());
@@ -199,7 +209,8 @@ public class CommunityFragranceService {
       name,
       brand,
       year,
-      imageUrl,
+      resolvedImageUrl,
+      imageObjectKey,
       purchaseUrl,
       concentration,
       req.longevityScore(),
@@ -219,7 +230,8 @@ public class CommunityFragranceService {
     fragrance.setName(name);
     fragrance.setBrand(brand);
     fragrance.setYear(year.equals("0") ? null : year);
-    fragrance.setImageUrl(imageUrl);
+    fragrance.setImageObjectKey(imageObjectKey);
+    fragrance.setImageUrl(resolvedImageUrl);
     fragrance.setVisibility(visibility);
     fragrance.setConcentration(concentration);
     fragrance.setLongevityScore(req.longevityScore());
@@ -351,7 +363,8 @@ public class CommunityFragranceService {
           parsed.name(),
           parsed.brand(),
           parsed.year(),
-          parsed.imageUrl(),
+          imageUrlResolver.resolveWithFallback(parsed.imageObjectKey(), parsed.imageUrl()),
+          parsed.imageObjectKey(),
           parsed.gender(),
 
           parsed.rating(),
@@ -391,7 +404,8 @@ public class CommunityFragranceService {
           f.getName(),
           f.getBrand(),
           f.getYear(),
-          null,
+          imageUrlResolver.resolveWithFallback(f.getImageObjectKey(), f.getImageUrl()),
+          f.getImageObjectKey(),
           null,
 
           null,
@@ -539,6 +553,12 @@ public class CommunityFragranceService {
     return cleaned;
   }
 
+  private static String normalizeObjectKey(String value) {
+    String cleaned = normalizeOptional(value);
+    if (cleaned == null) return null;
+    return cleaned;
+  }
+
   private static String normalizePurchaseUrl(String v) {
     String cleaned = normalizeOptional(v);
     if (cleaned == null) return null;
@@ -580,6 +600,7 @@ public class CommunityFragranceService {
     String brand,
     String year,
     String imageUrl,
+    String imageObjectKey,
     String purchaseUrl,
     String concentration,
     Integer longevityScore,
@@ -602,6 +623,7 @@ public class CommunityFragranceService {
       brand,
       year.equals("0") ? null : year,
       imageUrl,
+      imageObjectKey,
       null,
       null,
       null,

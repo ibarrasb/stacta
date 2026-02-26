@@ -13,6 +13,7 @@ import ReviewCard from "@/components/feed/ReviewCard";
 import ProfilePhotoPicker from "@/components/profile/ProfilePhotoPicker";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { getMe, updateMe } from "@/lib/api/me";
+import { uploadImageFile } from "@/lib/api/uploads";
 import { deleteReview } from "@/lib/api/reviews";
 import { addTopFragrance, removeFromCollection, removeFromWishlist, removeTopFragrance } from "@/lib/api/collection";
 import { listFollowers, listFollowing, unfollowUser } from "@/lib/api/follows";
@@ -113,6 +114,9 @@ export default function ProfilePage() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingProfileImage, setUploadingProfileImage] = useState(false);
+  const [draftAvatarFile, setDraftAvatarFile] = useState<File | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [removingCollectionKey, setRemovingCollectionKey] = useState<string | null>(null);
   const [removingWishlistKey, setRemovingWishlistKey] = useState<string | null>(null);
   const [togglingTopKey, setTogglingTopKey] = useState<string | null>(null);
@@ -322,26 +326,43 @@ export default function ProfilePage() {
     setDraftDisplayName(me?.displayName ?? "");
     setDraftBio(me?.bio ?? "");
     setDraftIsPrivate(Boolean(me?.isPrivate));
+    setDraftAvatarFile(null);
+    setPhotoError(null);
   }
 
   async function onSave() {
     if (!canSave || !me) return;
     setError(null);
+    setPhotoError(null);
     setSaving(true);
     try {
+      let avatarObjectKey: string | undefined;
+      if (draftAvatarFile) {
+        setUploadingProfileImage(true);
+        const uploaded = await uploadImageFile(draftAvatarFile, "PROFILE");
+        avatarObjectKey = uploaded.objectKey;
+      }
       const updated = await updateMe({
         displayName: draftDisplayName.trim(),
         bio: draftBio.trim() || null,
+        ...(avatarObjectKey ? { avatarObjectKey } : {}),
         isPrivate: draftIsPrivate,
       });
       setMe(updated);
       setDraftDisplayName(updated.displayName ?? "");
       setDraftBio(updated.bio ?? "");
       setDraftIsPrivate(Boolean(updated.isPrivate));
+      setDraftAvatarFile(null);
       setIsEditing(false);
     } catch (e: any) {
-      setError(e?.message || "Failed to update profile.");
+      const msg = e?.message || "Failed to update profile.";
+      if (draftAvatarFile && !msg.toLowerCase().includes("display")) {
+        setPhotoError(msg);
+      } else {
+        setError(msg);
+      }
     } finally {
+      setUploadingProfileImage(false);
       setSaving(false);
     }
   }
@@ -542,6 +563,11 @@ export default function ProfilePage() {
                       fallbackText={initials(me.displayName)}
                       initialUrl={me.avatarUrl}
                       disabled={!isEditing}
+                      error={photoError}
+                      onFileSelected={(file) => {
+                        setPhotoError(null);
+                        setDraftAvatarFile(file);
+                      }}
                     />
 
                     {/* Name + username + bio */}
@@ -680,10 +706,10 @@ export default function ProfilePage() {
                         </Button>
                         <Button
                           className="h-10 rounded-xl px-4"
-                          disabled={!canSave || saving}
+                          disabled={!canSave || saving || uploadingProfileImage}
                           onClick={onSave}
                         >
-                          {saving ? "Saving..." : "Save"}
+                          {saving || uploadingProfileImage ? "Saving..." : "Save"}
                         </Button>
                       </>
                     )}

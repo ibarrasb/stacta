@@ -13,6 +13,7 @@ import com.stacta.api.config.ApiException;
 import com.stacta.api.fragrance.FragranceRepository;
 import com.stacta.api.social.ActivityEventRepository;
 import com.stacta.api.social.FollowService;
+import com.stacta.api.upload.UploadImageUrlResolver;
 import com.stacta.api.user.dto.MeResponse;
 import com.stacta.api.user.dto.OnboardingRequest;
 import com.stacta.api.user.dto.UpdateMeRequest;
@@ -29,6 +30,7 @@ public class UserService {
   private final ActivityEventRepository activityEvents;
   private final FragranceRepository fragrances;
   private final CreatorRatingService creatorRatings;
+  private final UploadImageUrlResolver imageUrlResolver;
 
   public UserService(
     UserRepository repo,
@@ -36,7 +38,8 @@ public class UserService {
     UserCollectionService collectionService,
     ActivityEventRepository activityEvents,
     FragranceRepository fragrances,
-    CreatorRatingService creatorRatings
+    CreatorRatingService creatorRatings,
+    UploadImageUrlResolver imageUrlResolver
   ) {
     this.repo = repo;
     this.followService = followService;
@@ -44,6 +47,7 @@ public class UserService {
     this.activityEvents = activityEvents;
     this.fragrances = fragrances;
     this.creatorRatings = creatorRatings;
+    this.imageUrlResolver = imageUrlResolver;
   }
 
   @Transactional(readOnly = true)
@@ -96,6 +100,15 @@ public class UserService {
 
     user.setDisplayName(displayName);
     user.setBio(bio);
+    if (req.avatarObjectKey() != null) {
+      String avatarObjectKey = req.avatarObjectKey().trim();
+      if (avatarObjectKey.isEmpty()) {
+        user.setAvatarObjectKey(null);
+      } else {
+        user.setAvatarObjectKey(avatarObjectKey);
+      }
+      user.setAvatarUrl(imageUrlResolver.resolveFromObjectKey(user.getAvatarObjectKey()));
+    }
     if (req.isPrivate() != null) {
       user.setPrivate(req.isPrivate());
     }
@@ -159,7 +172,8 @@ public class UserService {
     return new UserProfileResponse(
       target.getUsername(),
       target.getDisplayName(),
-      target.getAvatarUrl(),
+      imageUrlResolver.resolveWithFallback(target.getAvatarObjectKey(), target.getAvatarUrl()),
+      target.getAvatarObjectKey(),
       isVisible ? target.getBio() : null,
       target.isVerified(),
       target.isPrivate(),
@@ -201,7 +215,8 @@ public class UserService {
       u.getUsername(),
       u.getDisplayName(),
       u.getBio(),
-      u.getAvatarUrl(),
+      imageUrlResolver.resolveWithFallback(u.getAvatarObjectKey(), u.getAvatarUrl()),
+      u.getAvatarObjectKey(),
       u.isVerified(),
       u.isAdmin(),
       u.isPrivate(),

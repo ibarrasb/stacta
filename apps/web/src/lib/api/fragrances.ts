@@ -14,6 +14,7 @@ export type FragranceSearchResult = {
   brand: string;
   year: string | null;
   imageUrl: string | null;
+  imageObjectKey?: string | null;
   gender: string | null;
 
   rating: string | null;
@@ -106,6 +107,7 @@ export type CreateCommunityFragranceRequest = {
   name: string;
   brand: string;
   year?: string | null;
+  imageObjectKey?: string | null;
   imageUrl?: string | null;
   purchaseUrl?: string | null;
   concentration?: string | null;

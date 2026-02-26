@@ -15,6 +15,7 @@ export type MeResponse = {
     displayName: string;
     bio: string | null;
     avatarUrl: string | null;
+    avatarObjectKey: string | null;
     isVerified: boolean;
     isAdmin: boolean;
     isPrivate: boolean;
@@ -37,6 +38,7 @@ export type MeResponse = {
 export type UpdateMeRequest = {
   displayName: string;
   bio: string | null;
+  avatarObjectKey?: string | null;
   isPrivate?: boolean;
 };
 
@@ -51,6 +53,7 @@ export type UserProfileResponse = {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  avatarObjectKey: string | null;
   bio: string | null;
   isVerified: boolean;
   isPrivate: boolean;

@@ -31,6 +31,7 @@ import { addToCollection as addCollectionItem, addToWishlist as addWishlistItem 
 import { getMe } from "@/lib/api/me";
 import { reportCommunityFragrance } from "@/lib/api/note-moderation";
 import { submitReview } from "@/lib/api/reviews";
+import { uploadImageFile, validateImageUploadFile } from "@/lib/api/uploads";
 import { getCreatorRatingSummary, rateCreator } from "@/lib/api/users";
 
 import fragrancePlaceholder from "@/assets/illustrations/NotFound.png";
@@ -766,8 +767,12 @@ export default function FragranceDetailPage() {
   const [draftYear, setDraftYear] = useState("");
   const [draftConcentration, setDraftConcentration] = useState("");
   const [draftImageUrl, setDraftImageUrl] = useState("");
+  const [draftImageObjectKey, setDraftImageObjectKey] = useState<string | null>(null);
+  const [draftImageFile, setDraftImageFile] = useState<File | null>(null);
   const [draftPurchaseUrl, setDraftPurchaseUrl] = useState("");
   const [draftImageLabel, setDraftImageLabel] = useState("");
+  const [draftImageError, setDraftImageError] = useState<string | null>(null);
+  const [uploadingDraftImage, setUploadingDraftImage] = useState(false);
   const [draftLongevity, setDraftLongevity] = useState(0);
   const [draftSillage, setDraftSillage] = useState(0);
   const [draftConfidence, setDraftConfidence] = useState(0);
@@ -786,6 +791,7 @@ export default function FragranceDetailPage() {
     brand: "",
     year: null,
     imageUrl: null,
+    imageObjectKey: null,
     gender: null,
     rating: null,
     price: null,
@@ -858,6 +864,9 @@ export default function FragranceDetailPage() {
     setDraftYear(String(fragrance.year ?? ""));
     setDraftConcentration(String((fragrance as any).concentration ?? fragrance.oilType ?? ""));
     setDraftImageUrl(String(fragrance.imageUrl ?? ""));
+    setDraftImageObjectKey((fragrance as any).imageObjectKey ?? null);
+    setDraftImageFile(null);
+    setDraftImageError(null);
     setDraftPurchaseUrl(String(fragrance.purchaseUrl ?? ""));
     setDraftImageLabel(imageSourceLabel(fragrance.imageUrl));
     setDraftLongevity(sliderIndexFromLabel(fragrance.longevity ?? (fragrance as any)?.Longevity, LONGEVITY_EDIT_LABELS));
@@ -885,6 +894,9 @@ export default function FragranceDetailPage() {
     setDraftYear("");
     setDraftConcentration("");
     setDraftImageUrl("");
+    setDraftImageObjectKey(null);
+    setDraftImageFile(null);
+    setDraftImageError(null);
     setDraftPurchaseUrl("");
     setDraftImageLabel("");
     setDraftLongevity(0);
@@ -908,6 +920,14 @@ export default function FragranceDetailPage() {
     const t = window.setTimeout(() => setDraftNoteAddedHint(null), 1400);
     return () => window.clearTimeout(t);
   }, [draftNoteAddedHint]);
+
+  useEffect(() => {
+    return () => {
+      if (draftImageUrl && draftImageUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(draftImageUrl);
+      }
+    };
+  }, [draftImageUrl]);
 
   useEffect(() => {
     if (!editingCommunity) return;
@@ -1871,7 +1891,7 @@ export default function FragranceDetailPage() {
   const hideComputedVotingSectionsWhileEditingCommunity = isCommunityFragrance && isEditingForm;
   const shownConfidence01 = isEditingForm ? clamp01(draftConfidence / 4) : confidence01;
   const shownPopularity01 = isEditingForm ? clamp01(draftPopularity / 4) : popularity01;
-  const canSaveEdit = draftBrand.trim().length > 0 && draftName.trim().length > 0;
+  const canSaveEdit = draftBrand.trim().length > 0 && draftName.trim().length > 0 && !uploadingDraftImage;
 
   function addDraftAccord() {
     const cleaned = draftAccordInput.trim();
@@ -1885,13 +1905,19 @@ export default function FragranceDetailPage() {
 
   const onPickDraftImage = useCallback((file: File | null) => {
     if (!file) return;
+    const validationError = validateImageUploadFile(file);
+    if (validationError) {
+      setDraftImageError(validationError);
+      return;
+    }
+    setDraftImageError(null);
     setDraftImageLabel(file.name || "Uploaded image");
-    const reader = new FileReader();
-    reader.onload = () => {
-      const v = typeof reader.result === "string" ? reader.result : "";
-      if (v) setDraftImageUrl(v);
-    };
-    reader.readAsDataURL(file);
+    setDraftImageFile(file);
+    const preview = URL.createObjectURL(file);
+    setDraftImageUrl((prev) => {
+      if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return preview;
+    });
   }, []);
 
   function addDraftNote(note: NoteDictionaryItem) {
@@ -1937,6 +1963,14 @@ export default function FragranceDetailPage() {
     }
     setSavingEdit(true);
     try {
+      let uploadedImageObjectKey = draftImageObjectKey;
+      let uploadedImageUrl = draftImageUrl.trim() || null;
+      if (draftImageFile) {
+        setUploadingDraftImage(true);
+        const uploaded = await uploadImageFile(draftImageFile, "FRAGRANCE");
+        uploadedImageObjectKey = uploaded.objectKey;
+        uploadedImageUrl = uploaded.publicUrl;
+      }
       const mainAccords = draftAccords.map((x) => x.name);
       const mainAccordsPercentage = draftAccords.reduce<Record<string, string>>((acc, it) => {
         acc[it.name] = ACCORD_STRENGTH_LABELS[it.strength] ?? "Moderate";
@@ -1967,7 +2001,8 @@ export default function FragranceDetailPage() {
         name: draftName.trim(),
         brand: draftBrand.trim(),
         year: nextYear || null,
-        imageUrl: draftImageUrl.trim() || null,
+        imageObjectKey: uploadedImageObjectKey || null,
+        imageUrl: uploadedImageUrl,
         purchaseUrl: normalizedPurchaseUrl,
         concentration: draftConcentration.trim() || null,
         longevityScore: null,
@@ -2002,10 +2037,13 @@ export default function FragranceDetailPage() {
       } else {
         setEditingCommunity(false);
       }
+      setDraftImageFile(null);
+      setDraftImageError(null);
     } catch (e: any) {
       setNoticeTitle(isCreateMode ? "Publish" : "Edit");
       setNotice(e?.message || (isCreateMode ? "Failed to publish fragrance." : "Failed to update fragrance."));
     } finally {
+      setUploadingDraftImage(false);
       setSavingEdit(false);
     }
   }, [
@@ -2019,6 +2057,8 @@ export default function FragranceDetailPage() {
     draftYear,
     draftConcentration,
     draftImageUrl,
+    draftImageObjectKey,
+    draftImageFile,
     draftPurchaseUrl,
     draftAccords,
     draftLongevity,
@@ -2051,8 +2091,8 @@ export default function FragranceDetailPage() {
               </Button>
             ) : null}
             {isEditingForm ? (
-              <Button className="h-10 rounded-xl px-5" onClick={saveInPlaceEdit} disabled={savingEdit || !canSaveEdit}>
-                {savingEdit ? (isCreateMode ? "Publishing..." : "Saving...") : (isCreateMode ? "Publish" : "Save Changes")}
+              <Button className="h-10 rounded-xl px-5" onClick={saveInPlaceEdit} disabled={savingEdit || uploadingDraftImage || !canSaveEdit}>
+                {savingEdit || uploadingDraftImage ? (isCreateMode ? "Publishing..." : "Saving...") : (isCreateMode ? "Publish" : "Save Changes")}
               </Button>
             ) : null}
             {isEditingForm ? (
@@ -2286,7 +2326,7 @@ export default function FragranceDetailPage() {
                           Upload image
                           <input
                             type="file"
-                            accept="image/*"
+                            accept="image/jpeg,image/png,image/webp"
                             className="hidden"
                             onChange={(e) => onPickDraftImage(e.target.files?.[0] ?? null)}
                           />
@@ -2303,13 +2343,19 @@ export default function FragranceDetailPage() {
                           className="h-8 rounded-full border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/18"
                           onClick={() => {
                             setDraftImageUrl("");
+                            setDraftImageObjectKey(null);
+                            setDraftImageFile(null);
+                            setDraftImageError(null);
                             setDraftImageLabel("");
                           }}
-                          disabled={!draftImageUrl.trim()}
+                          disabled={!draftImageUrl.trim() && !draftImageObjectKey && !draftImageFile}
                         >
                           Clear
                         </Button>
                       </div>
+                    ) : null}
+                    {isEditingForm && draftImageError ? (
+                      <div className="mt-2 text-xs text-red-200">{draftImageError}</div>
                     ) : null}
                     {isEditingForm ? (
                       <div className="mt-2">
@@ -2688,7 +2734,7 @@ export default function FragranceDetailPage() {
                         Upload image
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/jpeg,image/png,image/webp"
                           className="hidden"
                           onChange={(e) => onPickDraftImage(e.target.files?.[0] ?? null)}
                         />
@@ -2705,13 +2751,19 @@ export default function FragranceDetailPage() {
                         className="h-8 rounded-full border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/18"
                         onClick={() => {
                           setDraftImageUrl("");
+                          setDraftImageObjectKey(null);
+                          setDraftImageFile(null);
+                          setDraftImageError(null);
                           setDraftImageLabel("");
                         }}
-                        disabled={!draftImageUrl.trim()}
+                        disabled={!draftImageUrl.trim() && !draftImageObjectKey && !draftImageFile}
                       >
                         Clear
                       </Button>
                     </div>
+                  ) : null}
+                  {isEditingForm && draftImageError ? (
+                    <div className="mt-2 text-xs text-red-200">{draftImageError}</div>
                   ) : null}
                   {isEditingForm ? (
                     <div className="mt-2 max-w-2xl">

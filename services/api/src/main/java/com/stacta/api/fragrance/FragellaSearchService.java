@@ -14,6 +14,7 @@ import com.stacta.api.fragrance.dto.FragranceRatingSummary;
 import com.stacta.api.fragrance.dto.FragranceSearchResult;
 import com.stacta.api.integrations.fragella.FragellaClient;
 import com.stacta.api.integrations.fragella.FragellaDtos;
+import com.stacta.api.upload.UploadImageUrlResolver;
 import com.stacta.api.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +32,7 @@ public class FragellaSearchService {
   private final FragranceRepository fragranceRepository;
   private final UserRepository userRepository;
   private final FragranceRatingService ratingService;
+  private final UploadImageUrlResolver imageUrlResolver;
   private static final double FRAGELLA_RATING_PRIOR_WEIGHT = 220.0;
 
   public FragellaSearchService(
@@ -40,7 +42,8 @@ public class FragellaSearchService {
     ObjectMapper objectMapper,
     FragranceRepository fragranceRepository,
     UserRepository userRepository,
-    FragranceRatingService ratingService
+    FragranceRatingService ratingService,
+    UploadImageUrlResolver imageUrlResolver
   ) {
     this.client = client;
     this.mapper = mapper;
@@ -49,6 +52,7 @@ public class FragellaSearchService {
     this.fragranceRepository = fragranceRepository;
     this.userRepository = userRepository;
     this.ratingService = ratingService;
+    this.imageUrlResolver = imageUrlResolver;
   }
 
   public List<FragranceSearchResult> searchCached(String q, int limit) {
@@ -351,7 +355,8 @@ public class FragellaSearchService {
       in.name(),
       in.brand(),
       in.year(),
-      in.imageUrl(),
+      imageUrlResolver.resolveWithFallback(in.imageObjectKey(), in.imageUrl()),
+      in.imageObjectKey(),
       in.gender(),
 
       rating,
