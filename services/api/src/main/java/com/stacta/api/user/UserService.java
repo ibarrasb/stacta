@@ -231,6 +231,7 @@ public class UserService {
         f.getName(),
         f.getBrand(),
         f.getImageUrl(),
+        null,
         f.getCreatedAt() == null ? null : f.getCreatedAt().toInstant()
       ))
       .toList();

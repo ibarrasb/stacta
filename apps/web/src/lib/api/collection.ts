@@ -7,6 +7,7 @@ export type AddCollectionItemRequest = {
   name: string;
   brand?: string | null;
   imageUrl?: string | null;
+  collectionTag?: "BLIND_BUY" | "SAMPLED_FIRST" | "RECOMMENDED" | "HYPE_TREND" | "DEAL_DISCOUNT" | "GIFT" | null;
 };
 
 export type AddCollectionItemResponse = {

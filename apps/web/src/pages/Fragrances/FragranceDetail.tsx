@@ -68,6 +68,14 @@ const REVIEW_PRICE_OPTIONS = [
   { value: 4, label: "Good value" },
   { value: 5, label: "Excellent value" },
 ] as const;
+const COLLECTION_TAG_OPTIONS = [
+  { value: "BLIND_BUY", label: "Blind Buy" },
+  { value: "SAMPLED_FIRST", label: "Sampled First" },
+  { value: "RECOMMENDED", label: "Recommended" },
+  { value: "HYPE_TREND", label: "Hype/Trend" },
+  { value: "DEAL_DISCOUNT", label: "Deal/Discount" },
+  { value: "GIFT", label: "Gift" },
+] as const;
 const COMMUNITY_LONGEVITY_LEVEL_LABELS = ["", "Fleeting", "Weak", "Moderate", "Long lasting", "Endless"] as const;
 const COMMUNITY_SILLAGE_LEVEL_LABELS = ["", "Skin scent", "Weak", "Moderate", "Strong", "Nuclear"] as const;
 type PriceVoteValue =
@@ -78,6 +86,7 @@ type PriceVoteValue =
   | "EXCELLENT_VALUE"
   | "OVERPRICED"
   | "GREAT_VALUE";
+type CollectionTagValue = (typeof COLLECTION_TAG_OPTIONS)[number]["value"];
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -690,6 +699,14 @@ function imageSourceLabel(value: string | null | undefined) {
   }
 }
 
+function normalizePurchaseUrlForSubmit(raw: string) {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^www\./i.test(trimmed)) return `https://${trimmed}`;
+  return trimmed;
+}
+
 export default function FragranceDetailPage() {
   const navigate = useNavigate();
   const location = useLocation() as any;
@@ -711,6 +728,8 @@ export default function FragranceDetailPage() {
   const [reportFragranceReason, setReportFragranceReason] = useState<"SPAM" | "INAPPROPRIATE" | "OTHER">("INAPPROPRIATE");
   const [reportFragranceDetails, setReportFragranceDetails] = useState("");
   const [addingToCollection, setAddingToCollection] = useState(false);
+  const [collectionTagDialogOpen, setCollectionTagDialogOpen] = useState(false);
+  const [collectionTagSelection, setCollectionTagSelection] = useState<CollectionTagValue>("BLIND_BUY");
   const [viewerCollectionKeys, setViewerCollectionKeys] = useState<Set<string>>(new Set());
   const [addingToWishlist, setAddingToWishlist] = useState(false);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
@@ -747,6 +766,7 @@ export default function FragranceDetailPage() {
   const [draftYear, setDraftYear] = useState("");
   const [draftConcentration, setDraftConcentration] = useState("");
   const [draftImageUrl, setDraftImageUrl] = useState("");
+  const [draftPurchaseUrl, setDraftPurchaseUrl] = useState("");
   const [draftImageLabel, setDraftImageLabel] = useState("");
   const [draftLongevity, setDraftLongevity] = useState(0);
   const [draftSillage, setDraftSillage] = useState(0);
@@ -838,6 +858,7 @@ export default function FragranceDetailPage() {
     setDraftYear(String(fragrance.year ?? ""));
     setDraftConcentration(String((fragrance as any).concentration ?? fragrance.oilType ?? ""));
     setDraftImageUrl(String(fragrance.imageUrl ?? ""));
+    setDraftPurchaseUrl(String(fragrance.purchaseUrl ?? ""));
     setDraftImageLabel(imageSourceLabel(fragrance.imageUrl));
     setDraftLongevity(sliderIndexFromLabel(fragrance.longevity ?? (fragrance as any)?.Longevity, LONGEVITY_EDIT_LABELS));
     setDraftSillage(sliderIndexFromLabel(fragrance.sillage ?? (fragrance as any)?.Sillage, SILLAGE_EDIT_LABELS));
@@ -864,6 +885,7 @@ export default function FragranceDetailPage() {
     setDraftYear("");
     setDraftConcentration("");
     setDraftImageUrl("");
+    setDraftPurchaseUrl("");
     setDraftImageLabel("");
     setDraftLongevity(0);
     setDraftSillage(0);
@@ -1099,7 +1121,13 @@ export default function FragranceDetailPage() {
     return total > 0 ? clamp01((weighted / total) / 5) : 0;
   }, [communitySillageBars]);
 
-  const addToCollection = useCallback(async () => {
+  const addToCollection = useCallback(() => {
+    if (addingToCollection) return;
+    setCollectionTagSelection("BLIND_BUY");
+    setCollectionTagDialogOpen(true);
+  }, [addingToCollection]);
+
+  const confirmAddToCollection = useCallback(async () => {
     const normalizedSource = String(fragrance?.source ?? inferPreferredSource(routeExternalId || "") ?? "FRAGELLA")
       .trim()
       .toUpperCase();
@@ -1157,6 +1185,7 @@ export default function FragranceDetailPage() {
         name,
         brand: fragrance?.brand ?? null,
         imageUrl: fragrance?.imageUrl ?? null,
+        collectionTag: collectionTagSelection,
       });
       const key = collectionKey(source, external);
       if (key) {
@@ -1166,6 +1195,7 @@ export default function FragranceDetailPage() {
           return next;
         });
       }
+      setCollectionTagDialogOpen(false);
       setNoticeTitle("Collection");
       setNotice(res.status === "ALREADY_EXISTS" ? "Already in collection." : "Added to collection.");
     } catch (e: any) {
@@ -1174,7 +1204,7 @@ export default function FragranceDetailPage() {
     } finally {
       setAddingToCollection(false);
     }
-  }, [fragrance, routeExternalId]);
+  }, [collectionTagSelection, fragrance, routeExternalId]);
 
   const addToWishlist = useCallback(async () => {
     const normalizedSource = String(fragrance?.source ?? inferPreferredSource(routeExternalId || "") ?? "FRAGELLA")
@@ -1741,10 +1771,18 @@ export default function FragranceDetailPage() {
     setCommunityOccasionVotes(next);
   }, [communityOccasionStarsByKey]);
 
+  const isOwnCommunityFragrance = Boolean(
+    isCommunityFragrance &&
+    createdByUsername &&
+    (
+      (viewerUser?.id && String((fragrance as any)?.createdByUserId ?? "") === viewerUser.id) ||
+      (viewerUser?.username && viewerUser.username.toLowerCase() === createdByUsername.toLowerCase())
+    )
+  );
   const canRateCreator = Boolean(
     isCommunityFragrance &&
     createdByUsername &&
-    (!viewerUser?.username || viewerUser.username.toLowerCase() !== createdByUsername.toLowerCase())
+    !isOwnCommunityFragrance
   );
   const canManageCommunity = Boolean(
     isCommunityFragrance &&
@@ -1891,6 +1929,7 @@ export default function FragranceDetailPage() {
     if (!fragrance?.externalId) return;
     if (!isCreateMode && !canManageCommunity) return;
     const nextYear = draftYear.trim();
+    const normalizedPurchaseUrl = normalizePurchaseUrlForSubmit(draftPurchaseUrl);
     if (nextYear && !/^\d{4}$/.test(nextYear)) {
       setNoticeTitle("Edit");
       setNotice("Year must be a 4-digit value.");
@@ -1929,6 +1968,7 @@ export default function FragranceDetailPage() {
         brand: draftBrand.trim(),
         year: nextYear || null,
         imageUrl: draftImageUrl.trim() || null,
+        purchaseUrl: normalizedPurchaseUrl,
         concentration: draftConcentration.trim() || null,
         longevityScore: null,
         sillageScore: null,
@@ -1979,6 +2019,7 @@ export default function FragranceDetailPage() {
     draftYear,
     draftConcentration,
     draftImageUrl,
+    draftPurchaseUrl,
     draftAccords,
     draftLongevity,
     draftSillage,
@@ -2044,7 +2085,7 @@ export default function FragranceDetailPage() {
                 {deletingCommunity ? "Deleting..." : "Delete"}
               </Button>
             ) : null}
-            {isCommunityFragrance && createdByUsername ? (
+            {isCommunityFragrance && createdByUsername && !isOwnCommunityFragrance ? (
               <div className="w-full sm:w-auto sm:mr-2">
                 <div className="flex flex-wrap items-center justify-start gap-2 text-xs">
                   <span className="font-medium text-white/85">Stacta rep</span>
@@ -2268,6 +2309,16 @@ export default function FragranceDetailPage() {
                         >
                           Clear
                         </Button>
+                      </div>
+                    ) : null}
+                    {isEditingForm ? (
+                      <div className="mt-2">
+                        <input
+                          value={draftPurchaseUrl}
+                          onChange={(e) => setDraftPurchaseUrl(e.target.value)}
+                          placeholder="Buy link (optional) e.g. https://shop.com/product"
+                          className="h-9 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                        />
                       </div>
                     ) : null}
                   </div>
@@ -2662,6 +2713,16 @@ export default function FragranceDetailPage() {
                       </Button>
                     </div>
                   ) : null}
+                  {isEditingForm ? (
+                    <div className="mt-2 max-w-2xl">
+                      <input
+                        value={draftPurchaseUrl}
+                        onChange={(e) => setDraftPurchaseUrl(e.target.value)}
+                        placeholder="Buy link (optional) e.g. https://shop.com/product"
+                        className="h-9 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                      />
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
@@ -2897,6 +2958,67 @@ export default function FragranceDetailPage() {
         onConfirm={onDeleteCommunity}
       />
 
+      <Dialog
+        open={collectionTagDialogOpen}
+        onOpenChange={(next) => {
+          if (addingToCollection) return;
+          setCollectionTagDialogOpen(next);
+        }}
+      >
+        <DialogContent className="w-[calc(100vw-24px)] max-w-md rounded-3xl border-white/15 bg-[#121212]/95 p-0 text-white backdrop-blur-xl">
+          <DialogHeader className="border-b border-white/10 px-5 py-4">
+            <DialogTitle className="text-base text-white">Tag This Collection Add</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 p-5">
+            <div className="text-sm text-white/75">Pick one tag for this add-to-collection post.</div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {COLLECTION_TAG_OPTIONS.map((opt) => {
+                const active = collectionTagSelection === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setCollectionTagSelection(opt.value)}
+                    className={cx(
+                      "h-10 rounded-xl border px-3 text-sm transition",
+                      active
+                        ? "border-[#3EB489]/60 bg-[#3EB489]/20 text-[#9de2ca]"
+                        : "border-white/15 bg-white/5 text-white/85 hover:bg-white/10"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9 border-white/20 bg-white/10 text-white hover:bg-white/16"
+                onClick={() => setCollectionTagDialogOpen(false)}
+                disabled={addingToCollection}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="h-9 bg-[#3EB489] text-black hover:bg-[#34a07a]"
+                onClick={confirmAddToCollection}
+                disabled={addingToCollection}
+              >
+                {addingToCollection ? (
+                  <span className="inline-flex items-center gap-2">
+                    <InlineSpinner />
+                    <span>Adding</span>
+                  </span>
+                ) : "Add to Collection"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={reviewDialogOpen} onOpenChange={(next) => !reviewSubmitting && setReviewDialogOpen(next)}>
         <DialogContent className="w-[calc(100vw-24px)] max-w-xl rounded-3xl border-white/15 bg-[#121212]/90 p-0 text-white backdrop-blur-xl">
           <DialogHeader className="border-b border-white/10 px-5 py-4">
@@ -2912,33 +3034,16 @@ export default function FragranceDetailPage() {
                 <span>
                   Overall rating: <span className="font-semibold">{ratingState?.userRating ?? "—"} / 5</span>
                 </span>
-                {reviewScorecard.priceLabel ? (
-                  <span className={cx("rounded-full border px-2 py-0.5 text-[11px] font-semibold", reviewPriceToneClasses(reviewScorecard.priceScore, true))}>
-                    Price: {reviewScorecard.priceLabel}
-                  </span>
-                ) : null}
               </div>
               <div className="mt-3">
                 <div className="mb-2 text-[11px] uppercase tracking-[0.12em] text-white/55">Price Perception</div>
-                <div className="flex flex-wrap gap-2">
-                  {REVIEW_PRICE_OPTIONS.map((option) => (
-                    <button
-                      key={`review-price-${option.value}`}
-                      type="button"
-                      className={cx(
-                        "min-h-9 rounded-full border px-3 py-1 text-xs transition touch-manipulation",
-                        reviewPriceToneClasses(option.value, reviewPriceValue === option.value)
-                      )}
-                      onClick={() => {
-                        const next = reviewPriceValue === option.value ? null : option.value;
-                        setReviewPriceValue(next);
-                        setCommunityPriceVote(reviewPriceToCommunityVote(next));
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+                {reviewScorecard.priceLabel ? (
+                  <span className={cx("rounded-full border px-2 py-0.5 text-[11px] font-semibold", reviewPriceToneClasses(reviewScorecard.priceScore, true))}>
+                    {reviewScorecard.priceLabel}
+                  </span>
+                ) : (
+                  <div className="text-xs text-white/55">No price selected yet. Set price perception in fragrance details.</div>
+                )}
               </div>
               {reviewScorecard.performance.length ? (
                 <div className="mt-3 space-y-2">
@@ -2946,7 +3051,13 @@ export default function FragranceDetailPage() {
                     <div key={row.label}>
                       <div className="mb-1 flex items-center justify-between text-xs text-white/75">
                         <span>{row.label}</span>
-                        <span>{row.value}/5</span>
+                        <span>
+                          {row.label.toLowerCase() === "longevity"
+                            ? (COMMUNITY_LONGEVITY_LEVEL_LABELS[row.value] ?? `${row.value}/5`)
+                            : row.label.toLowerCase() === "sillage"
+                              ? (COMMUNITY_SILLAGE_LEVEL_LABELS[row.value] ?? `${row.value}/5`)
+                              : `${row.value}/5`}
+                        </span>
                       </div>
                       <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                         <div className="h-full rounded-full bg-[#3EB489]" style={{ width: `${Math.round((row.value / 5) * 100)}%` }} />

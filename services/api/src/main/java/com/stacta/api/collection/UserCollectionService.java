@@ -13,10 +13,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class UserCollectionService {
+  private static final Set<String> ALLOWED_COLLECTION_TAGS = Set.of(
+    "BLIND_BUY",
+    "SAMPLED_FIRST",
+    "RECOMMENDED",
+    "HYPE_TREND",
+    "DEAL_DISCOUNT",
+    "GIFT"
+  );
 
   private final UserCollectionItemRepository items;
   private final UserWishlistItemRepository wishlistItems;
@@ -65,6 +74,7 @@ public class UserCollectionService {
     entity.setFragranceName(name);
     entity.setFragranceBrand(nullIfBlank(req.brand()));
     entity.setFragranceImageUrl(nullIfBlank(req.imageUrl()));
+    entity.setCollectionTag(normalizeCollectionTag(req.collectionTag()));
 
     var saved = items.save(entity);
     if (isNew) {
@@ -210,6 +220,7 @@ public class UserCollectionService {
       row.getFragranceName(),
       row.getFragranceBrand(),
       row.getFragranceImageUrl(),
+      row.getCollectionTag(),
       row.getAddedAt()
     );
   }
@@ -221,6 +232,7 @@ public class UserCollectionService {
       row.getFragranceName(),
       row.getFragranceBrand(),
       row.getFragranceImageUrl(),
+      null,
       row.getAddedAt()
     );
   }
@@ -235,6 +247,17 @@ public class UserCollectionService {
 
   private String normalizeExternalId(String raw) {
     return safeTrim(raw).toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+  }
+
+  private String normalizeCollectionTag(String raw) {
+    String normalized = safeTrim(raw).toUpperCase(Locale.ROOT);
+    if (normalized.isEmpty()) {
+      throw new ApiException("INVALID_COLLECTION_ITEM");
+    }
+    if (!ALLOWED_COLLECTION_TAGS.contains(normalized)) {
+      throw new ApiException("INVALID_COLLECTION_ITEM");
+    }
+    return normalized;
   }
 
   private boolean isSyntheticRouteId(String externalId) {
@@ -258,6 +281,7 @@ public class UserCollectionService {
     event.setFragranceSource(item.getFragranceSource());
     event.setFragranceExternalId(item.getFragranceExternalId());
     event.setFragranceImageUrl(item.getFragranceImageUrl());
+    event.setCollectionTag(item.getCollectionTag());
     activities.save(event);
   }
 

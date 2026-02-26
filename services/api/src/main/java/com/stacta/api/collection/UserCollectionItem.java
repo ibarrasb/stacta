@@ -40,6 +40,9 @@ public class UserCollectionItem {
   @Column(name = "fragrance_image_url")
   private String fragranceImageUrl;
 
+  @Column(name = "collection_tag")
+  private String collectionTag;
+
   @Column(name = "added_at", nullable = false, updatable = false)
   private Instant addedAt;
 
@@ -61,5 +64,7 @@ public class UserCollectionItem {
   public void setFragranceBrand(String fragranceBrand) { this.fragranceBrand = fragranceBrand; }
   public String getFragranceImageUrl() { return fragranceImageUrl; }
   public void setFragranceImageUrl(String fragranceImageUrl) { this.fragranceImageUrl = fragranceImageUrl; }
+  public String getCollectionTag() { return collectionTag; }
+  public void setCollectionTag(String collectionTag) { this.collectionTag = collectionTag; }
   public Instant getAddedAt() { return addedAt; }
 }

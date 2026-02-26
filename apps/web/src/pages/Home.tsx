@@ -50,6 +50,18 @@ function kindPill(type: FeedItem["type"]) {
   return "Follow";
 }
 
+function collectionTagLabel(tag: string | null | undefined) {
+  const normalized = String(tag ?? "").trim().toUpperCase();
+  if (!normalized) return null;
+  if (normalized === "BLIND_BUY") return "Blind Buy";
+  if (normalized === "SAMPLED_FIRST") return "Sampled First";
+  if (normalized === "RECOMMENDED") return "Recommended";
+  if (normalized === "HYPE_TREND") return "Hype/Trend";
+  if (normalized === "DEAL_DISCOUNT") return "Deal/Discount";
+  if (normalized === "GIFT") return "Gift";
+  return null;
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -348,6 +360,11 @@ export default function HomePage() {
                       ) : (
                         <span className="font-semibold text-amber-100">{item.fragranceName || "a fragrance"}</span>
                       )}
+                      {item.type === "COLLECTION_ITEM_ADDED" && collectionTagLabel(item.collectionTag) ? (
+                        <span className="ml-2 inline-flex items-center rounded-full border border-[#3EB489]/45 bg-[#3EB489]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#9de2ca]">
+                          {collectionTagLabel(item.collectionTag)}
+                        </span>
+                      ) : null}
                       .
                     </div>
 

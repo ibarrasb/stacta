@@ -116,6 +116,7 @@ public class FeedService {
       row.getFragranceSource(),
       row.getFragranceExternalId(),
       row.getFragranceImageUrl(),
+      row.getCollectionTag(),
       row.getReviewRating(),
       row.getReviewExcerpt(),
       row.getReviewPerformance(),

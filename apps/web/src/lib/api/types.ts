@@ -4,6 +4,7 @@ export type CollectionItem = {
   name: string;
   brand: string | null;
   imageUrl: string | null;
+  collectionTag: string | null;
   addedAt: string;
 };
 
@@ -190,6 +191,7 @@ export type FeedItem = {
   fragranceSource: "FRAGELLA" | "COMMUNITY" | string | null;
   fragranceExternalId: string | null;
   fragranceImageUrl: string | null;
+  collectionTag: string | null;
   reviewRating: number | null;
   reviewExcerpt: string | null;
   reviewPerformance: string | null;

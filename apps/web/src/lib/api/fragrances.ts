@@ -107,6 +107,7 @@ export type CreateCommunityFragranceRequest = {
   brand: string;
   year?: string | null;
   imageUrl?: string | null;
+  purchaseUrl?: string | null;
   concentration?: string | null;
   longevityScore?: number | null; // 1-5
   sillageScore?: number | null; // 1-5

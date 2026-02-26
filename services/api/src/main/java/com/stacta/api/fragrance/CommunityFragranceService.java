@@ -68,6 +68,7 @@ public class CommunityFragranceService {
       ? null
       : req.concentration().trim();
     String imageUrl = normalizeImageUrl(req.imageUrl());
+    String purchaseUrl = normalizePurchaseUrl(req.purchaseUrl());
     String confidence = normalizeOptional(req.confidence());
     String popularity = normalizeOptional(req.popularity());
     List<String> mainAccords = normalizeAccords(req.mainAccords());
@@ -89,6 +90,7 @@ public class CommunityFragranceService {
       brand,
       year,
       imageUrl,
+      purchaseUrl,
       concentration,
       req.longevityScore(),
       req.sillageScore(),
@@ -172,6 +174,7 @@ public class CommunityFragranceService {
     String visibility = normalizeVisibility(req.visibility());
     String concentration = normalizeOptional(req.concentration());
     String imageUrl = normalizeImageUrl(req.imageUrl());
+    String purchaseUrl = normalizePurchaseUrl(req.purchaseUrl());
     String confidence = normalizeOptional(req.confidence());
     String popularity = normalizeOptional(req.popularity());
     List<String> mainAccords = normalizeAccords(req.mainAccords());
@@ -197,6 +200,7 @@ public class CommunityFragranceService {
       brand,
       year,
       imageUrl,
+      purchaseUrl,
       concentration,
       req.longevityScore(),
       req.sillageScore(),
@@ -535,6 +539,14 @@ public class CommunityFragranceService {
     return cleaned;
   }
 
+  private static String normalizePurchaseUrl(String v) {
+    String cleaned = normalizeOptional(v);
+    if (cleaned == null) return null;
+    if (cleaned.matches("(?i)^https?://.*")) return cleaned;
+    if (cleaned.matches("(?i)^www\\..*")) return "https://" + cleaned;
+    return cleaned;
+  }
+
   private static List<String> normalizeAccords(List<String> accords) {
     if (accords == null || accords.isEmpty()) return List.of();
     return accords.stream()
@@ -568,6 +580,7 @@ public class CommunityFragranceService {
     String brand,
     String year,
     String imageUrl,
+    String purchaseUrl,
     String concentration,
     Integer longevityScore,
     Integer sillageScore,
@@ -604,7 +617,7 @@ public class CommunityFragranceService {
       mainAccords == null ? List.of() : mainAccords,
       List.of(),
       new NotesDto(top, middle, base),
-      null,
+      purchaseUrl,
       concentration,
       longevityScore,
       sillageScore,

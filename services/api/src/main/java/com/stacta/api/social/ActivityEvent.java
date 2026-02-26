@@ -38,6 +38,9 @@ public class ActivityEvent {
   @Column(name = "fragrance_image_url")
   private String fragranceImageUrl;
 
+  @Column(name = "collection_tag")
+  private String collectionTag;
+
   @Column(name = "review_rating")
   private Integer reviewRating;
 
@@ -88,6 +91,8 @@ public class ActivityEvent {
   public void setFragranceExternalId(String fragranceExternalId) { this.fragranceExternalId = fragranceExternalId; }
   public String getFragranceImageUrl() { return fragranceImageUrl; }
   public void setFragranceImageUrl(String fragranceImageUrl) { this.fragranceImageUrl = fragranceImageUrl; }
+  public String getCollectionTag() { return collectionTag; }
+  public void setCollectionTag(String collectionTag) { this.collectionTag = collectionTag; }
   public Integer getReviewRating() { return reviewRating; }
   public void setReviewRating(Integer reviewRating) { this.reviewRating = reviewRating; }
   public String getReviewExcerpt() { return reviewExcerpt; }

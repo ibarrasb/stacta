@@ -8,5 +8,6 @@ public record CollectionItemDto(
   String name,
   String brand,
   String imageUrl,
+  String collectionTag,
   Instant addedAt
 ) {}

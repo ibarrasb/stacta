@@ -58,6 +58,19 @@ function priceToneClasses(value: number) {
   return "border-green-300/70 bg-green-400/22 text-green-100";
 }
 
+function performanceValueLabel(label: string, value: number) {
+  const key = label.trim().toLowerCase();
+  if (key === "longevity") {
+    const map = ["", "Fleeting", "Weak", "Moderate", "Long lasting", "Endless"];
+    return map[value] ?? `${value}/5`;
+  }
+  if (key === "sillage") {
+    const map = ["", "Skin scent", "Weak", "Moderate", "Strong", "Nuclear"];
+    return map[value] ?? `${value}/5`;
+  }
+  return `${value}/5`;
+}
+
 export default function ReviewCard({
   item,
   timeAgo,
@@ -255,7 +268,7 @@ export default function ReviewCard({
 
       <div
         className="overflow-hidden transition-all duration-300 ease-out"
-        style={{ maxHeight: expanded ? "560px" : "0px", opacity: expanded ? 1 : 0 }}
+        style={{ maxHeight: expanded ? "2000px" : "0px", opacity: expanded ? 1 : 0 }}
       >
         <div className="mt-3 space-y-3 border-t border-white/10 pt-3">
           {performanceRows.length ? (
@@ -266,7 +279,7 @@ export default function ReviewCard({
                   <div key={`p-${row.label}`}>
                     <div className="mb-1 flex items-center justify-between text-xs text-white/75">
                       <span>{row.label}</span>
-                      <span>{row.value}/5</span>
+                      <span>{performanceValueLabel(row.label, row.value)}</span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                       <div className="h-full rounded-full" style={{ width: `${Math.round((row.value / 5) * 100)}%`, background: TEAL }} />

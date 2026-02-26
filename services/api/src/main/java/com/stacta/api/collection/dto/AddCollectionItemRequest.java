@@ -7,5 +7,6 @@ public record AddCollectionItemRequest(
   @NotBlank String externalId,
   @NotBlank String name,
   String brand,
-  String imageUrl
+  String imageUrl,
+  String collectionTag
 ) {}

@@ -20,6 +20,7 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
       ae.fragrance_source AS fragranceSource,
       ae.fragrance_external_id AS fragranceExternalId,
       ae.fragrance_image_url AS fragranceImageUrl,
+      ae.collection_tag AS collectionTag,
       ae.review_rating AS reviewRating,
       ae.review_excerpt AS reviewExcerpt,
       ae.review_performance AS reviewPerformance,
@@ -74,6 +75,7 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
       ae.fragrance_source AS fragranceSource,
       ae.fragrance_external_id AS fragranceExternalId,
       ae.fragrance_image_url AS fragranceImageUrl,
+      ae.collection_tag AS collectionTag,
       ae.review_rating AS reviewRating,
       ae.review_excerpt AS reviewExcerpt,
       ae.review_performance AS reviewPerformance,
@@ -118,6 +120,7 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
       ae.fragrance_source AS fragranceSource,
       ae.fragrance_external_id AS fragranceExternalId,
       ae.fragrance_image_url AS fragranceImageUrl,
+      ae.collection_tag AS collectionTag,
       ae.review_rating AS reviewRating,
       ae.review_excerpt AS reviewExcerpt,
       ae.review_performance AS reviewPerformance,
@@ -178,6 +181,7 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
     String getFragranceSource();
     String getFragranceExternalId();
     String getFragranceImageUrl();
+    String getCollectionTag();
     Integer getReviewRating();
     String getReviewExcerpt();
     String getReviewPerformance();

@@ -15,6 +15,7 @@ public record FeedItem(
   String fragranceSource,
   String fragranceExternalId,
   String fragranceImageUrl,
+  String collectionTag,
   Integer reviewRating,
   String reviewExcerpt,
   String reviewPerformance,
