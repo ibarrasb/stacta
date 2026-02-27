@@ -7,7 +7,7 @@ import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
 import ReviewCard from "@/components/feed/ReviewCard";
 import { getMe } from "@/lib/api/me";
-import { deleteReview } from "@/lib/api/reviews";
+import { deleteReview, likeReview, unlikeReview } from "@/lib/api/reviews";
 import { getUnreadNotificationsCount } from "@/lib/api/notifications";
 import { listFeed, type FeedFilter, type FeedTab } from "@/lib/api/feed";
 import type { FeedItem } from "@/lib/api/types";
@@ -75,6 +75,7 @@ export default function HomePage() {
   const [viewerUsername, setViewerUsername] = useState<string | null>(null);
   const [pendingDeleteReviewId, setPendingDeleteReviewId] = useState<string | null>(null);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+  const [likingReviewId, setLikingReviewId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,6 +154,33 @@ export default function HomePage() {
     } finally {
       setDeletingReviewId(null);
       setPendingDeleteReviewId(null);
+    }
+  }
+
+  async function onToggleReviewLike(reviewId: string, currentlyLiked: boolean) {
+    if (!reviewId || likingReviewId === reviewId) return;
+    setLikingReviewId(reviewId);
+    setItems((prev) => prev.map((item) => {
+      if (item.id !== reviewId) return item;
+      const nextLikes = Math.max(0, item.likesCount + (currentlyLiked ? -1 : 1));
+      return { ...item, viewerHasLiked: !currentlyLiked, likesCount: nextLikes };
+    }));
+    try {
+      const res = currentlyLiked ? await unlikeReview(reviewId) : await likeReview(reviewId);
+      setItems((prev) => prev.map((item) => (
+        item.id === reviewId
+          ? { ...item, viewerHasLiked: res.viewerHasLiked, likesCount: res.likesCount }
+          : item
+      )));
+    } catch (e: any) {
+      setItems((prev) => prev.map((item) => {
+        if (item.id !== reviewId) return item;
+        const revertedLikes = Math.max(0, item.likesCount + (currentlyLiked ? 1 : -1));
+        return { ...item, viewerHasLiked: currentlyLiked, likesCount: revertedLikes };
+      }));
+      setError(e?.message || "Failed to update like.");
+    } finally {
+      setLikingReviewId(null);
     }
   }
 
@@ -313,6 +341,13 @@ export default function HomePage() {
                         ? () => setPendingDeleteReviewId(item.id)
                         : undefined
                     }
+                    onToggleLike={
+                      viewerUsername && item.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
+                        ? () => onToggleReviewLike(item.id, Boolean(item.viewerHasLiked))
+                        : undefined
+                    }
+                    onOpenComments={() => navigate(`/reviews/${encodeURIComponent(item.id)}`, { state: { from: { pathname: "/home" } } })}
+                    liking={likingReviewId === item.id}
                     deleting={deletingReviewId === item.id}
                   />
                 ) : (

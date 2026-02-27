@@ -29,6 +29,15 @@ public class NotificationEvent {
   @Column(name = "source_follow_id")
   private UUID sourceFollowId;
 
+  @Column(name = "source_review_id")
+  private UUID sourceReviewId;
+
+  @Column(name = "source_comment_id")
+  private UUID sourceCommentId;
+
+  @Column(name = "aggregate_count", nullable = false)
+  private int aggregateCount = 1;
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
@@ -49,6 +58,12 @@ public class NotificationEvent {
   public void setType(String type) { this.type = type; }
   public UUID getSourceFollowId() { return sourceFollowId; }
   public void setSourceFollowId(UUID sourceFollowId) { this.sourceFollowId = sourceFollowId; }
+  public UUID getSourceReviewId() { return sourceReviewId; }
+  public void setSourceReviewId(UUID sourceReviewId) { this.sourceReviewId = sourceReviewId; }
+  public UUID getSourceCommentId() { return sourceCommentId; }
+  public void setSourceCommentId(UUID sourceCommentId) { this.sourceCommentId = sourceCommentId; }
+  public int getAggregateCount() { return aggregateCount; }
+  public void setAggregateCount(int aggregateCount) { this.aggregateCount = aggregateCount; }
   public Instant getCreatedAt() { return createdAt; }
   public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
   public Instant getDeletedAt() { return deletedAt; }

@@ -10,5 +10,11 @@ public record NotificationItem(
   String actorDisplayName,
   String actorAvatarUrl,
   Instant createdAt,
-  boolean followedBack
+  boolean followedBack,
+  UUID sourceReviewId,
+  UUID sourceCommentId,
+  Integer aggregateCount,
+  String reviewFragranceName,
+  String reviewFragranceSource,
+  String reviewFragranceExternalId
 ) {}

@@ -8,6 +8,7 @@ import com.stacta.api.user.UserRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -21,10 +22,12 @@ public class FeedService {
 
   private final ActivityEventRepository activities;
   private final UserRepository users;
+  private final FollowService follows;
 
-  public FeedService(ActivityEventRepository activities, UserRepository users) {
+  public FeedService(ActivityEventRepository activities, UserRepository users, FollowService follows) {
     this.activities = activities;
     this.users = users;
+    this.follows = follows;
   }
 
   @Transactional(readOnly = true)
@@ -86,6 +89,43 @@ public class FeedService {
     var token = parseFollowingCursor(cursor);
     var rows = activities.listMyReviewFeed(
       me.getId(),
+      me.getId(),
+      token == null ? null : token.createdAt(),
+      token == null ? null : token.id(),
+      PageRequest.of(0, safeLimit + 1)
+    );
+
+    boolean hasMore = rows.size() > safeLimit;
+    var pageRows = hasMore ? rows.subList(0, safeLimit) : rows;
+    var items = pageRows.stream().map(this::mapView).toList();
+
+    String nextCursor = null;
+    if (hasMore && !pageRows.isEmpty()) {
+      var last = pageRows.get(pageRows.size() - 1);
+      nextCursor = encodeFollowingCursor(last.getCreatedAt(), last.getId());
+    }
+    return new FeedResponse(items, nextCursor);
+  }
+
+  @Transactional(readOnly = true)
+  public FeedResponse listUserReviews(String viewerSub, String username, int limit, String cursor) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    String normalizedUsername = normalizeUsername(username);
+    User target = users.findByUsernameIgnoreCase(normalizedUsername)
+      .orElseThrow(() -> new ApiException("USER_NOT_FOUND"));
+
+    boolean isOwner = me.getId().equals(target.getId());
+    boolean isFollowing = follows.isFollowing(me.getId(), target.getId());
+    boolean isVisible = !target.isPrivate() || isOwner || isFollowing;
+    if (!isVisible) {
+      return new FeedResponse(List.of(), null);
+    }
+
+    int safeLimit = Math.max(1, Math.min(limit, 50));
+    var token = parseFollowingCursor(cursor);
+    var rows = activities.listMyReviewFeed(
+      target.getId(),
+      me.getId(),
       token == null ? null : token.createdAt(),
       token == null ? null : token.id(),
       PageRequest.of(0, safeLimit + 1)
@@ -125,6 +165,7 @@ public class FeedService {
       row.getLikesCount(),
       row.getCommentsCount(),
       row.getRepostsCount(),
+      row.getViewerHasLiked(),
       row.getCreatedAt()
     );
   }
@@ -143,6 +184,15 @@ public class FeedService {
       case "REVIEW_POSTED", "COLLECTION_ITEM_ADDED", "WISHLIST_ITEM_ADDED", "USER_FOLLOWED_USER", "REVIEW_REPOSTED" -> normalized;
       default -> throw new ApiException("INVALID_FEED_FILTER");
     };
+  }
+
+  private String normalizeUsername(String raw) {
+    String cleaned = raw == null ? "" : raw
+      .trim()
+      .toLowerCase()
+      .replaceAll("^@+", "")
+      .replaceAll("[^a-z0-9_]", "");
+    return cleaned.length() > 20 ? cleaned.substring(0, 20) : cleaned;
   }
 
   private record FollowingCursor(Instant createdAt, UUID id) {}

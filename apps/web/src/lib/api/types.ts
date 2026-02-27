@@ -116,12 +116,25 @@ export type FollowConnectionsPage = {
 
 export type NotificationItem = {
   id: string;
-  type: "FOLLOWED_YOU" | "FOLLOWED_YOU_BACK" | "MODERATION_STRIKE" | string;
+  type:
+    | "FOLLOWED_YOU"
+    | "FOLLOWED_YOU_BACK"
+    | "MODERATION_STRIKE"
+    | "REVIEW_LIKED"
+    | "REVIEW_COMMENTED"
+    | "REVIEW_COMMENT_REPLIED"
+    | string;
   actorUsername: string;
   actorDisplayName: string;
   actorAvatarUrl: string | null;
   createdAt: string;
   followedBack: boolean;
+  sourceReviewId: string | null;
+  sourceCommentId: string | null;
+  aggregateCount: number | null;
+  reviewFragranceName: string | null;
+  reviewFragranceSource: string | null;
+  reviewFragranceExternalId: string | null;
 };
 
 export type NotificationsPage = {
@@ -203,11 +216,29 @@ export type FeedItem = {
   likesCount: number;
   commentsCount: number;
   repostsCount: number;
+  viewerHasLiked: boolean;
   createdAt: string;
 };
 
 export type FeedPage = {
   items: FeedItem[];
   nextCursor: string | null;
+};
+
+export type ReviewCommentItem = {
+  id: string;
+  reviewId: string;
+  parentCommentId: string | null;
+  authorUsername: string;
+  authorDisplayName: string;
+  authorAvatarUrl: string | null;
+  body: string;
+  createdAt: string;
+  viewerCanDelete: boolean;
+};
+
+export type ReviewThreadResponse = {
+  review: FeedItem;
+  comments: ReviewCommentItem[];
 };
   

@@ -6,10 +6,13 @@ import { Separator } from "@/components/ui/separator";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
+import ReviewCard from "@/components/feed/ReviewCard";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { followUser, unfollowUser } from "@/lib/api/follows";
+import { listUserReviewFeed } from "@/lib/api/feed";
+import { likeReview, unlikeReview } from "@/lib/api/reviews";
 import { getUserProfile } from "@/lib/api/users";
-import type { UserProfileResponse } from "@/lib/api/types";
+import type { FeedItem, UserProfileResponse } from "@/lib/api/types";
 import fragranceFallbackImg from "@/assets/illustrations/NotFound.png";
 
 const FALLBACK_FRAGRANCE_IMG = fragranceFallbackImg;
@@ -62,6 +65,13 @@ export default function PublicProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<{ title: string; message: string } | null>(null);
   const [activeTab, setActiveTab] = useState<PublicProfileTab>("overview");
+  const [reviewItems, setReviewItems] = useState<FeedItem[]>([]);
+  const [reviewCursor, setReviewCursor] = useState<string | null>(null);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsLoadingMore, setReviewsLoadingMore] = useState(false);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [reviewsLoaded, setReviewsLoaded] = useState(false);
+  const [likingReviewId, setLikingReviewId] = useState<string | null>(null);
 
   const backTarget = useMemo(() => {
     const stateFrom = (location.state as any)?.from?.pathname;
@@ -104,6 +114,85 @@ export default function PublicProfilePage() {
       cancelled = true;
     };
   }, [username]);
+
+  useEffect(() => {
+    setReviewItems([]);
+    setReviewCursor(null);
+    setReviewsError(null);
+    setReviewsLoaded(false);
+  }, [profile?.username, profile?.reviewCount]);
+
+  useEffect(() => {
+    if (!profile || activeTab !== "reviews" || !profile.isVisible || reviewsLoaded) return;
+    let cancelled = false;
+    const targetUsername = profile.username;
+
+    async function loadReviews() {
+      setReviewsLoading(true);
+      setReviewsError(null);
+      try {
+        const page = await listUserReviewFeed(targetUsername, { limit: 20 });
+        if (cancelled) return;
+        setReviewItems(page.items);
+        setReviewCursor(page.nextCursor);
+        setReviewsLoaded(true);
+      } catch (e: any) {
+        if (cancelled) return;
+        setReviewsError(e?.message || "Failed to load reviews.");
+        setReviewItems([]);
+        setReviewCursor(null);
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    }
+
+    void loadReviews();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, profile, reviewsLoaded]);
+
+  async function onLoadMoreReviews() {
+    if (!profile || !reviewCursor || reviewsLoadingMore) return;
+    setReviewsLoadingMore(true);
+    setReviewsError(null);
+    try {
+      const page = await listUserReviewFeed(profile.username, { limit: 20, cursor: reviewCursor });
+      setReviewItems((prev) => [...prev, ...page.items]);
+      setReviewCursor(page.nextCursor);
+    } catch (e: any) {
+      setReviewsError(e?.message || "Failed to load more reviews.");
+    } finally {
+      setReviewsLoadingMore(false);
+    }
+  }
+
+  async function onToggleReviewLike(reviewId: string, currentlyLiked: boolean) {
+    if (!reviewId || likingReviewId === reviewId) return;
+    setLikingReviewId(reviewId);
+    setReviewItems((prev) => prev.map((item) => {
+      if (item.id !== reviewId) return item;
+      const nextLikes = Math.max(0, item.likesCount + (currentlyLiked ? -1 : 1));
+      return { ...item, viewerHasLiked: !currentlyLiked, likesCount: nextLikes };
+    }));
+    try {
+      const res = currentlyLiked ? await unlikeReview(reviewId) : await likeReview(reviewId);
+      setReviewItems((prev) => prev.map((item) => (
+        item.id === reviewId
+          ? { ...item, viewerHasLiked: res.viewerHasLiked, likesCount: res.likesCount }
+          : item
+      )));
+    } catch (e: any) {
+      setReviewItems((prev) => prev.map((item) => {
+        if (item.id !== reviewId) return item;
+        const revertedLikes = Math.max(0, item.likesCount + (currentlyLiked ? 1 : -1));
+        return { ...item, viewerHasLiked: currentlyLiked, likesCount: revertedLikes };
+      }));
+      setReviewsError(e?.message || "Failed to update like.");
+    } finally {
+      setLikingReviewId(null);
+    }
+  }
 
   async function onToggleFollow() {
     if (!profile || profile.isOwner) return;
@@ -167,6 +256,19 @@ export default function PublicProfilePage() {
           }
         : undefined,
     });
+  }
+
+  function timeAgo(iso: string) {
+    const then = new Date(iso).getTime();
+    if (Number.isNaN(then)) return iso;
+    const sec = Math.max(1, Math.floor((Date.now() - then) / 1000));
+    if (sec < 60) return `${sec}s`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h`;
+    const day = Math.floor(hr / 24);
+    return `${day}d`;
   }
 
   return (
@@ -514,9 +616,58 @@ export default function PublicProfilePage() {
                         ? `${profile.displayName || profile.username} has posted ${profile.reviewCount} review(s).`
                         : "Follow to view this user's reviews."}
                     </div>
-                    <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
-                      Dedicated public review list is being wired next.
-                    </div>
+                    {!profile.isVisible ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        Follow to view this user's reviews.
+                      </div>
+                    ) : reviewsError ? (
+                      <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                        {reviewsError}
+                      </div>
+                    ) : reviewsLoading ? (
+                      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-5">
+                        <LoadingSpinner label="Loading reviews..." />
+                      </div>
+                    ) : !reviewItems.length ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        No reviews posted yet.
+                      </div>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {reviewItems.map((item) => (
+                          <ReviewCard
+                            key={item.id}
+                            item={item}
+                            timeAgo={timeAgo(item.createdAt)}
+                            onOpenUser={() => navigate(`/u/${encodeURIComponent(item.actorUsername)}`)}
+                            onOpenFragrance={() => {
+                              if (!item.fragranceExternalId) return;
+                              openFragranceDetail(item.fragranceSource ?? "FRAGELLA", item.fragranceExternalId);
+                            }}
+                            onToggleLike={profile.isOwner ? undefined : () => onToggleReviewLike(item.id, Boolean(item.viewerHasLiked))}
+                            onOpenComments={() => navigate(`/reviews/${encodeURIComponent(item.id)}`, { state: { from: { pathname: `/u/${profile.username}` } } })}
+                            liking={likingReviewId === item.id}
+                          />
+                        ))}
+                        {reviewCursor ? (
+                          <div className="pt-1">
+                            <Button
+                              variant="secondary"
+                              className="h-9 rounded-xl border border-white/12 bg-white/8 px-3 text-sm text-white hover:bg-white/14"
+                              onClick={onLoadMoreReviews}
+                              disabled={reviewsLoadingMore}
+                            >
+                              {reviewsLoadingMore ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <InlineSpinner />
+                                  <span>Loading...</span>
+                                </span>
+                              ) : "Load more reviews"}
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 ) : null}
 

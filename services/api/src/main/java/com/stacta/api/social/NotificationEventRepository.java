@@ -18,9 +18,16 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
       u.username AS actorUsername,
       u.display_name AS actorDisplayName,
       u.avatar_url AS actorAvatarUrl,
+      ne.source_review_id AS sourceReviewId,
+      ne.source_comment_id AS sourceCommentId,
+      ne.aggregate_count AS aggregateCount,
+      ae.fragrance_name AS reviewFragranceName,
+      ae.fragrance_source AS reviewFragranceSource,
+      ae.fragrance_external_id AS reviewFragranceExternalId,
       ne.created_at AS createdAt
     FROM notification_event ne
     JOIN users u ON u.id = ne.actor_user_id
+    LEFT JOIN activity_event ae ON ae.id = ne.source_review_id
     WHERE ne.recipient_user_id = :recipientUserId
       AND ne.deleted_at IS NULL
       AND (
@@ -55,6 +62,12 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
     String getActorUsername();
     String getActorDisplayName();
     String getActorAvatarUrl();
+    UUID getSourceReviewId();
+    UUID getSourceCommentId();
+    Integer getAggregateCount();
+    String getReviewFragranceName();
+    String getReviewFragranceSource();
+    String getReviewFragranceExternalId();
     Instant getCreatedAt();
   }
 

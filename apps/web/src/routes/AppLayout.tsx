@@ -22,6 +22,7 @@ export default function AppLayout() {
     pathname.startsWith("/notifications") ||
     pathname === "/settings" ||
     pathname.startsWith("/u/") ||
+    pathname.startsWith("/reviews/") ||
     pathname.startsWith("/fragrances/");
 
   return (

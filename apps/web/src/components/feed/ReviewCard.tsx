@@ -78,7 +78,10 @@ export default function ReviewCard({
   onOpenFragrance,
   onDelete,
   onReport,
+  onOpenComments,
   deleting,
+  onToggleLike,
+  liking,
 }: {
   item: FeedItem;
   timeAgo: string;
@@ -86,7 +89,10 @@ export default function ReviewCard({
   onOpenFragrance: () => void;
   onDelete?: () => void;
   onReport?: () => void;
+  onOpenComments?: () => void;
   deleting?: boolean;
+  onToggleLike?: () => void;
+  liking?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -243,17 +249,23 @@ export default function ReviewCard({
             type="button"
             title="Like"
             aria-label="Like review"
-            className="inline-flex h-7 w-7 items-center justify-center text-white/65 transition hover:text-[#3EB489]"
+            className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+            onClick={onToggleLike}
+            disabled={Boolean(liking) || !onToggleLike}
           >
-            <Heart className="h-4 w-4" />
+            <Heart className={`h-4 w-4 ${item.viewerHasLiked ? "fill-[#3EB489] text-[#3EB489]" : ""}`} />
+            <span className="text-[11px] text-white/70">{item.likesCount}</span>
           </button>
           <button
             type="button"
             title="Comment"
             aria-label="Comment on review"
-            className="inline-flex h-7 w-7 items-center justify-center text-white/65 transition hover:text-[#3EB489]"
+            className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489] disabled:cursor-not-allowed disabled:opacity-55"
+            onClick={onOpenComments}
+            disabled={!onOpenComments}
           >
             <MessageCircle className="h-4 w-4" />
+            <span className="text-[11px] text-white/70">{item.commentsCount}</span>
           </button>
           <button
             type="button"

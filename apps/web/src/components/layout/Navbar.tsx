@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { authSignOut } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import { getMe } from "@/lib/api/me";
+import { getUnreadNotificationsCount } from "@/lib/api/notifications";
 
 const ONBOARDED_KEY = "stacta:onboardedSub";
 
@@ -31,6 +32,7 @@ function isActive(pathname: string, to: string) {
 export default function Navbar() {
   const { pathname } = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +49,33 @@ export default function Navbar() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshUnread = async () => {
+      try {
+        const res = await getUnreadNotificationsCount();
+        if (cancelled) return;
+        setUnreadCount(Math.max(0, Number(res?.count ?? 0)));
+      } catch {
+        if (cancelled) return;
+        setUnreadCount(0);
+      }
+    };
+
+    void refreshUnread();
+    const id = window.setInterval(() => {
+      void refreshUnread();
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [pathname]);
+
+  const unreadLabel = unreadCount > 99 ? "99+" : unreadCount > 0 ? String(unreadCount) : null;
 
   const activeLabel = useMemo(() => {
     const item = [...NAV_ITEMS, ...(isAdmin ? [{ label: "Admin", to: "/admin/note-reports" as const }] : [])]
@@ -88,13 +117,18 @@ export default function Navbar() {
                 key={`m-${item.to}`}
                 to={item.to}
                 className={[
-                  "shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition",
+                  "relative shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition",
                   active
                     ? "border border-amber-200/35 bg-amber-300/20 text-amber-100"
                     : "border border-transparent text-white/75 hover:border-white/20 hover:bg-white/10 hover:text-white",
                 ].join(" ")}
               >
                 {item.label}
+                {item.to === "/notifications" && unreadLabel ? (
+                  <span className="absolute -right-1 -top-1 rounded-full border border-white/25 bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                    {unreadLabel}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -108,13 +142,18 @@ export default function Navbar() {
                 key={item.to}
                 to={item.to}
                 className={[
-                  "shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition",
+                  "relative shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold transition",
                   active
                     ? "border border-amber-200/35 bg-amber-300/20 text-amber-100"
                     : "border border-transparent text-white/75 hover:border-white/20 hover:bg-white/10 hover:text-white",
                 ].join(" ")}
               >
                 {item.label}
+                {item.to === "/notifications" && unreadLabel ? (
+                  <span className="absolute -right-1 -top-1 rounded-full border border-white/25 bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                    {unreadLabel}
+                  </span>
+                ) : null}
               </Link>
             );
           })}

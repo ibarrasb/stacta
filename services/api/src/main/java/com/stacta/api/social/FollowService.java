@@ -254,7 +254,13 @@ public class FollowService {
         v.getActorDisplayName(),
         v.getActorAvatarUrl(),
         v.getCreatedAt(),
-        FOLLOWED_YOU_BACK.equals(v.getType())
+        FOLLOWED_YOU_BACK.equals(v.getType()),
+        v.getSourceReviewId(),
+        v.getSourceCommentId(),
+        v.getAggregateCount(),
+        v.getReviewFragranceName(),
+        v.getReviewFragranceSource(),
+        v.getReviewFragranceExternalId()
       ))
       .toList();
 

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import NoticeDialog from "@/components/ui/notice-dialog";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
+import ReportDialog from "@/components/ui/report-dialog";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
 import type { FragranceSearchResult } from "@/lib/api/fragrances";
@@ -76,6 +77,11 @@ const COLLECTION_TAG_OPTIONS = [
   { value: "HYPE_TREND", label: "Hype/Trend" },
   { value: "DEAL_DISCOUNT", label: "Deal/Discount" },
   { value: "GIFT", label: "Gift" },
+] as const;
+const FRAGRANCE_REPORT_REASONS = [
+  { value: "INAPPROPRIATE", label: "Inappropriate" },
+  { value: "SPAM", label: "Spam" },
+  { value: "OTHER", label: "Other" },
 ] as const;
 const COMMUNITY_LONGEVITY_LEVEL_LABELS = ["", "Fleeting", "Weak", "Moderate", "Long lasting", "Endless"] as const;
 const COMMUNITY_SILLAGE_LEVEL_LABELS = ["", "Skin scent", "Weak", "Moderate", "Strong", "Nuclear"] as const;
@@ -3169,53 +3175,19 @@ export default function FragranceDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={reportFragranceDialogOpen} onOpenChange={(next) => !reportSubmitting && setReportFragranceDialogOpen(next)}>
-        <DialogContent className="max-w-md rounded-3xl border-white/15 bg-[#090a0f] text-white">
-          <DialogHeader>
-            <DialogTitle>Report Fragrance</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="text-sm text-white/80">
-              Reporting: <span className="font-semibold">{fragrance?.brand} {fragrance?.name}</span>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-white/60">Reason</div>
-              <select
-                value={reportFragranceReason}
-                onChange={(e) => setReportFragranceReason(e.target.value as any)}
-                className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none"
-              >
-                <option value="INAPPROPRIATE">Inappropriate</option>
-                <option value="SPAM">Spam</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-white/60">Details (optional)</div>
-              <Textarea
-                value={reportFragranceDetails}
-                onChange={(e) => setReportFragranceDetails(e.target.value)}
-                placeholder="Add context for moderators..."
-                className="min-h-20 rounded-xl border-white/10 bg-white/5 text-white"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20"
-                onClick={() => setReportFragranceDialogOpen(false)}
-                disabled={reportSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button type="button" className="h-9 rounded-xl px-4" onClick={submitReportFragrance} disabled={reportSubmitting}>
-                {reportSubmitting ? "Submitting…" : "Submit report"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ReportDialog
+        open={reportFragranceDialogOpen}
+        onOpenChange={setReportFragranceDialogOpen}
+        title="Report Fragrance"
+        targetLabel={`${fragrance?.brand ?? ""} ${fragrance?.name ?? ""}`.trim()}
+        reasons={[...FRAGRANCE_REPORT_REASONS]}
+        reason={reportFragranceReason}
+        onReasonChange={(next) => setReportFragranceReason(next as "SPAM" | "INAPPROPRIATE" | "OTHER")}
+        details={reportFragranceDetails}
+        onDetailsChange={setReportFragranceDetails}
+        submitting={reportSubmitting}
+        onSubmit={submitReportFragrance}
+      />
 
       <NoticeDialog
         open={Boolean(notice)}

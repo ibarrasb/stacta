@@ -4,6 +4,7 @@ import com.stacta.api.social.dto.FeedResponse;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,5 +37,15 @@ public class FeedController {
     @RequestParam(name = "cursor", required = false) String cursor
   ) {
     return feedService.listMineReviews(jwt.getSubject(), limit, cursor);
+  }
+
+  @GetMapping("/users/{username}/reviews")
+  public FeedResponse listUserReviews(
+    @AuthenticationPrincipal Jwt jwt,
+    @PathVariable("username") String username,
+    @RequestParam(name = "limit", defaultValue = "20") int limit,
+    @RequestParam(name = "cursor", required = false) String cursor
+  ) {
+    return feedService.listUserReviews(jwt.getSubject(), username, limit, cursor);
   }
 }

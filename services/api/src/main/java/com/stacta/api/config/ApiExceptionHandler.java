@@ -24,9 +24,13 @@ public class ApiExceptionHandler {
       case "UPLOAD_UNSUPPORTED_CONTENT_TYPE" -> HttpStatus.BAD_REQUEST;
       case "UPLOAD_FILE_TOO_LARGE" -> HttpStatus.BAD_REQUEST;
       case "INVALID_REVIEW" -> HttpStatus.BAD_REQUEST;
+      case "INVALID_COMMENT" -> HttpStatus.BAD_REQUEST;
       case "REVIEW_FORBIDDEN" -> HttpStatus.FORBIDDEN;
+      case "COMMENT_FORBIDDEN" -> HttpStatus.FORBIDDEN;
       case "TOP_FRAGRANCES_LIMIT_REACHED" -> HttpStatus.BAD_REQUEST;
       case "REVIEW_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+      case "COMMENT_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+      case "COMMENT_REPORT_ALREADY_EXISTS" -> HttpStatus.CONFLICT;
       case "COLLECTION_ITEM_NOT_FOUND" -> HttpStatus.NOT_FOUND;
       case "NOT_ONBOARDED" -> HttpStatus.NOT_FOUND;
       case "USER_NOT_FOUND" -> HttpStatus.NOT_FOUND;

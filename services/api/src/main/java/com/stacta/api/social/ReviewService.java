@@ -4,12 +4,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stacta.api.config.ApiException;
 import com.stacta.api.social.dto.CreateReviewRequest;
+import com.stacta.api.social.dto.ReviewLikeResponse;
 import com.stacta.api.user.User;
 import com.stacta.api.user.UserRepository;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,15 +21,18 @@ public class ReviewService {
   private final ActivityEventRepository activities;
   private final UserRepository users;
   private final ObjectMapper objectMapper;
+  private final JdbcTemplate jdbc;
 
   public ReviewService(
     ActivityEventRepository activities,
     UserRepository users,
-    ObjectMapper objectMapper
+    ObjectMapper objectMapper,
+    JdbcTemplate jdbc
   ) {
     this.activities = activities;
     this.users = users;
     this.objectMapper = objectMapper;
+    this.jdbc = jdbc;
   }
 
   @Transactional
@@ -72,6 +77,142 @@ public class ReviewService {
       throw new ApiException("REVIEW_FORBIDDEN");
     }
     activities.delete(event);
+  }
+
+  @Transactional
+  public ReviewLikeResponse like(String viewerSub, UUID reviewId) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    ActivityEvent review = getReviewOrThrow(reviewId);
+    if (me.getId().equals(review.getActorUserId())) {
+      throw new ApiException("REVIEW_FORBIDDEN");
+    }
+
+    int inserted = jdbc.update(
+      """
+      INSERT INTO review_like (review_id, user_id)
+      VALUES (?, ?)
+      ON CONFLICT DO NOTHING
+      """,
+      reviewId,
+      me.getId()
+    );
+    if (inserted > 0) {
+      activities.bumpLikesCount(reviewId, 1);
+    }
+
+    syncReviewLikeNotification(reviewId, review.getActorUserId());
+    int likesCount = getLikesCount(reviewId);
+    return new ReviewLikeResponse(likesCount, true);
+  }
+
+  @Transactional
+  public ReviewLikeResponse unlike(String viewerSub, UUID reviewId) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    ActivityEvent review = getReviewOrThrow(reviewId);
+    if (me.getId().equals(review.getActorUserId())) {
+      throw new ApiException("REVIEW_FORBIDDEN");
+    }
+
+    int deleted = jdbc.update(
+      """
+      DELETE FROM review_like
+      WHERE review_id = ?
+        AND user_id = ?
+      """,
+      reviewId,
+      me.getId()
+    );
+    if (deleted > 0) {
+      activities.bumpLikesCount(reviewId, -1);
+    }
+
+    syncReviewLikeNotification(reviewId, review.getActorUserId());
+    int likesCount = getLikesCount(reviewId);
+    return new ReviewLikeResponse(likesCount, false);
+  }
+
+  private ActivityEvent getReviewOrThrow(UUID reviewId) {
+    ActivityEvent event = activities.findById(reviewId).orElseThrow(() -> new ApiException("REVIEW_NOT_FOUND"));
+    if (!"REVIEW_POSTED".equalsIgnoreCase(String.valueOf(event.getType()))) {
+      throw new ApiException("REVIEW_NOT_FOUND");
+    }
+    return event;
+  }
+
+  private int getLikesCount(UUID reviewId) {
+    return activities.findById(reviewId)
+      .map(ActivityEvent::getLikesCount)
+      .orElse(0);
+  }
+
+  private void syncReviewLikeNotification(UUID reviewId, UUID recipientUserId) {
+    if (reviewId == null || recipientUserId == null) return;
+    Integer count = jdbc.queryForObject(
+      """
+      SELECT COUNT(*)
+      FROM review_like
+      WHERE review_id = ?
+        AND user_id <> ?
+      """,
+      Integer.class,
+      reviewId,
+      recipientUserId
+    );
+    int safeCount = Math.max(0, count == null ? 0 : count);
+    if (safeCount <= 0) {
+      jdbc.update(
+        """
+        DELETE FROM notification_event
+        WHERE recipient_user_id = ?
+          AND source_review_id = ?
+          AND type = 'REVIEW_LIKED'
+        """,
+        recipientUserId,
+        reviewId
+      );
+      return;
+    }
+
+    UUID latestActor = jdbc.query(
+      """
+      SELECT user_id
+      FROM review_like
+      WHERE review_id = ?
+        AND user_id <> ?
+      ORDER BY created_at DESC
+      LIMIT 1
+      """,
+      rs -> rs.next() ? rs.getObject(1, UUID.class) : null,
+      reviewId,
+      recipientUserId
+    );
+    if (latestActor == null) return;
+
+    jdbc.update(
+      """
+      INSERT INTO notification_event (
+        recipient_user_id,
+        actor_user_id,
+        type,
+        source_review_id,
+        aggregate_count,
+        created_at,
+        deleted_at
+      )
+      VALUES (?, ?, 'REVIEW_LIKED', ?, ?, now(), NULL)
+      ON CONFLICT (recipient_user_id, source_review_id, type)
+      WHERE type = 'REVIEW_LIKED'
+      DO UPDATE SET
+        actor_user_id = EXCLUDED.actor_user_id,
+        aggregate_count = EXCLUDED.aggregate_count,
+        created_at = now(),
+        deleted_at = NULL
+      """,
+      recipientUserId,
+      latestActor,
+      reviewId,
+      safeCount
+    );
   }
 
   private Map<String, Integer> normalizeRatingMap(Map<String, Integer> input, int maxEntries) {

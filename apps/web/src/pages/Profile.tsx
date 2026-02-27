@@ -1005,6 +1005,7 @@ export default function ProfilePage() {
                             timeAgo={timeAgo(item.createdAt)}
                             onOpenUser={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/profile" } } })}
                             onOpenFragrance={() => openFeedFragrance(item)}
+                            onOpenComments={() => navigate(`/reviews/${encodeURIComponent(item.id)}`, { state: { from: { pathname: "/profile" } } })}
                             onDelete={() => setPendingDeleteReviewId(item.id)}
                             deleting={deletingReviewId === item.id}
                           />

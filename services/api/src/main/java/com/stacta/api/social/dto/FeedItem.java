@@ -24,5 +24,6 @@ public record FeedItem(
   int likesCount,
   int commentsCount,
   int repostsCount,
+  boolean viewerHasLiked,
   Instant createdAt
 ) {}
