@@ -5,10 +5,14 @@ import java.util.UUID;
 
 public record FeedItem(
   UUID id,
+  UUID sourceReviewId,
   String type,
   String actorUsername,
   String actorDisplayName,
   String actorAvatarUrl,
+  String repostActorUsername,
+  String repostActorDisplayName,
+  String repostActorAvatarUrl,
   String targetUsername,
   String targetDisplayName,
   String fragranceName,
@@ -25,5 +29,6 @@ public record FeedItem(
   int commentsCount,
   int repostsCount,
   boolean viewerHasLiked,
+  boolean viewerHasReposted,
   Instant createdAt
 ) {}

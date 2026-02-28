@@ -5,6 +5,7 @@ export type CollectionItem = {
   brand: string | null;
   imageUrl: string | null;
   collectionTag: string | null;
+  userRating: number | null;
   addedAt: string;
 };
 
@@ -72,6 +73,7 @@ export type UserProfileResponse = {
   wishlistItems: CollectionItem[];
   topFragrances: CollectionItem[];
   communityFragrances: CollectionItem[];
+  followsYou: boolean;
   isFollowing: boolean;
   followRequested: boolean;
 };
@@ -197,10 +199,14 @@ export type FragranceReportListResponse = {
 
 export type FeedItem = {
   id: string;
+  sourceReviewId: string;
   type: "USER_FOLLOWED_USER" | "REVIEW_POSTED" | "COLLECTION_ITEM_ADDED" | "WISHLIST_ITEM_ADDED" | "REVIEW_REPOSTED";
   actorUsername: string;
   actorDisplayName: string;
   actorAvatarUrl: string | null;
+  repostActorUsername: string | null;
+  repostActorDisplayName: string | null;
+  repostActorAvatarUrl: string | null;
   targetUsername: string | null;
   targetDisplayName: string | null;
   fragranceName: string | null;
@@ -217,6 +223,7 @@ export type FeedItem = {
   commentsCount: number;
   repostsCount: number;
   viewerHasLiked: boolean;
+  viewerHasReposted: boolean;
   createdAt: string;
 };
 

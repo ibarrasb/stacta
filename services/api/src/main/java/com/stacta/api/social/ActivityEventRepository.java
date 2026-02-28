@@ -37,9 +37,22 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
   """)
   int bumpCommentsCount(@Param("reviewId") UUID reviewId, @Param("delta") int delta);
 
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query("""
+    UPDATE ActivityEvent ae
+    SET ae.repostsCount = CASE
+      WHEN ae.repostsCount + :delta < 0 THEN 0
+      ELSE ae.repostsCount + :delta
+    END
+    WHERE ae.id = :reviewId
+      AND ae.type = 'REVIEW_POSTED'
+  """)
+  int bumpRepostsCount(@Param("reviewId") UUID reviewId, @Param("delta") int delta);
+
   @Query(value = """
     SELECT
       ae.id AS id,
+      COALESCE(ae.source_review_id, ae.id) AS sourceReviewId,
       ae.type AS type,
       ae.fragrance_name AS fragranceName,
       ae.fragrance_source AS fragranceSource,
@@ -51,20 +64,29 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
       ae.review_performance AS reviewPerformance,
       ae.review_season AS reviewSeason,
       ae.review_occasion AS reviewOccasion,
-      ae.likes_count AS likesCount,
-      ae.comments_count AS commentsCount,
-      ae.reposts_count AS repostsCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.likes_count ELSE ae.likes_count END AS likesCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.comments_count ELSE ae.comments_count END AS commentsCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.reposts_count ELSE ae.reposts_count END AS repostsCount,
       CASE WHEN rl.user_id IS NULL THEN false ELSE true END AS viewerHasLiked,
+      CASE WHEN rr.user_id IS NULL THEN false ELSE true END AS viewerHasReposted,
       ae.created_at AS createdAt,
-      actor.username AS actorUsername,
-      actor.display_name AS actorDisplayName,
-      actor.avatar_url AS actorAvatarUrl,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.username ELSE actor.username END AS actorUsername,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.display_name ELSE actor.display_name END AS actorDisplayName,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.avatar_object_key ELSE actor.avatar_object_key END AS actorAvatarObjectKey,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.avatar_url ELSE actor.avatar_url END AS actorAvatarUrl,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.username ELSE NULL END AS repostActorUsername,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.display_name ELSE NULL END AS repostActorDisplayName,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.avatar_object_key ELSE NULL END AS repostActorAvatarObjectKey,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.avatar_url ELSE NULL END AS repostActorAvatarUrl,
       target.username AS targetUsername,
       target.display_name AS targetDisplayName
     FROM activity_event ae
     JOIN users actor ON actor.id = ae.actor_user_id
+    LEFT JOIN activity_event src ON src.id = ae.source_review_id AND src.type = 'REVIEW_POSTED'
+    LEFT JOIN users src_actor ON src_actor.id = src.actor_user_id
     LEFT JOIN users target ON target.id = ae.target_user_id
-    LEFT JOIN review_like rl ON rl.review_id = ae.id AND rl.user_id = :viewerUserId
+    LEFT JOIN review_like rl ON rl.review_id = COALESCE(ae.source_review_id, ae.id) AND rl.user_id = :viewerUserId
+    LEFT JOIN review_repost rr ON rr.review_id = COALESCE(ae.source_review_id, ae.id) AND rr.user_id = :viewerUserId
     LEFT JOIN user_follow uf ON uf.follower_user_id = :viewerUserId
       AND uf.following_user_id = ae.actor_user_id
       AND uf.status = 'ACCEPTED'
@@ -97,6 +119,7 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
   @Query(value = """
     SELECT
       ae.id AS id,
+      COALESCE(ae.source_review_id, ae.id) AS sourceReviewId,
       ae.type AS type,
       ae.fragrance_name AS fragranceName,
       ae.fragrance_source AS fragranceSource,
@@ -108,20 +131,29 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
       ae.review_performance AS reviewPerformance,
       ae.review_season AS reviewSeason,
       ae.review_occasion AS reviewOccasion,
-      ae.likes_count AS likesCount,
-      ae.comments_count AS commentsCount,
-      ae.reposts_count AS repostsCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.likes_count ELSE ae.likes_count END AS likesCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.comments_count ELSE ae.comments_count END AS commentsCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.reposts_count ELSE ae.reposts_count END AS repostsCount,
       CASE WHEN rl.user_id IS NULL THEN false ELSE true END AS viewerHasLiked,
+      CASE WHEN rr.user_id IS NULL THEN false ELSE true END AS viewerHasReposted,
       ae.created_at AS createdAt,
-      actor.username AS actorUsername,
-      actor.display_name AS actorDisplayName,
-      actor.avatar_url AS actorAvatarUrl,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.username ELSE actor.username END AS actorUsername,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.display_name ELSE actor.display_name END AS actorDisplayName,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.avatar_object_key ELSE actor.avatar_object_key END AS actorAvatarObjectKey,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.avatar_url ELSE actor.avatar_url END AS actorAvatarUrl,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.username ELSE NULL END AS repostActorUsername,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.display_name ELSE NULL END AS repostActorDisplayName,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.avatar_object_key ELSE NULL END AS repostActorAvatarObjectKey,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.avatar_url ELSE NULL END AS repostActorAvatarUrl,
       target.username AS targetUsername,
       target.display_name AS targetDisplayName
     FROM activity_event ae
     JOIN users actor ON actor.id = ae.actor_user_id
+    LEFT JOIN activity_event src ON src.id = ae.source_review_id AND src.type = 'REVIEW_POSTED'
+    LEFT JOIN users src_actor ON src_actor.id = src.actor_user_id
     LEFT JOIN users target ON target.id = ae.target_user_id
-    LEFT JOIN review_like rl ON rl.review_id = ae.id AND rl.user_id = :viewerUserId
+    LEFT JOIN review_like rl ON rl.review_id = COALESCE(ae.source_review_id, ae.id) AND rl.user_id = :viewerUserId
+    LEFT JOIN review_repost rr ON rr.review_id = COALESCE(ae.source_review_id, ae.id) AND rr.user_id = :viewerUserId
     WHERE ae.actor_user_id = :actorUserId
       AND ae.type = 'REVIEW_POSTED'
       AND (
@@ -145,6 +177,7 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
   @Query(value = """
     SELECT
       ae.id AS id,
+      COALESCE(ae.source_review_id, ae.id) AS sourceReviewId,
       ae.type AS type,
       ae.fragrance_name AS fragranceName,
       ae.fragrance_source AS fragranceSource,
@@ -156,20 +189,29 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
       ae.review_performance AS reviewPerformance,
       ae.review_season AS reviewSeason,
       ae.review_occasion AS reviewOccasion,
-      ae.likes_count AS likesCount,
-      ae.comments_count AS commentsCount,
-      ae.reposts_count AS repostsCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.likes_count ELSE ae.likes_count END AS likesCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.comments_count ELSE ae.comments_count END AS commentsCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.reposts_count ELSE ae.reposts_count END AS repostsCount,
       CASE WHEN rl.user_id IS NULL THEN false ELSE true END AS viewerHasLiked,
+      CASE WHEN rr.user_id IS NULL THEN false ELSE true END AS viewerHasReposted,
       ae.created_at AS createdAt,
-      actor.username AS actorUsername,
-      actor.display_name AS actorDisplayName,
-      actor.avatar_url AS actorAvatarUrl,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.username ELSE actor.username END AS actorUsername,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.display_name ELSE actor.display_name END AS actorDisplayName,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.avatar_object_key ELSE actor.avatar_object_key END AS actorAvatarObjectKey,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.avatar_url ELSE actor.avatar_url END AS actorAvatarUrl,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.username ELSE NULL END AS repostActorUsername,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.display_name ELSE NULL END AS repostActorDisplayName,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.avatar_object_key ELSE NULL END AS repostActorAvatarObjectKey,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.avatar_url ELSE NULL END AS repostActorAvatarUrl,
       target.username AS targetUsername,
       target.display_name AS targetDisplayName
     FROM activity_event ae
     JOIN users actor ON actor.id = ae.actor_user_id
+    LEFT JOIN activity_event src ON src.id = ae.source_review_id AND src.type = 'REVIEW_POSTED'
+    LEFT JOIN users src_actor ON src_actor.id = src.actor_user_id
     LEFT JOIN users target ON target.id = ae.target_user_id
-    LEFT JOIN review_like rl ON rl.review_id = ae.id AND rl.user_id = :viewerUserId
+    LEFT JOIN review_like rl ON rl.review_id = COALESCE(ae.source_review_id, ae.id) AND rl.user_id = :viewerUserId
+    LEFT JOIN review_repost rr ON rr.review_id = COALESCE(ae.source_review_id, ae.id) AND rr.user_id = :viewerUserId
     WHERE ae.id = :reviewId
       AND ae.type = 'REVIEW_POSTED'
     LIMIT 1
@@ -182,6 +224,7 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
   @Query(value = """
     SELECT
       ae.id AS id,
+      COALESCE(ae.source_review_id, ae.id) AS sourceReviewId,
       ae.type AS type,
       ae.fragrance_name AS fragranceName,
       ae.fragrance_source AS fragranceSource,
@@ -193,21 +236,30 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
       ae.review_performance AS reviewPerformance,
       ae.review_season AS reviewSeason,
       ae.review_occasion AS reviewOccasion,
-      ae.likes_count AS likesCount,
-      ae.comments_count AS commentsCount,
-      ae.reposts_count AS repostsCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.likes_count ELSE ae.likes_count END AS likesCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.comments_count ELSE ae.comments_count END AS commentsCount,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src.id IS NOT NULL THEN src.reposts_count ELSE ae.reposts_count END AS repostsCount,
       CASE WHEN rl.user_id IS NULL THEN false ELSE true END AS viewerHasLiked,
+      CASE WHEN rr.user_id IS NULL THEN false ELSE true END AS viewerHasReposted,
       ae.created_at AS createdAt,
-      actor.username AS actorUsername,
-      actor.display_name AS actorDisplayName,
-      actor.avatar_url AS actorAvatarUrl,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.username ELSE actor.username END AS actorUsername,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.display_name ELSE actor.display_name END AS actorDisplayName,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.avatar_object_key ELSE actor.avatar_object_key END AS actorAvatarObjectKey,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' AND src_actor.id IS NOT NULL THEN src_actor.avatar_url ELSE actor.avatar_url END AS actorAvatarUrl,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.username ELSE NULL END AS repostActorUsername,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.display_name ELSE NULL END AS repostActorDisplayName,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.avatar_object_key ELSE NULL END AS repostActorAvatarObjectKey,
+      CASE WHEN ae.type = 'REVIEW_REPOSTED' THEN actor.avatar_url ELSE NULL END AS repostActorAvatarUrl,
       target.username AS targetUsername,
       target.display_name AS targetDisplayName,
       ((ae.likes_count * 1) + (ae.comments_count * 2) + (ae.reposts_count * 3)) AS score
     FROM activity_event ae
     JOIN users actor ON actor.id = ae.actor_user_id
+    LEFT JOIN activity_event src ON src.id = ae.source_review_id AND src.type = 'REVIEW_POSTED'
+    LEFT JOIN users src_actor ON src_actor.id = src.actor_user_id
     LEFT JOIN users target ON target.id = ae.target_user_id
-    LEFT JOIN review_like rl ON rl.review_id = ae.id AND rl.user_id = :viewerUserId
+    LEFT JOIN review_like rl ON rl.review_id = COALESCE(ae.source_review_id, ae.id) AND rl.user_id = :viewerUserId
+    LEFT JOIN review_repost rr ON rr.review_id = COALESCE(ae.source_review_id, ae.id) AND rr.user_id = :viewerUserId
     LEFT JOIN user_follow uf ON uf.follower_user_id = :viewerUserId
       AND uf.following_user_id = ae.actor_user_id
       AND uf.status = 'ACCEPTED'
@@ -245,6 +297,7 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
 
   interface ActivityFeedView {
     UUID getId();
+    UUID getSourceReviewId();
     String getType();
     String getFragranceName();
     String getFragranceSource();
@@ -260,10 +313,16 @@ public interface ActivityEventRepository extends JpaRepository<ActivityEvent, UU
     int getCommentsCount();
     int getRepostsCount();
     boolean getViewerHasLiked();
+    boolean getViewerHasReposted();
     Instant getCreatedAt();
     String getActorUsername();
     String getActorDisplayName();
+    String getActorAvatarObjectKey();
     String getActorAvatarUrl();
+    String getRepostActorUsername();
+    String getRepostActorDisplayName();
+    String getRepostActorAvatarObjectKey();
+    String getRepostActorAvatarUrl();
     String getTargetUsername();
     String getTargetDisplayName();
   }

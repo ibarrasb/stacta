@@ -17,6 +17,7 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
       ne.type AS type,
       u.username AS actorUsername,
       u.display_name AS actorDisplayName,
+      u.avatar_object_key AS actorAvatarObjectKey,
       u.avatar_url AS actorAvatarUrl,
       ne.source_review_id AS sourceReviewId,
       ne.source_comment_id AS sourceCommentId,
@@ -61,6 +62,7 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
     String getType();
     String getActorUsername();
     String getActorDisplayName();
+    String getActorAvatarObjectKey();
     String getActorAvatarUrl();
     UUID getSourceReviewId();
     UUID getSourceCommentId();

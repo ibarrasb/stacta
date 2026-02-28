@@ -142,7 +142,7 @@ public class FragranceController {
         avg = enriched.rating() == null ? 0.0 : Double.parseDouble(enriched.rating());
       } catch (Exception ignore) {}
       long count = enriched.ratingCount() == null ? 0L : Math.max(0L, enriched.ratingCount());
-      Integer userRating = enriched.userRating();
+      Double userRating = enriched.userRating();
       return new FragranceRatingSummary(avg, count, userRating);
     }
     return ratingService.getSummary(viewerSub, source, externalId);

@@ -26,6 +26,7 @@ public record UserProfileResponse(
   List<CollectionItemDto> wishlistItems,
   List<CollectionItemDto> topFragrances,
   List<CollectionItemDto> communityFragrances,
+  boolean followsYou,
   boolean isFollowing,
   boolean followRequested
 ) {}

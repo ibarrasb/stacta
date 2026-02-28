@@ -4,15 +4,22 @@ import com.stacta.api.collection.dto.AddCollectionItemRequest;
 import com.stacta.api.collection.dto.AddCollectionItemResponse;
 import com.stacta.api.collection.dto.CollectionItemDto;
 import com.stacta.api.config.ApiException;
+import com.stacta.api.fragrance.Fragrance;
+import com.stacta.api.fragrance.FragranceRepository;
 import com.stacta.api.social.ActivityEvent;
 import com.stacta.api.social.ActivityEventRepository;
 import com.stacta.api.user.User;
 import com.stacta.api.user.UserRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,19 +39,25 @@ public class UserCollectionService {
   private final UserTopFragranceRepository topFragrances;
   private final ActivityEventRepository activities;
   private final UserRepository users;
+  private final JdbcTemplate jdbc;
+  private final FragranceRepository fragrances;
 
   public UserCollectionService(
     UserCollectionItemRepository items,
     UserWishlistItemRepository wishlistItems,
     UserTopFragranceRepository topFragrances,
     ActivityEventRepository activities,
-    UserRepository users
+    UserRepository users,
+    JdbcTemplate jdbc,
+    FragranceRepository fragrances
   ) {
     this.items = items;
     this.wishlistItems = wishlistItems;
     this.topFragrances = topFragrances;
     this.activities = activities;
     this.users = users;
+    this.jdbc = jdbc;
+    this.fragrances = fragrances;
   }
 
   @Transactional
@@ -57,6 +70,7 @@ public class UserCollectionService {
     if (externalId.isEmpty() || isSyntheticRouteId(externalId) || name.isEmpty()) {
       throw new ApiException("INVALID_COLLECTION_ITEM");
     }
+    validateCanUseCommunityFragrance(me, source, externalId);
 
     boolean isNew = false;
     UserCollectionItem entity = items.findByUserIdAndFragranceSourceAndFragranceExternalId(me.getId(), source, externalId)
@@ -80,12 +94,19 @@ public class UserCollectionService {
     if (isNew) {
       appendCollectionActivity(saved);
     }
-    return new AddCollectionItemResponse(toDto(saved), isNew ? "ADDED" : "ALREADY_EXISTS");
+    Double userRating = getUserRating(saved.getUserId(), saved.getFragranceSource(), saved.getFragranceExternalId());
+    return new AddCollectionItemResponse(toDto(saved, userRating), isNew ? "ADDED" : "ALREADY_EXISTS");
   }
 
   @Transactional(readOnly = true)
   public List<CollectionItemDto> listForUser(UUID userId) {
-    return items.findByUserIdOrderByAddedAtDesc(userId).stream().map(this::toDto).toList();
+    List<UserCollectionItem> rows = items.findByUserIdOrderByAddedAtDesc(userId);
+    Map<String, Double> ratingByKey = getRatingsByFragrance(userId, rows.stream()
+      .map(row -> new FragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))
+      .toList());
+    return rows.stream()
+      .map(row -> toDto(row, ratingByKey.get(fragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))))
+      .toList();
   }
 
   @Transactional
@@ -114,6 +135,7 @@ public class UserCollectionService {
     if (externalId.isEmpty() || isSyntheticRouteId(externalId) || name.isEmpty()) {
       throw new ApiException("INVALID_COLLECTION_ITEM");
     }
+    validateCanUseCommunityFragrance(me, source, externalId);
 
     boolean isNew = false;
     UserWishlistItem entity = wishlistItems.findByUserIdAndFragranceSourceAndFragranceExternalId(me.getId(), source, externalId)
@@ -135,7 +157,8 @@ public class UserCollectionService {
     if (isNew) {
       appendWishlistActivity(saved);
     }
-    return toDto(saved);
+    Double userRating = getUserRating(saved.getUserId(), saved.getFragranceSource(), saved.getFragranceExternalId());
+    return toDto(saved, userRating);
   }
 
   @Transactional
@@ -151,7 +174,13 @@ public class UserCollectionService {
 
   @Transactional(readOnly = true)
   public List<CollectionItemDto> listWishlistForUser(UUID userId) {
-    return wishlistItems.findByUserIdOrderByAddedAtDesc(userId).stream().map(this::toDto).toList();
+    List<UserWishlistItem> rows = wishlistItems.findByUserIdOrderByAddedAtDesc(userId);
+    Map<String, Double> ratingByKey = getRatingsByFragrance(userId, rows.stream()
+      .map(row -> new FragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))
+      .toList());
+    return rows.stream()
+      .map(row -> toDto(row, ratingByKey.get(fragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))))
+      .toList();
   }
 
   @Transactional(readOnly = true)
@@ -206,14 +235,19 @@ public class UserCollectionService {
 
   @Transactional(readOnly = true)
   public List<CollectionItemDto> listTopForUser(UUID userId) {
-    return topFragrances.findByUserIdOrderByCreatedAtAsc(userId).stream()
+    List<UserCollectionItem> rows = topFragrances.findByUserIdOrderByCreatedAtAsc(userId).stream()
       .map(row -> items.findByIdAndUserId(row.getUserCollectionItemId(), userId).orElse(null))
       .filter(java.util.Objects::nonNull)
-      .map(this::toDto)
+      .toList();
+    Map<String, Double> ratingByKey = getRatingsByFragrance(userId, rows.stream()
+      .map(row -> new FragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))
+      .toList());
+    return rows.stream()
+      .map(row -> toDto(row, ratingByKey.get(fragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))))
       .toList();
   }
 
-  private CollectionItemDto toDto(UserCollectionItem row) {
+  private CollectionItemDto toDto(UserCollectionItem row, Double userRating) {
     return new CollectionItemDto(
       row.getFragranceSource(),
       row.getFragranceExternalId(),
@@ -221,11 +255,12 @@ public class UserCollectionService {
       row.getFragranceBrand(),
       row.getFragranceImageUrl(),
       row.getCollectionTag(),
+      userRating,
       row.getAddedAt()
     );
   }
 
-  private CollectionItemDto toDto(UserWishlistItem row) {
+  private CollectionItemDto toDto(UserWishlistItem row, Double userRating) {
     return new CollectionItemDto(
       row.getFragranceSource(),
       row.getFragranceExternalId(),
@@ -233,8 +268,70 @@ public class UserCollectionService {
       row.getFragranceBrand(),
       row.getFragranceImageUrl(),
       null,
+      userRating,
       row.getAddedAt()
     );
+  }
+
+  private Double getUserRating(UUID userId, String source, String externalId) {
+    return jdbc.query(
+      "SELECT rating FROM fragrance_rating WHERE user_id = ? AND external_source = ? AND external_id = ?",
+      rs -> rs.next() ? rs.getDouble(1) : null,
+      userId,
+      source,
+      externalId
+    );
+  }
+
+  private Map<String, Double> getRatingsByFragrance(UUID userId, List<FragranceKey> fragrances) {
+    if (fragrances == null || fragrances.isEmpty()) {
+      return Map.of();
+    }
+    StringBuilder sql = new StringBuilder(
+      "SELECT external_source, external_id, rating FROM fragrance_rating WHERE user_id = ? AND ("
+    );
+    for (int i = 0; i < fragrances.size(); i++) {
+      if (i > 0) sql.append(" OR ");
+      sql.append("(external_source = ? AND external_id = ?)");
+    }
+    sql.append(")");
+
+    return jdbc.query(sql.toString(), ps -> bindFragranceRatingLookup(ps, userId, fragrances), rs -> {
+      Map<String, Double> byKey = new HashMap<>();
+      while (rs.next()) {
+        byKey.put(fragranceKey(rs.getString("external_source"), rs.getString("external_id")), rs.getDouble("rating"));
+      }
+      return byKey;
+    });
+  }
+
+  private void bindFragranceRatingLookup(
+    PreparedStatement ps,
+    UUID userId,
+    List<FragranceKey> fragrances
+  ) throws SQLException {
+    int paramIndex = 1;
+    ps.setObject(paramIndex++, userId);
+    for (FragranceKey key : fragrances) {
+      ps.setString(paramIndex++, key.source());
+      ps.setString(paramIndex++, key.externalId());
+    }
+  }
+
+  private String fragranceKey(String source, String externalId) {
+    return source + "|" + externalId;
+  }
+
+  private record FragranceKey(String source, String externalId) {}
+
+  private void validateCanUseCommunityFragrance(User viewer, String source, String externalId) {
+    if (!"COMMUNITY".equalsIgnoreCase(source)) return;
+    Fragrance fragrance = fragrances.findByExternalSourceAndExternalId("COMMUNITY", externalId)
+      .orElseThrow(() -> new ApiException("INVALID_COLLECTION_ITEM"));
+    boolean isPublic = "PUBLIC".equalsIgnoreCase(String.valueOf(fragrance.getVisibility()));
+    if (!isPublic) {
+      throw new ApiException("INVALID_COLLECTION_ITEM");
+    }
   }
 
   private String normalizeSource(String raw) {

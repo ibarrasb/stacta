@@ -11,9 +11,15 @@ import {
   createReviewComment,
   deleteReviewComment,
   getReviewThread,
+  likeReview,
+  repostReview,
   reportReviewComment,
+  unlikeReview,
+  unrepostReview,
 } from "@/lib/api/reviews";
 import type { ReviewCommentItem, ReviewThreadResponse } from "@/lib/api/types";
+
+const DEFAULT_AVATAR_IMG = "/stacta.png";
 
 const COMMENT_REPORT_REASONS = [
   { value: "INAPPROPRIATE", label: "Inappropriate" },
@@ -33,15 +39,6 @@ function timeAgo(iso: string) {
   if (hr < 24) return `${hr}h`;
   const day = Math.floor(hr / 24);
   return `${day}d`;
-}
-
-function initials(name?: string | null) {
-  const n = (name || "").trim();
-  if (!n) return "S";
-  const parts = n.split(/\s+/).slice(0, 2);
-  const first = parts[0]?.[0] ?? "";
-  const second = parts[1]?.[0] ?? "";
-  return (first + second).toUpperCase() || "S";
 }
 
 function CommentActionMenu({
@@ -115,6 +112,8 @@ export default function ReviewThreadPage() {
   const [reportCommentId, setReportCommentId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState<"SPAM" | "INAPPROPRIATE" | "HARASSMENT" | "OTHER">("INAPPROPRIATE");
   const [reportDetails, setReportDetails] = useState("");
+  const [likingReviewId, setLikingReviewId] = useState<string | null>(null);
+  const [repostingReviewId, setRepostingReviewId] = useState<string | null>(null);
   const composerRef = useRef<HTMLElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -212,6 +211,58 @@ export default function ReviewThreadPage() {
     }
   }
 
+  async function onToggleReviewLike(reviewId: string, currentlyLiked: boolean) {
+    if (!reviewId || likingReviewId === reviewId) return;
+    setLikingReviewId(reviewId);
+    setThread((prev) => {
+      if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
+      const nextLikes = Math.max(0, prev.review.likesCount + (currentlyLiked ? -1 : 1));
+      return { ...prev, review: { ...prev.review, viewerHasLiked: !currentlyLiked, likesCount: nextLikes } };
+    });
+    try {
+      const res = currentlyLiked ? await unlikeReview(reviewId) : await likeReview(reviewId);
+      setThread((prev) => {
+        if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
+        return { ...prev, review: { ...prev.review, viewerHasLiked: res.viewerHasLiked, likesCount: res.likesCount } };
+      });
+    } catch (e: any) {
+      setThread((prev) => {
+        if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
+        const revertedLikes = Math.max(0, prev.review.likesCount + (currentlyLiked ? 1 : -1));
+        return { ...prev, review: { ...prev.review, viewerHasLiked: currentlyLiked, likesCount: revertedLikes } };
+      });
+      setError(e?.message || "Failed to update like.");
+    } finally {
+      setLikingReviewId(null);
+    }
+  }
+
+  async function onToggleReviewRepost(reviewId: string, currentlyReposted: boolean) {
+    if (!reviewId || repostingReviewId === reviewId) return;
+    setRepostingReviewId(reviewId);
+    setThread((prev) => {
+      if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
+      const nextReposts = Math.max(0, prev.review.repostsCount + (currentlyReposted ? -1 : 1));
+      return { ...prev, review: { ...prev.review, viewerHasReposted: !currentlyReposted, repostsCount: nextReposts } };
+    });
+    try {
+      const res = currentlyReposted ? await unrepostReview(reviewId) : await repostReview(reviewId);
+      setThread((prev) => {
+        if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
+        return { ...prev, review: { ...prev.review, viewerHasReposted: res.viewerHasReposted, repostsCount: res.repostsCount } };
+      });
+    } catch (e: any) {
+      setThread((prev) => {
+        if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
+        const revertedReposts = Math.max(0, prev.review.repostsCount + (currentlyReposted ? 1 : -1));
+        return { ...prev, review: { ...prev.review, viewerHasReposted: currentlyReposted, repostsCount: revertedReposts } };
+      });
+      setError(e?.message || "Failed to update repost.");
+    } finally {
+      setRepostingReviewId(null);
+    }
+  }
+
   function focusComposer() {
     composerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     window.setTimeout(() => {
@@ -243,17 +294,18 @@ export default function ReviewThreadPage() {
               className="inline-flex items-center gap-2 text-left"
               onClick={() => navigate(`/u/${comment.authorUsername}`)}
             >
-              {comment.authorAvatarUrl ? (
-                <img
-                  src={comment.authorAvatarUrl}
-                  alt={`${comment.authorUsername} avatar`}
-                  className="h-7 w-7 rounded-full border border-white/15 object-cover"
-                />
-              ) : (
-                <div className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/10 text-[10px] font-semibold text-white/80">
-                  {initials(comment.authorDisplayName || comment.authorUsername)}
-                </div>
-              )}
+              <img
+                src={comment.authorAvatarUrl?.trim() ? comment.authorAvatarUrl : DEFAULT_AVATAR_IMG}
+                alt={`${comment.authorUsername} avatar`}
+                className="h-7 w-7 rounded-full border border-white/15 object-cover"
+                loading="lazy"
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  if (img.dataset.fallbackApplied === "1") return;
+                  img.dataset.fallbackApplied = "1";
+                  img.src = DEFAULT_AVATAR_IMG;
+                }}
+              />
               <span className="truncate text-sm font-semibold text-white">{comment.authorDisplayName || comment.authorUsername}</span>
             </button>
             <div className="mt-1 text-[11px] text-white/55">@{comment.authorUsername} • {timeAgo(comment.createdAt)}</div>
@@ -325,6 +377,10 @@ export default function ReviewThreadPage() {
                 const source = String(thread.review.fragranceSource ?? "FRAGELLA").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
                 navigate(`/fragrances/${encodeURIComponent(thread.review.fragranceExternalId)}?source=${source}`);
               }}
+              onToggleLike={() => onToggleReviewLike(thread.review.sourceReviewId, Boolean(thread.review.viewerHasLiked))}
+              onToggleRepost={() => onToggleReviewRepost(thread.review.sourceReviewId, Boolean(thread.review.viewerHasReposted))}
+              liking={likingReviewId === thread.review.sourceReviewId}
+              reposting={repostingReviewId === thread.review.sourceReviewId}
             />
 
             <section ref={composerRef} className="rounded-3xl border border-white/15 bg-black/25 p-4 backdrop-blur-xl">

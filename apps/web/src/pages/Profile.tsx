@@ -22,6 +22,7 @@ import type { FeedItem, FollowConnectionItem, MeResponse } from "@/lib/api/types
 import fragranceFallbackImg from "@/assets/illustrations/NotFound.png";
 
 const FALLBACK_FRAGRANCE_IMG = fragranceFallbackImg;
+const DEFAULT_AVATAR_IMG = "/stacta.png";
 
 function initials(name?: string | null) {
   const n = (name || "").trim();
@@ -63,6 +64,33 @@ function StarReputation({ value }: { value: number }) {
         const fill = Math.max(0, Math.min(1, safe - i));
         return (
           <span key={i} className="relative inline-block text-sm leading-none text-white/25">
+            ★
+            <span className="absolute inset-y-0 left-0 overflow-hidden text-amber-200" style={{ width: `${Math.round(fill * 100)}%` }}>
+              ★
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function fragranceRatingLabel(userRating: number | null | undefined) {
+  const rating = Number(userRating);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    return "Not rated";
+  }
+  return `${(Math.round(rating * 2) / 2).toFixed(1)} / 5`;
+}
+
+function HalfStars({ value }: { value: number }) {
+  const safe = Number.isFinite(value) ? Math.max(0, Math.min(5, value)) : 0;
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const fill = Math.max(0, Math.min(1, safe - i));
+        return (
+          <span key={i} className="relative inline-block text-xs leading-none text-white/25">
             ★
             <span className="absolute inset-y-0 left-0 overflow-hidden text-amber-200" style={{ width: `${Math.round(fill * 100)}%` }}>
               ★
@@ -892,6 +920,16 @@ export default function ProfilePage() {
                                   <div className="min-w-0">
                                     <div className="text-sm font-semibold leading-snug text-white/95 break-words">{item.name}</div>
                                     <div className="mt-1 text-xs text-white/65 break-words">{item.brand || "—"}</div>
+                                    <div className="mt-1 flex items-center gap-2 text-amber-100/80">
+                                      {Number(item.userRating ?? 0) >= 1 ? (
+                                        <>
+                                          <HalfStars value={Number(item.userRating)} />
+                                          <span className="text-xs">{fragranceRatingLabel(item.userRating)}</span>
+                                        </>
+                                      ) : (
+                                        <span className="text-xs">Not rated</span>
+                                      )}
+                                    </div>
                                     {me.topFragrances.some(
                                       (x) => x.source.toUpperCase() === item.source.toUpperCase() && x.externalId === item.externalId
                                     ) ? (
@@ -1100,6 +1138,16 @@ export default function ProfilePage() {
                               <div className="min-w-0 flex-1">
                                 <div className="text-sm font-semibold leading-snug text-white/95 break-words">{item.name}</div>
                                 <div className="mt-1 text-xs text-white/70 break-words">{item.brand || "—"}</div>
+                                <div className="mt-1 flex items-center gap-2 text-amber-100/80">
+                                  {Number(item.userRating ?? 0) >= 1 ? (
+                                    <>
+                                      <HalfStars value={Number(item.userRating)} />
+                                      <span className="text-xs">{fragranceRatingLabel(item.userRating)}</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-xs">Not rated</span>
+                                  )}
+                                </div>
                                 <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-cyan-100/80">Wishlist</div>
                               </div>
                             </button>
@@ -1243,13 +1291,18 @@ export default function ProfilePage() {
                                   }}
                                   className="flex min-w-0 items-center gap-3 text-left"
                                 >
-                                  {item.avatarUrl ? (
-                                    <img src={item.avatarUrl} alt={`${item.username} avatar`} className="h-10 w-10 rounded-full border border-white/15 object-cover" />
-                                  ) : (
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xs font-semibold text-white/75">
-                                      {initials(item.displayName || item.username)}
-                                    </div>
-                                  )}
+                                  <img
+                                    src={item.avatarUrl?.trim() ? item.avatarUrl : DEFAULT_AVATAR_IMG}
+                                    alt={`${item.username} avatar`}
+                                    className="h-10 w-10 rounded-full border border-white/15 object-cover"
+                                    loading="lazy"
+                                    onError={(e) => {
+                                      const img = e.currentTarget;
+                                      if (img.dataset.fallbackApplied === "1") return;
+                                      img.dataset.fallbackApplied = "1";
+                                      img.src = DEFAULT_AVATAR_IMG;
+                                    }}
+                                  />
                                   <div className="min-w-0">
                                     <div className="break-words text-sm font-semibold text-white">{item.displayName || item.username}</div>
                                     <div className="mt-0.5 break-all text-xs text-white/60">@{item.username}</div>

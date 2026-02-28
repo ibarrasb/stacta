@@ -28,13 +28,14 @@ public class FragranceRatingService {
   }
 
   @Transactional
-  public FragranceRatingSummary upsertRating(String cognitoSub, String source, String externalId, int rating) {
+  public FragranceRatingSummary upsertRating(String cognitoSub, String source, String externalId, double rating) {
     var user = users.findByCognitoSub(cognitoSub)
       .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "User not onboarded"));
 
     String src = normalizeSource(source);
     String ext = normalizeExternalId(externalId);
-    log.info("rating.upsert.begin userId={} source={} externalId={} rating={}", user.getId(), src, ext, rating);
+    double normalizedRating = normalizeRating(rating);
+    log.info("rating.upsert.begin userId={} source={} externalId={} rating={}", user.getId(), src, ext, normalizedRating);
 
     jdbc.update(
       """
@@ -43,7 +44,7 @@ public class FragranceRatingService {
       ON CONFLICT (user_id, external_source, external_id)
       DO UPDATE SET rating = EXCLUDED.rating, updated_at = now()
       """,
-      user.getId(), src, ext, rating
+      user.getId(), src, ext, normalizedRating
     );
 
     FragranceRatingSummary summary = getSummary(cognitoSub, src, ext);
@@ -78,13 +79,13 @@ public class FragranceRatingService {
       ext
     );
 
-    Integer userRating = null;
+    Double userRating = null;
     if (cognitoSub != null && !cognitoSub.isBlank()) {
       var userOpt = users.findByCognitoSub(cognitoSub);
       if (userOpt.isPresent()) {
         userRating = jdbc.query(
           "SELECT rating FROM fragrance_rating WHERE user_id = ? AND external_source = ? AND external_id = ?",
-          rs -> rs.next() ? rs.getInt(1) : null,
+          rs -> rs.next() ? rs.getDouble(1) : null,
           userOpt.get().getId(),
           src,
           ext
@@ -125,7 +126,7 @@ public class FragranceRatingService {
     double mergedAvg = total == 0
       ? 0.0
       : ((primary.average() * pCount) + (alternate.average() * aCount)) / total;
-    Integer mergedUserRating = primary.userRating() != null ? primary.userRating() : alternate.userRating();
+    Double mergedUserRating = primary.userRating() != null ? primary.userRating() : alternate.userRating();
     log.info(
       "rating.summary.alt.merge source={} externalId={} alt={} pCount={} aCount={} mergedCount={} mergedUserRating={}",
       source,
@@ -159,7 +160,7 @@ public class FragranceRatingService {
 
     long totalCount = 0L;
     double weighted = 0.0;
-    Integer userRating = null;
+    Double userRating = null;
     for (String id : normalized) {
       FragranceRatingSummary s = getSummary(cognitoSub, src, id);
       long c = Math.max(0L, s.count());
@@ -189,5 +190,19 @@ public class FragranceRatingService {
 
   private static String normalizeExternalId(String externalId) {
     return externalId == null ? "" : externalId.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+  }
+
+  private static double normalizeRating(double rating) {
+    if (!Double.isFinite(rating)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "rating is required");
+    }
+    if (rating < 1.0 || rating > 5.0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "rating must be between 1 and 5");
+    }
+    double rounded = Math.round(rating * 2.0) / 2.0;
+    if (Math.abs(rounded - rating) > 1e-9) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "rating must be in 0.5 increments");
+    }
+    return rounded;
   }
 }

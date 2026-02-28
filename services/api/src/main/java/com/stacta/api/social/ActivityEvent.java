@@ -68,6 +68,9 @@ public class ActivityEvent {
   @Column(name = "source_follow_id")
   private UUID sourceFollowId;
 
+  @Column(name = "source_review_id")
+  private UUID sourceReviewId;
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
@@ -111,6 +114,8 @@ public class ActivityEvent {
   public void setRepostsCount(int repostsCount) { this.repostsCount = repostsCount; }
   public UUID getSourceFollowId() { return sourceFollowId; }
   public void setSourceFollowId(UUID sourceFollowId) { this.sourceFollowId = sourceFollowId; }
+  public UUID getSourceReviewId() { return sourceReviewId; }
+  public void setSourceReviewId(UUID sourceReviewId) { this.sourceReviewId = sourceReviewId; }
   public Instant getCreatedAt() { return createdAt; }
   public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

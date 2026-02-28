@@ -5,6 +5,7 @@ import com.stacta.api.social.dto.CreateReviewCommentRequest;
 import com.stacta.api.social.dto.ReportReviewCommentRequest;
 import com.stacta.api.social.dto.ReviewCommentItem;
 import com.stacta.api.social.dto.ReviewLikeResponse;
+import com.stacta.api.social.dto.ReviewRepostResponse;
 import com.stacta.api.social.dto.ReviewThreadResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -62,6 +63,22 @@ public class ReviewController {
     @PathVariable("reviewId") UUID reviewId
   ) {
     return reviewService.unlike(jwt.getSubject(), reviewId);
+  }
+
+  @PutMapping("/{reviewId}/repost")
+  public ReviewRepostResponse repost(
+    @AuthenticationPrincipal Jwt jwt,
+    @PathVariable("reviewId") UUID reviewId
+  ) {
+    return reviewService.repost(jwt.getSubject(), reviewId);
+  }
+
+  @DeleteMapping("/{reviewId}/repost")
+  public ReviewRepostResponse unrepost(
+    @AuthenticationPrincipal Jwt jwt,
+    @PathVariable("reviewId") UUID reviewId
+  ) {
+    return reviewService.unrepost(jwt.getSubject(), reviewId);
   }
 
   @GetMapping("/{reviewId}")

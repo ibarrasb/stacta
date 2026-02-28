@@ -9,6 +9,8 @@ import { getMe } from "@/lib/api/me";
 import { clearReadNotifications, deleteNotification, listNotifications } from "@/lib/api/notifications";
 import type { NotificationItem, PendingFollowRequestItem } from "@/lib/api/types";
 
+const DEFAULT_AVATAR_IMG = "/stacta.png";
+
 function when(value: string) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
@@ -81,15 +83,6 @@ function dayBucket(value: string) {
   if (dayDiff === 1) return "Yesterday";
   if (dayDiff < 7) return "This week";
   return "Earlier";
-}
-
-function initials(name?: string | null) {
-  const n = (name || "").trim();
-  if (!n) return "S";
-  const parts = n.split(/\s+/).slice(0, 2);
-  const first = parts[0]?.[0] ?? "";
-  const second = parts[1]?.[0] ?? "";
-  return (first + second).toUpperCase() || "S";
 }
 
 export default function NotificationsPage() {
@@ -290,18 +283,18 @@ export default function NotificationsPage() {
                           className="mt-0.5 shrink-0"
                           onClick={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/notifications" } } })}
                         >
-                          {item.actorAvatarUrl ? (
-                            <img
-                              src={item.actorAvatarUrl}
-                              alt={`${item.actorUsername} avatar`}
-                              className="h-9 w-9 rounded-full border border-white/15 object-cover"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xs font-semibold text-white/80">
-                              {initials(item.actorDisplayName || item.actorUsername)}
-                            </div>
-                          )}
+                          <img
+                            src={item.actorAvatarUrl?.trim() ? item.actorAvatarUrl : DEFAULT_AVATAR_IMG}
+                            alt={`${item.actorUsername} avatar`}
+                            className="h-9 w-9 rounded-full border border-white/15 object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              const img = e.currentTarget;
+                              if (img.dataset.fallbackApplied === "1") return;
+                              img.dataset.fallbackApplied = "1";
+                              img.src = DEFAULT_AVATAR_IMG;
+                            }}
+                          />
                         </button>
                         <button
                           className="min-w-0 flex-1 text-left"

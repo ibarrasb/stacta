@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import LoadingSpinner from "@/components/ui/loading-spinner";
@@ -10,18 +11,13 @@ import ReviewCard from "@/components/feed/ReviewCard";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { followUser, unfollowUser } from "@/lib/api/follows";
 import { listUserReviewFeed } from "@/lib/api/feed";
-import { likeReview, unlikeReview } from "@/lib/api/reviews";
+import { likeReview, repostReview, unlikeReview, unrepostReview } from "@/lib/api/reviews";
 import { getUserProfile } from "@/lib/api/users";
 import type { FeedItem, UserProfileResponse } from "@/lib/api/types";
 import fragranceFallbackImg from "@/assets/illustrations/NotFound.png";
 
 const FALLBACK_FRAGRANCE_IMG = fragranceFallbackImg;
-
-function getInitials(value: string) {
-  const v = value.trim();
-  if (!v) return "U";
-  return v.slice(0, 2).toUpperCase();
-}
+const DEFAULT_AVATAR_IMG = "/stacta.png";
 
 function compactCount(value: number | null | undefined) {
   const n = Number(value ?? 0);
@@ -41,6 +37,33 @@ function StarReputation({ value }: { value: number }) {
         const fill = Math.max(0, Math.min(1, safe - i));
         return (
           <span key={i} className="relative inline-block text-sm leading-none text-white/25">
+            ★
+            <span className="absolute inset-y-0 left-0 overflow-hidden text-amber-200" style={{ width: `${Math.round(fill * 100)}%` }}>
+              ★
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function fragranceRatingLabel(userRating: number | null | undefined) {
+  const rating = Number(userRating);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    return "Not rated";
+  }
+  return `${(Math.round(rating * 2) / 2).toFixed(1)} / 5`;
+}
+
+function HalfStars({ value }: { value: number }) {
+  const safe = Number.isFinite(value) ? Math.max(0, Math.min(5, value)) : 0;
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const fill = Math.max(0, Math.min(1, safe - i));
+        return (
+          <span key={i} className="relative inline-block text-xs leading-none text-white/25">
             ★
             <span className="absolute inset-y-0 left-0 overflow-hidden text-amber-200" style={{ width: `${Math.round(fill * 100)}%` }}>
               ★
@@ -72,6 +95,8 @@ export default function PublicProfilePage() {
   const [reviewsError, setReviewsError] = useState<string | null>(null);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
   const [likingReviewId, setLikingReviewId] = useState<string | null>(null);
+  const [repostingReviewId, setRepostingReviewId] = useState<string | null>(null);
+  const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
 
   const backTarget = useMemo(() => {
     const stateFrom = (location.state as any)?.from?.pathname;
@@ -171,26 +196,53 @@ export default function PublicProfilePage() {
     if (!reviewId || likingReviewId === reviewId) return;
     setLikingReviewId(reviewId);
     setReviewItems((prev) => prev.map((item) => {
-      if (item.id !== reviewId) return item;
+      if (item.sourceReviewId !== reviewId) return item;
       const nextLikes = Math.max(0, item.likesCount + (currentlyLiked ? -1 : 1));
       return { ...item, viewerHasLiked: !currentlyLiked, likesCount: nextLikes };
     }));
     try {
       const res = currentlyLiked ? await unlikeReview(reviewId) : await likeReview(reviewId);
       setReviewItems((prev) => prev.map((item) => (
-        item.id === reviewId
+        item.sourceReviewId === reviewId
           ? { ...item, viewerHasLiked: res.viewerHasLiked, likesCount: res.likesCount }
           : item
       )));
     } catch (e: any) {
       setReviewItems((prev) => prev.map((item) => {
-        if (item.id !== reviewId) return item;
+        if (item.sourceReviewId !== reviewId) return item;
         const revertedLikes = Math.max(0, item.likesCount + (currentlyLiked ? 1 : -1));
         return { ...item, viewerHasLiked: currentlyLiked, likesCount: revertedLikes };
       }));
       setReviewsError(e?.message || "Failed to update like.");
     } finally {
       setLikingReviewId(null);
+    }
+  }
+
+  async function onToggleReviewRepost(reviewId: string, currentlyReposted: boolean) {
+    if (!reviewId || repostingReviewId === reviewId) return;
+    setRepostingReviewId(reviewId);
+    setReviewItems((prev) => prev.map((item) => {
+      if (item.sourceReviewId !== reviewId) return item;
+      const nextReposts = Math.max(0, item.repostsCount + (currentlyReposted ? -1 : 1));
+      return { ...item, viewerHasReposted: !currentlyReposted, repostsCount: nextReposts };
+    }));
+    try {
+      const res = currentlyReposted ? await unrepostReview(reviewId) : await repostReview(reviewId);
+      setReviewItems((prev) => prev.map((item) => (
+        item.sourceReviewId === reviewId
+          ? { ...item, viewerHasReposted: res.viewerHasReposted, repostsCount: res.repostsCount }
+          : item
+      )));
+    } catch (e: any) {
+      setReviewItems((prev) => prev.map((item) => {
+        if (item.sourceReviewId !== reviewId) return item;
+        const revertedReposts = Math.max(0, item.repostsCount + (currentlyReposted ? 1 : -1));
+        return { ...item, viewerHasReposted: currentlyReposted, repostsCount: revertedReposts };
+      }));
+      setReviewsError(e?.message || "Failed to update repost.");
+    } finally {
+      setRepostingReviewId(null);
     }
   }
 
@@ -307,19 +359,25 @@ export default function PublicProfilePage() {
               <div className="space-y-6">
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 items-start gap-4 sm:gap-5">
-                    <div className="relative h-24 w-24 overflow-hidden rounded-3xl border border-white/15 bg-white/10 shadow-[0_12px_30px_rgba(0,0,0,0.35)]">
-                      {profile.avatarUrl ? (
-                        <img
-                          src={profile.avatarUrl}
-                          alt={`${profile.username} avatar`}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-2xl font-semibold text-white/90">
-                          {getInitials(profile.displayName || profile.username)}
-                        </div>
-                      )}
-                    </div>
+                    <button
+                      type="button"
+                      className="relative h-24 w-24 overflow-hidden rounded-3xl border border-white/15 bg-white/10 shadow-[0_12px_30px_rgba(0,0,0,0.35)]"
+                      onClick={() => setAvatarPreviewOpen(true)}
+                      aria-label="Preview profile photo"
+                    >
+                      <img
+                        src={profile.avatarUrl?.trim() ? profile.avatarUrl : DEFAULT_AVATAR_IMG}
+                        alt={`${profile.username} avatar`}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          if (img.dataset.fallbackApplied === "1") return;
+                          img.dataset.fallbackApplied = "1";
+                          img.src = DEFAULT_AVATAR_IMG;
+                        }}
+                      />
+                    </button>
 
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -330,20 +388,19 @@ export default function PublicProfilePage() {
                         <div className="rounded-full border border-cyan-300/35 bg-cyan-400/15 px-2.5 py-0.5 text-xs font-semibold text-cyan-100">
                           @{profile.username}
                         </div>
+                        {!profile.isOwner && profile.followsYou ? (
+                          <div className="rounded-full border border-emerald-300/35 bg-emerald-400/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-100">
+                            Follows you
+                          </div>
+                        ) : null}
                         <div className="rounded-full border border-white/15 bg-white/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/80">
                           {profile.isPrivate ? "Private" : "Public"}
                         </div>
                       </div>
 
-                      {!profile.isVisible ? (
-                        <div className="mt-3 max-w-xl text-sm text-white/75">
-                          This account is private. Send a follow request to see more.
-                        </div>
-                      ) : (
-                        <div className="mt-3 max-w-xl whitespace-pre-wrap text-sm text-white/85">
-                          {profile.bio?.trim() ? profile.bio : "No bio yet."}
-                        </div>
-                      )}
+                      <div className="mt-3 max-w-xl whitespace-pre-wrap text-sm text-white/85">
+                        {profile.bio?.trim() ? profile.bio : "No bio yet."}
+                      </div>
                       <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
                         <div className="text-white/80">
                           <span className="font-semibold text-white">{compactCount(profile.followersCount)}</span> followers
@@ -402,6 +459,13 @@ export default function PublicProfilePage() {
                     )}
                   </div>
                 </div>
+                {profile.isPrivate && !profile.isVisible ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/70">
+                    This account is private. Follow to view collections, reviews, wishlist, and community fragrances.
+                  </div>
+                ) : null}
+                {!(profile.isPrivate && !profile.isVisible) ? (
+                  <>
                 <Separator className="bg-white/10" />
 
                 <div className="grid gap-3 sm:grid-cols-4">
@@ -585,6 +649,16 @@ export default function PublicProfilePage() {
                                   <div className="min-w-0">
                                     <div className="text-sm font-semibold leading-snug text-white/95 break-words">{item.name}</div>
                                     <div className="mt-1 text-xs text-white/65 break-words">{item.brand || "—"}</div>
+                                    <div className="mt-1 flex items-center gap-2 text-amber-100/80">
+                                      {Number(item.userRating ?? 0) >= 1 ? (
+                                        <>
+                                          <HalfStars value={Number(item.userRating)} />
+                                          <span className="text-xs">{fragranceRatingLabel(item.userRating)}</span>
+                                        </>
+                                      ) : (
+                                        <span className="text-xs">Not rated</span>
+                                      )}
+                                    </div>
                                   </div>
                                 </button>
                                 <div className="mt-3 flex justify-center">
@@ -644,9 +718,11 @@ export default function PublicProfilePage() {
                               if (!item.fragranceExternalId) return;
                               openFragranceDetail(item.fragranceSource ?? "FRAGELLA", item.fragranceExternalId);
                             }}
-                            onToggleLike={profile.isOwner ? undefined : () => onToggleReviewLike(item.id, Boolean(item.viewerHasLiked))}
-                            onOpenComments={() => navigate(`/reviews/${encodeURIComponent(item.id)}`, { state: { from: { pathname: `/u/${profile.username}` } } })}
-                            liking={likingReviewId === item.id}
+                            onToggleLike={profile.isOwner ? undefined : () => onToggleReviewLike(item.sourceReviewId, Boolean(item.viewerHasLiked))}
+                            onToggleRepost={profile.isOwner ? undefined : () => onToggleReviewRepost(item.sourceReviewId, Boolean(item.viewerHasReposted))}
+                            onOpenComments={() => navigate(`/reviews/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: `/u/${profile.username}` } } })}
+                            liking={likingReviewId === item.sourceReviewId}
+                            reposting={repostingReviewId === item.sourceReviewId}
                           />
                         ))}
                         {reviewCursor ? (
@@ -712,6 +788,16 @@ export default function PublicProfilePage() {
                               <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-semibold text-white/95">{item.name}</div>
                                 <div className="truncate text-xs text-white/70">{item.brand || "—"}</div>
+                                <div className="mt-1 flex items-center gap-2 text-amber-100/80">
+                                  {Number(item.userRating ?? 0) >= 1 ? (
+                                    <>
+                                      <HalfStars value={Number(item.userRating)} />
+                                      <span className="text-xs">{fragranceRatingLabel(item.userRating)}</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-xs">Not rated</span>
+                                  )}
+                                </div>
                                 <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-cyan-100/80">Wishlist</div>
                               </div>
                             </button>
@@ -797,6 +883,8 @@ export default function PublicProfilePage() {
                     )}
                   </div>
                 ) : null}
+                  </>
+                ) : null}
               </div>
             )}
           </div>
@@ -813,6 +901,22 @@ export default function PublicProfilePage() {
         onConfirm={runToggleFollow}
         loading={actionLoading}
       />
+
+      <Dialog open={avatarPreviewOpen} onOpenChange={setAvatarPreviewOpen}>
+        <DialogContent className="w-[calc(100vw-24px)] max-w-2xl rounded-3xl border-white/15 bg-black/85 p-3 text-white backdrop-blur-xl">
+          <img
+            src={profile?.avatarUrl?.trim() ? profile.avatarUrl : DEFAULT_AVATAR_IMG}
+            alt={`${profile?.username ?? "User"} profile preview`}
+            className="max-h-[80vh] w-full rounded-2xl object-contain"
+            onError={(e) => {
+              const img = e.currentTarget;
+              if (img.dataset.fallbackApplied === "1") return;
+              img.dataset.fallbackApplied = "1";
+              img.src = DEFAULT_AVATAR_IMG;
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

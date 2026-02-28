@@ -42,5 +42,5 @@ public record FragranceSearchResult(
   UUID createdByUserId,
   String createdByUsername,
   Long ratingCount,
-  Integer userRating
+  Double userRating
 ) {}

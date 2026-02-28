@@ -385,6 +385,76 @@ function AverageStars({ value, max = 5 }: { value: number; max?: number }) {
   );
 }
 
+function normalizeHalfStar(value: number | null | undefined) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const rounded = Math.round(n * 2) / 2;
+  if (rounded < 1 || rounded > 5) return null;
+  return rounded;
+}
+
+function FragranceHalfStarInput({
+  value,
+  onSelect,
+  disabled,
+}: {
+  value: number | null | undefined;
+  onSelect: (next: number) => void;
+  disabled?: boolean;
+}) {
+  const [hoverValue, setHoverValue] = useState<number | null>(null);
+  const safe = Math.max(0, Math.min(5, Number.isFinite(Number(value)) ? Number(value) : 0));
+  const displayValue = hoverValue ?? safe;
+  return (
+    <div
+      className="flex items-center gap-1.5"
+      role="radiogroup"
+      aria-label="Fragrance rating (half-star increments)"
+      onMouseLeave={() => setHoverValue(null)}
+    >
+      {Array.from({ length: 5 }).map((_, i) => {
+        const star = i + 1;
+        const fill = Math.max(0, Math.min(1, displayValue - i));
+        const leftValue = i + 0.5;
+        const rightValue = star;
+        return (
+          <div key={star} className="relative h-5 w-5">
+            <button
+              type="button"
+              className="absolute inset-y-0 left-0 z-10 w-1/2 cursor-pointer"
+              onClick={() => onSelect(leftValue)}
+              onMouseEnter={() => setHoverValue(leftValue)}
+              disabled={disabled}
+              aria-label={`Rate ${leftValue} stars`}
+              aria-checked={Math.abs((value ?? 0) - leftValue) < 0.001}
+              role="radio"
+            />
+            <button
+              type="button"
+              className="absolute inset-y-0 right-0 z-10 w-1/2 cursor-pointer"
+              onClick={() => onSelect(rightValue)}
+              onMouseEnter={() => setHoverValue(rightValue)}
+              disabled={disabled}
+              aria-label={`Rate ${rightValue} stars`}
+              aria-checked={Math.abs((value ?? 0) - rightValue) < 0.001}
+              role="radio"
+            />
+            <span className="pointer-events-none relative inline-block text-base leading-none text-white/25">
+              ★
+              <span
+                className="absolute inset-y-0 left-0 overflow-hidden text-amber-200"
+                style={{ width: `${Math.round(fill * 100)}%` }}
+              >
+                ★
+              </span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function VibeChip({ text }: { text: string }) {
   const idx = hashIdx(text.toLowerCase(), BAR_GRADIENTS.length);
   const dotG = BAR_GRADIENTS[idx];
@@ -1412,7 +1482,7 @@ export default function FragranceDetailPage() {
   }, [fragrance]);
   const currentUserRating = useMemo(() => {
     const n = Number((fragrance as any)?.userRating ?? 0);
-    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : null;
+    return normalizeHalfStar(n);
   }, [fragrance]);
 
   useEffect(() => {
@@ -1428,7 +1498,8 @@ export default function FragranceDetailPage() {
   }, [fragrance, ratingValue, ratingCount, currentUserRating]);
 
   const onRateFragrance = useCallback(async (stars: number) => {
-    if (stars < 1 || stars > 5) return;
+    const normalizedStars = normalizeHalfStar(stars);
+    if (normalizedStars === null) return;
     const normalizedSource = String(fragrance?.source ?? inferPreferredSource(routeExternalId || "") ?? "FRAGELLA")
       .trim()
       .toUpperCase();
@@ -1456,12 +1527,12 @@ export default function FragranceDetailPage() {
       const summary = await rateFragrance({
         source,
         externalId: resolvedExternal,
-        rating: stars,
+        rating: normalizedStars,
       });
       setRatingState({
         average: Number(summary.average ?? 0),
         count: Number(summary.count ?? 0),
-        userRating: summary.userRating ?? stars,
+        userRating: summary.userRating ?? normalizedStars,
       });
     } catch (e: any) {
       setNoticeTitle("Rating");
@@ -1698,6 +1769,7 @@ export default function FragranceDetailPage() {
     const name = String(fragrance?.name ?? "").trim();
     const brand = String(fragrance?.brand ?? "").trim();
     const rating = Number(ratingState?.userRating ?? 0);
+    const reviewRating = Math.round(rating);
     const excerpt = reviewBody.trim();
 
     if ((!resolvedExternal || isSyntheticRouteId(resolvedExternal)) && source === "FRAGELLA") {
@@ -1757,7 +1829,7 @@ export default function FragranceDetailPage() {
         fragranceName: name || "Fragrance",
         fragranceBrand: fragrance?.brand ?? null,
         fragranceImageUrl: fragrance?.imageUrl ?? null,
-        rating,
+        rating: reviewRating,
         excerpt,
         performance: performancePayload,
         season: Object.fromEntries(reviewScorecard.season.map((it) => [it.label.toLowerCase(), it.value])),
@@ -2481,23 +2553,15 @@ export default function FragranceDetailPage() {
                           {ratingState && ratingState.count > 0 ? `${ratingState.count} ratings` : "No ratings yet"}
                         </div>
                         <div className="mt-2 text-[11px] text-white/55">Your rating</div>
-                        <div className="mt-1 flex items-center gap-1">
-                          {Array.from({ length: 5 }).map((_, i) => {
-                            const n = i + 1;
-                            const lit = n <= (ratingState?.userRating ?? 0);
-                            return (
-                              <button
-                                key={n}
-                                type="button"
-                                className={cx("text-base transition", lit ? "text-amber-200" : "text-white/25 hover:text-white/60")}
-                                onClick={() => onRateFragrance(n)}
-                                disabled={ratingBusy}
-                                aria-label={`Rate ${n} star${n > 1 ? "s" : ""}`}
-                              >
-                                ★
-                              </button>
-                            );
-                          })}
+                        <div className="mt-1">
+                          <FragranceHalfStarInput
+                            value={ratingState?.userRating ?? null}
+                            onSelect={onRateFragrance}
+                            disabled={ratingBusy}
+                          />
+                        </div>
+                        <div className="mt-1 text-[11px] text-white/60">
+                          {ratingState?.userRating ? `${ratingState.userRating.toFixed(1)} / 5` : "Select your rating"}
                         </div>
                       </div>
                     </div>
@@ -3090,7 +3154,7 @@ export default function FragranceDetailPage() {
               <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#3EB489]">Scorecard Summary</div>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-white/85">
                 <span>
-                  Overall rating: <span className="font-semibold">{ratingState?.userRating ?? "—"} / 5</span>
+                  Overall rating: <span className="font-semibold">{ratingState?.userRating ? ratingState.userRating.toFixed(1) : "—"} / 5</span>
                 </span>
               </div>
               <div className="mt-3">

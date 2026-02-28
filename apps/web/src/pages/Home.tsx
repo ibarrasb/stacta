@@ -7,10 +7,12 @@ import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
 import ReviewCard from "@/components/feed/ReviewCard";
 import { getMe } from "@/lib/api/me";
-import { deleteReview, likeReview, unlikeReview } from "@/lib/api/reviews";
+import { deleteReview, likeReview, repostReview, unlikeReview, unrepostReview } from "@/lib/api/reviews";
 import { getUnreadNotificationsCount } from "@/lib/api/notifications";
 import { listFeed, type FeedFilter, type FeedTab } from "@/lib/api/feed";
 import type { FeedItem } from "@/lib/api/types";
+
+const DEFAULT_AVATAR_IMG = "/stacta.png";
 
 function timeAgo(iso: string) {
   const then = new Date(iso).getTime();
@@ -23,15 +25,6 @@ function timeAgo(iso: string) {
   if (hr < 24) return `${hr}h`;
   const day = Math.floor(hr / 24);
   return `${day}d`;
-}
-
-function initials(name?: string | null) {
-  const n = (name || "").trim();
-  if (!n) return "S";
-  const parts = n.split(/\s+/).slice(0, 2);
-  const first = parts[0]?.[0] ?? "";
-  const second = parts[1]?.[0] ?? "";
-  return (first + second).toUpperCase() || "S";
 }
 
 function eventLabel(item: FeedItem) {
@@ -76,6 +69,7 @@ export default function HomePage() {
   const [pendingDeleteReviewId, setPendingDeleteReviewId] = useState<string | null>(null);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [likingReviewId, setLikingReviewId] = useState<string | null>(null);
+  const [repostingReviewId, setRepostingReviewId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -161,26 +155,53 @@ export default function HomePage() {
     if (!reviewId || likingReviewId === reviewId) return;
     setLikingReviewId(reviewId);
     setItems((prev) => prev.map((item) => {
-      if (item.id !== reviewId) return item;
+      if (item.sourceReviewId !== reviewId) return item;
       const nextLikes = Math.max(0, item.likesCount + (currentlyLiked ? -1 : 1));
       return { ...item, viewerHasLiked: !currentlyLiked, likesCount: nextLikes };
     }));
     try {
       const res = currentlyLiked ? await unlikeReview(reviewId) : await likeReview(reviewId);
       setItems((prev) => prev.map((item) => (
-        item.id === reviewId
+        item.sourceReviewId === reviewId
           ? { ...item, viewerHasLiked: res.viewerHasLiked, likesCount: res.likesCount }
           : item
       )));
     } catch (e: any) {
       setItems((prev) => prev.map((item) => {
-        if (item.id !== reviewId) return item;
+        if (item.sourceReviewId !== reviewId) return item;
         const revertedLikes = Math.max(0, item.likesCount + (currentlyLiked ? 1 : -1));
         return { ...item, viewerHasLiked: currentlyLiked, likesCount: revertedLikes };
       }));
       setError(e?.message || "Failed to update like.");
     } finally {
       setLikingReviewId(null);
+    }
+  }
+
+  async function onToggleReviewRepost(reviewId: string, currentlyReposted: boolean) {
+    if (!reviewId || repostingReviewId === reviewId) return;
+    setRepostingReviewId(reviewId);
+    setItems((prev) => prev.map((item) => {
+      if (item.sourceReviewId !== reviewId) return item;
+      const nextReposts = Math.max(0, item.repostsCount + (currentlyReposted ? -1 : 1));
+      return { ...item, viewerHasReposted: !currentlyReposted, repostsCount: nextReposts };
+    }));
+    try {
+      const res = currentlyReposted ? await unrepostReview(reviewId) : await repostReview(reviewId);
+      setItems((prev) => prev.map((item) => (
+        item.sourceReviewId === reviewId
+          ? { ...item, viewerHasReposted: res.viewerHasReposted, repostsCount: res.repostsCount }
+          : item
+      )));
+    } catch (e: any) {
+      setItems((prev) => prev.map((item) => {
+        if (item.sourceReviewId !== reviewId) return item;
+        const revertedReposts = Math.max(0, item.repostsCount + (currentlyReposted ? 1 : -1));
+        return { ...item, viewerHasReposted: currentlyReposted, repostsCount: revertedReposts };
+      }));
+      setError(e?.message || "Failed to update repost.");
+    } finally {
+      setRepostingReviewId(null);
     }
   }
 
@@ -313,12 +334,17 @@ export default function HomePage() {
               </div>
             ) : (
               items.map((item, idx) => (
-                item.type === "REVIEW_POSTED" ? (
+                item.type === "REVIEW_POSTED" || item.type === "REVIEW_REPOSTED" ? (
                   <ReviewCard
                     key={item.id}
                     item={item}
                     timeAgo={timeAgo(item.createdAt)}
                     onOpenUser={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/home" } } })}
+                    onOpenRepostActor={
+                      item.repostActorUsername
+                        ? () => navigate(`/u/${item.repostActorUsername}`, { state: { from: { pathname: "/home" } } })
+                        : undefined
+                    }
                     onOpenFragrance={() => {
                       const source = String(item.fragranceSource ?? "FRAGELLA").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
                       const externalId = String(item.fragranceExternalId ?? "").trim();
@@ -337,17 +363,25 @@ export default function HomePage() {
                       });
                     }}
                     onDelete={
-                      viewerUsername && item.actorUsername.toLowerCase() === viewerUsername.toLowerCase()
+                      viewerUsername
+                      && item.type === "REVIEW_POSTED"
+                      && item.actorUsername.toLowerCase() === viewerUsername.toLowerCase()
                         ? () => setPendingDeleteReviewId(item.id)
                         : undefined
                     }
                     onToggleLike={
                       viewerUsername && item.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
-                        ? () => onToggleReviewLike(item.id, Boolean(item.viewerHasLiked))
+                        ? () => onToggleReviewLike(item.sourceReviewId, Boolean(item.viewerHasLiked))
                         : undefined
                     }
-                    onOpenComments={() => navigate(`/reviews/${encodeURIComponent(item.id)}`, { state: { from: { pathname: "/home" } } })}
-                    liking={likingReviewId === item.id}
+                    onToggleRepost={
+                      viewerUsername && item.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
+                        ? () => onToggleReviewRepost(item.sourceReviewId, Boolean(item.viewerHasReposted))
+                        : undefined
+                    }
+                    onOpenComments={() => navigate(`/reviews/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/home" } } })}
+                    liking={likingReviewId === item.sourceReviewId}
+                    reposting={repostingReviewId === item.sourceReviewId}
                     deleting={deletingReviewId === item.id}
                   />
                 ) : (
@@ -361,18 +395,18 @@ export default function HomePage() {
                         className="flex min-w-0 items-center gap-2 text-left"
                         onClick={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/home" } } })}
                       >
-                        {item.actorAvatarUrl ? (
-                          <img
-                            src={item.actorAvatarUrl}
-                            alt={`${item.actorUsername} avatar`}
-                            className="h-9 w-9 rounded-full border border-white/15 object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xs font-semibold text-white/75">
-                            {initials(item.actorDisplayName || item.actorUsername)}
-                          </div>
-                        )}
+                        <img
+                          src={item.actorAvatarUrl?.trim() ? item.actorAvatarUrl : DEFAULT_AVATAR_IMG}
+                          alt={`${item.actorUsername} avatar`}
+                          className="h-9 w-9 rounded-full border border-white/15 object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            if (img.dataset.fallbackApplied === "1") return;
+                            img.dataset.fallbackApplied = "1";
+                            img.src = DEFAULT_AVATAR_IMG;
+                          }}
+                        />
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold text-white">{item.actorDisplayName || item.actorUsername}</div>
                           <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>

@@ -3,8 +3,11 @@ package com.stacta.api.social;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stacta.api.config.ApiException;
+import com.stacta.api.fragrance.Fragrance;
+import com.stacta.api.fragrance.FragranceRepository;
 import com.stacta.api.social.dto.CreateReviewRequest;
 import com.stacta.api.social.dto.ReviewLikeResponse;
+import com.stacta.api.social.dto.ReviewRepostResponse;
 import com.stacta.api.user.User;
 import com.stacta.api.user.UserRepository;
 import java.util.LinkedHashMap;
@@ -22,17 +25,20 @@ public class ReviewService {
   private final UserRepository users;
   private final ObjectMapper objectMapper;
   private final JdbcTemplate jdbc;
+  private final FragranceRepository fragrances;
 
   public ReviewService(
     ActivityEventRepository activities,
     UserRepository users,
     ObjectMapper objectMapper,
-    JdbcTemplate jdbc
+    JdbcTemplate jdbc,
+    FragranceRepository fragrances
   ) {
     this.activities = activities;
     this.users = users;
     this.objectMapper = objectMapper;
     this.jdbc = jdbc;
+    this.fragrances = fragrances;
   }
 
   @Transactional
@@ -46,6 +52,7 @@ public class ReviewService {
     if (externalId.isEmpty() || fragranceName.isEmpty() || excerpt.isEmpty()) {
       throw new ApiException("INVALID_REVIEW");
     }
+    validateCanReviewCommunityFragrance(me, source, externalId);
 
     Map<String, Integer> performance = normalizeRatingMap(req.performance(), 8);
     Map<String, Integer> season = normalizeRatingMap(req.season(), 16);
@@ -131,6 +138,65 @@ public class ReviewService {
     return new ReviewLikeResponse(likesCount, false);
   }
 
+  @Transactional
+  public ReviewRepostResponse repost(String viewerSub, UUID reviewId) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    ActivityEvent review = getReviewOrThrow(reviewId);
+    if (me.getId().equals(review.getActorUserId())) {
+      throw new ApiException("REVIEW_FORBIDDEN");
+    }
+
+    int inserted = jdbc.update(
+      """
+      INSERT INTO review_repost (review_id, user_id)
+      VALUES (?, ?)
+      ON CONFLICT DO NOTHING
+      """,
+      reviewId,
+      me.getId()
+    );
+    if (inserted > 0) {
+      activities.bumpRepostsCount(reviewId, 1);
+      upsertRepostActivity(me.getId(), review);
+    }
+
+    return new ReviewRepostResponse(getRepostsCount(reviewId), true);
+  }
+
+  @Transactional
+  public ReviewRepostResponse unrepost(String viewerSub, UUID reviewId) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    ActivityEvent review = getReviewOrThrow(reviewId);
+    if (me.getId().equals(review.getActorUserId())) {
+      throw new ApiException("REVIEW_FORBIDDEN");
+    }
+
+    int deleted = jdbc.update(
+      """
+      DELETE FROM review_repost
+      WHERE review_id = ?
+        AND user_id = ?
+      """,
+      reviewId,
+      me.getId()
+    );
+    if (deleted > 0) {
+      activities.bumpRepostsCount(reviewId, -1);
+      jdbc.update(
+        """
+        DELETE FROM activity_event
+        WHERE actor_user_id = ?
+          AND type = 'REVIEW_REPOSTED'
+          AND source_review_id = ?
+        """,
+        me.getId(),
+        reviewId
+      );
+    }
+
+    return new ReviewRepostResponse(getRepostsCount(reviewId), false);
+  }
+
   private ActivityEvent getReviewOrThrow(UUID reviewId) {
     ActivityEvent event = activities.findById(reviewId).orElseThrow(() -> new ApiException("REVIEW_NOT_FOUND"));
     if (!"REVIEW_POSTED".equalsIgnoreCase(String.valueOf(event.getType()))) {
@@ -142,6 +208,12 @@ public class ReviewService {
   private int getLikesCount(UUID reviewId) {
     return activities.findById(reviewId)
       .map(ActivityEvent::getLikesCount)
+      .orElse(0);
+  }
+
+  private int getRepostsCount(UUID reviewId) {
+    return activities.findById(reviewId)
+      .map(ActivityEvent::getRepostsCount)
       .orElse(0);
   }
 
@@ -215,6 +287,24 @@ public class ReviewService {
     );
   }
 
+  private void upsertRepostActivity(UUID actorUserId, ActivityEvent sourceReview) {
+    if (actorUserId == null || sourceReview == null || sourceReview.getId() == null) return;
+    ActivityEvent repost = new ActivityEvent();
+    repost.setActorUserId(actorUserId);
+    repost.setType("REVIEW_REPOSTED");
+    repost.setSourceReviewId(sourceReview.getId());
+    repost.setFragranceName(sourceReview.getFragranceName());
+    repost.setFragranceSource(sourceReview.getFragranceSource());
+    repost.setFragranceExternalId(sourceReview.getFragranceExternalId());
+    repost.setFragranceImageUrl(sourceReview.getFragranceImageUrl());
+    repost.setReviewRating(sourceReview.getReviewRating());
+    repost.setReviewExcerpt(sourceReview.getReviewExcerpt());
+    repost.setReviewPerformance(sourceReview.getReviewPerformance());
+    repost.setReviewSeason(sourceReview.getReviewSeason());
+    repost.setReviewOccasion(sourceReview.getReviewOccasion());
+    activities.save(repost);
+  }
+
   private Map<String, Integer> normalizeRatingMap(Map<String, Integer> input, int maxEntries) {
     if (input == null || input.isEmpty()) return Map.of();
     Map<String, Integer> out = new LinkedHashMap<>();
@@ -253,5 +343,15 @@ public class ReviewService {
   private String nullIfBlank(String raw) {
     String trimmed = safeTrim(raw);
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private void validateCanReviewCommunityFragrance(User viewer, String source, String externalId) {
+    if (!"COMMUNITY".equalsIgnoreCase(source)) return;
+    Fragrance fragrance = fragrances.findByExternalSourceAndExternalId("COMMUNITY", externalId)
+      .orElseThrow(() -> new ApiException("INVALID_REVIEW"));
+    boolean isPublic = "PUBLIC".equalsIgnoreCase(String.valueOf(fragrance.getVisibility()));
+    if (!isPublic) {
+      throw new ApiException("INVALID_REVIEW");
+    }
   }
 }

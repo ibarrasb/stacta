@@ -4,16 +4,8 @@ import type { FeedItem } from "@/lib/api/types";
 import fragranceFallbackImg from "@/assets/illustrations/NotFound.png";
 
 const FALLBACK_FRAGRANCE_IMG = fragranceFallbackImg;
+const DEFAULT_AVATAR_IMG = "/stacta.png";
 const TEAL = "#3EB489";
-
-function initials(name?: string | null) {
-  const n = (name || "").trim();
-  if (!n) return "S";
-  const parts = n.split(/\s+/).slice(0, 2);
-  const first = parts[0]?.[0] ?? "";
-  const second = parts[1]?.[0] ?? "";
-  return (first + second).toUpperCase() || "S";
-}
 
 function safeMap(raw: string | null): Array<{ label: string; value: number }> {
   if (!raw) return [];
@@ -37,9 +29,29 @@ function safeMap(raw: string | null): Array<{ label: string; value: number }> {
   }
 }
 
-function ratingStars(value: number) {
-  const safe = Math.max(0, Math.min(5, Math.round(value)));
-  return "★★★★★".slice(0, safe) + "☆☆☆☆☆".slice(0, 5 - safe);
+function ratingValue(value: number | null | undefined) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(5, n));
+}
+
+function HalfStars({ value }: { value: number }) {
+  const safe = ratingValue(value);
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const fill = Math.max(0, Math.min(1, safe - i));
+        return (
+          <span key={i} className="relative inline-block text-xs leading-none text-white/25">
+            ★
+            <span className="absolute inset-y-0 left-0 overflow-hidden text-amber-200" style={{ width: `${Math.round(fill * 100)}%` }}>
+              ★
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function priceTagFromScore(value: number) {
@@ -82,6 +94,9 @@ export default function ReviewCard({
   deleting,
   onToggleLike,
   liking,
+  onToggleRepost,
+  reposting,
+  onOpenRepostActor,
 }: {
   item: FeedItem;
   timeAgo: string;
@@ -93,6 +108,9 @@ export default function ReviewCard({
   deleting?: boolean;
   onToggleLike?: () => void;
   liking?: boolean;
+  onToggleRepost?: () => void;
+  reposting?: boolean;
+  onOpenRepostActor?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -132,27 +150,39 @@ export default function ReviewCard({
     >
       <div className="flex items-start justify-between gap-3">
         <button className="flex min-w-0 items-center gap-2 text-left" onClick={onOpenUser}>
-          {item.actorAvatarUrl ? (
-            <img
-              src={item.actorAvatarUrl}
-              alt={`${item.actorUsername} avatar`}
-              className="h-9 w-9 rounded-full border border-white/15 object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xs font-semibold text-white/75">
-              {initials(item.actorDisplayName || item.actorUsername)}
-            </div>
-          )}
+          <img
+            src={item.actorAvatarUrl?.trim() ? item.actorAvatarUrl : DEFAULT_AVATAR_IMG}
+            alt={`${item.actorUsername} avatar`}
+            className="h-9 w-9 rounded-full border border-white/15 object-cover"
+            loading="lazy"
+            onError={(e) => {
+              const img = e.currentTarget;
+              if (img.dataset.fallbackApplied === "1") return;
+              img.dataset.fallbackApplied = "1";
+              img.src = DEFAULT_AVATAR_IMG;
+            }}
+          />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-white">{item.actorDisplayName || item.actorUsername}</div>
             <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>
           </div>
         </button>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/85">
-            Review
-          </span>
+          {item.type === "REVIEW_REPOSTED" ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-full border border-emerald-300/35 bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-100 transition hover:bg-emerald-400/22 disabled:cursor-default"
+              onClick={onOpenRepostActor}
+              disabled={!onOpenRepostActor}
+            >
+              <Repeat2 className="h-3 w-3" />
+              {((item.repostActorDisplayName || item.repostActorUsername || "Someone") + " reposted")}
+            </button>
+          ) : (
+            <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/85">
+              Review
+            </span>
+          )}
           <div className="relative" ref={menuRef}>
             <button
               type="button"
@@ -217,8 +247,9 @@ export default function ReviewCard({
           <button type="button" onClick={onOpenFragrance} className="text-left">
             <div className="truncate text-sm font-semibold text-white">{item.fragranceName || "Fragrance"}</div>
           </button>
-          <div className="mt-1 text-xs" style={{ color: TEAL }}>
-            {ratingStars(Number(item.reviewRating ?? 0))} {item.reviewRating ? `(${item.reviewRating}/5)` : ""}
+          <div className="mt-1 flex items-center gap-2 text-xs" style={{ color: TEAL }}>
+            <HalfStars value={Number(item.reviewRating ?? 0)} />
+            {item.reviewRating ? <span>{`${Number(item.reviewRating).toFixed(1)}/5`}</span> : null}
           </div>
           {pricePerformance ? (
             <div className="mt-1">
@@ -271,9 +302,12 @@ export default function ReviewCard({
             type="button"
             title="Repost"
             aria-label="Repost review"
-            className="inline-flex h-7 w-7 items-center justify-center text-white/65 transition hover:text-[#3EB489]"
+            className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489] disabled:cursor-not-allowed disabled:opacity-55"
+            onClick={onToggleRepost}
+            disabled={Boolean(reposting) || !onToggleRepost}
           >
-            <Repeat2 className="h-4 w-4" />
+            <Repeat2 className={`h-4 w-4 ${item.viewerHasReposted ? "text-[#3EB489]" : ""}`} />
+            <span className="text-[11px] text-white/70">{item.repostsCount}</span>
           </button>
         </div>
       </div>
@@ -321,7 +355,7 @@ export default function ReviewCard({
                   <div key={`s-${row.label}`}>
                     <div className="mb-1 flex items-center justify-between text-xs text-white/75">
                       <span>{row.label}</span>
-                      <span>{ratingStars(row.value)}</span>
+                      <HalfStars value={row.value} />
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                       <div className="h-full rounded-full" style={{ width: `${Math.round((row.value / 5) * 100)}%`, background: TEAL }} />
@@ -340,7 +374,7 @@ export default function ReviewCard({
                   <div key={`o-${row.label}`}>
                     <div className="mb-1 flex items-center justify-between text-xs text-white/75">
                       <span>{row.label}</span>
-                      <span>{ratingStars(row.value)}</span>
+                      <HalfStars value={row.value} />
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                       <div className="h-full rounded-full" style={{ width: `${Math.round((row.value / 5) * 100)}%`, background: TEAL }} />

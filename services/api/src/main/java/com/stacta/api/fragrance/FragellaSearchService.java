@@ -341,7 +341,7 @@ public class FragellaSearchService {
     var createdByUsername = resolveCreatedByUsername(createdByUserId, in.createdByUsername(), createdByUsernameFallback);
     String rating = in.rating();
     Long ratingCount = in.ratingCount();
-    Integer userRating = in.userRating();
+    Double userRating = in.userRating();
     if (ratingSummary != null && ratingSummary.count() > 0) {
       rating = String.format(java.util.Locale.US, "%.2f", ratingSummary.average());
       ratingCount = ratingSummary.count();

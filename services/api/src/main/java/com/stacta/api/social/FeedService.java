@@ -3,6 +3,7 @@ package com.stacta.api.social;
 import com.stacta.api.config.ApiException;
 import com.stacta.api.social.dto.FeedItem;
 import com.stacta.api.social.dto.FeedResponse;
+import com.stacta.api.upload.UploadImageUrlResolver;
 import com.stacta.api.user.User;
 import com.stacta.api.user.UserRepository;
 import java.nio.charset.StandardCharsets;
@@ -23,11 +24,18 @@ public class FeedService {
   private final ActivityEventRepository activities;
   private final UserRepository users;
   private final FollowService follows;
+  private final UploadImageUrlResolver imageUrlResolver;
 
-  public FeedService(ActivityEventRepository activities, UserRepository users, FollowService follows) {
+  public FeedService(
+    ActivityEventRepository activities,
+    UserRepository users,
+    FollowService follows,
+    UploadImageUrlResolver imageUrlResolver
+  ) {
     this.activities = activities;
     this.users = users;
     this.follows = follows;
+    this.imageUrlResolver = imageUrlResolver;
   }
 
   @Transactional(readOnly = true)
@@ -146,10 +154,14 @@ public class FeedService {
   private FeedItem mapView(ActivityEventRepository.ActivityFeedView row) {
     return new FeedItem(
       row.getId(),
+      row.getSourceReviewId(),
       row.getType(),
       row.getActorUsername(),
       row.getActorDisplayName(),
-      row.getActorAvatarUrl(),
+      imageUrlResolver.resolveWithFallback(row.getActorAvatarObjectKey(), row.getActorAvatarUrl()),
+      row.getRepostActorUsername(),
+      row.getRepostActorDisplayName(),
+      imageUrlResolver.resolveWithFallback(row.getRepostActorAvatarObjectKey(), row.getRepostActorAvatarUrl()),
       row.getTargetUsername(),
       row.getTargetDisplayName(),
       row.getFragranceName(),
@@ -166,6 +178,7 @@ public class FeedService {
       row.getCommentsCount(),
       row.getRepostsCount(),
       row.getViewerHasLiked(),
+      row.getViewerHasReposted(),
       row.getCreatedAt()
     );
   }

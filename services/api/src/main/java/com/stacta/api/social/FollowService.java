@@ -9,6 +9,7 @@ import com.stacta.api.social.dto.NotificationsResponse;
 import com.stacta.api.social.dto.PendingFollowRequestItem;
 import com.stacta.api.social.dto.PendingFollowRequestsResponse;
 import com.stacta.api.social.dto.UnreadNotificationsResponse;
+import com.stacta.api.upload.UploadImageUrlResolver;
 import com.stacta.api.user.User;
 import com.stacta.api.user.UserRepository;
 import java.nio.charset.StandardCharsets;
@@ -37,17 +38,20 @@ public class FollowService {
   private final NotificationEventRepository notifications;
   private final ActivityEventRepository activities;
   private final UserRepository users;
+  private final UploadImageUrlResolver imageUrlResolver;
 
   public FollowService(
     FollowRepository follows,
     NotificationEventRepository notifications,
     ActivityEventRepository activities,
-    UserRepository users
+    UserRepository users,
+    UploadImageUrlResolver imageUrlResolver
   ) {
     this.follows = follows;
     this.notifications = notifications;
     this.activities = activities;
     this.users = users;
+    this.imageUrlResolver = imageUrlResolver;
   }
 
   @Transactional
@@ -117,7 +121,13 @@ public class FollowService {
     boolean hasMore = rows.size() > safeLimit;
     var pageRows = hasMore ? rows.subList(0, safeLimit) : rows;
     var items = pageRows.stream()
-      .map(v -> new PendingFollowRequestItem(v.getId(), v.getUsername(), v.getDisplayName(), v.getAvatarUrl(), v.getRequestedAt()))
+      .map(v -> new PendingFollowRequestItem(
+        v.getId(),
+        v.getUsername(),
+        v.getDisplayName(),
+        imageUrlResolver.resolveWithFallback(v.getAvatarObjectKey(), v.getAvatarUrl()),
+        v.getRequestedAt()
+      ))
       .toList();
 
     String nextCursor = null;
@@ -147,7 +157,7 @@ public class FollowService {
       .map(v -> new FollowConnectionItem(
         v.getUsername(),
         v.getDisplayName(),
-        v.getAvatarUrl(),
+        imageUrlResolver.resolveWithFallback(v.getAvatarObjectKey(), v.getAvatarUrl()),
         Boolean.TRUE.equals(v.getIsPrivate()),
         Boolean.TRUE.equals(v.getIsFollowing()),
         Boolean.TRUE.equals(v.getFollowsYou()),
@@ -182,7 +192,7 @@ public class FollowService {
       .map(v -> new FollowConnectionItem(
         v.getUsername(),
         v.getDisplayName(),
-        v.getAvatarUrl(),
+        imageUrlResolver.resolveWithFallback(v.getAvatarObjectKey(), v.getAvatarUrl()),
         Boolean.TRUE.equals(v.getIsPrivate()),
         Boolean.TRUE.equals(v.getIsFollowing()),
         Boolean.TRUE.equals(v.getFollowsYou()),
@@ -252,7 +262,7 @@ public class FollowService {
         v.getType(),
         v.getActorUsername(),
         v.getActorDisplayName(),
-        v.getActorAvatarUrl(),
+        imageUrlResolver.resolveWithFallback(v.getActorAvatarObjectKey(), v.getActorAvatarUrl()),
         v.getCreatedAt(),
         FOLLOWED_YOU_BACK.equals(v.getType()),
         v.getSourceReviewId(),

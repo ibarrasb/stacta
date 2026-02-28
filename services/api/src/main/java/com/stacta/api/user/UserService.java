@@ -128,7 +128,7 @@ public class UserService {
       .map(u -> new UserSearchItem(
         u.getUsername(),
         u.getDisplayName(),
-        u.getAvatarUrl(),
+        imageUrlResolver.resolveWithFallback(u.getAvatarObjectKey(), u.getAvatarUrl()),
         u.isPrivate()
       ))
       .toList();
@@ -147,6 +147,7 @@ public class UserService {
     User viewer = viewerSub == null ? null : repo.findByCognitoSub(viewerSub).orElse(null);
     boolean isOwner = viewer != null && viewer.getId().equals(target.getId());
     boolean isFollowing = viewer != null && followService.isFollowing(viewer.getId(), target.getId());
+    boolean followsYou = viewer != null && followService.isFollowing(target.getId(), viewer.getId());
     boolean followRequested = viewer != null && followService.hasPendingRequest(viewer.getId(), target.getId());
     boolean isVisible = !target.isPrivate() || isOwner || isFollowing;
     long followersCount = target.getFollowersCount();
@@ -155,10 +156,10 @@ public class UserService {
     long collectionCount = isVisible ? collectionService.countForUser(target.getId()) : 0;
     long wishlistCount = isVisible ? collectionService.countWishlistForUser(target.getId()) : 0;
     long reviewCount = isVisible ? activityEvents.countByActorUserIdAndType(target.getId(), "REVIEW_POSTED") : 0;
-    long communityFragranceCount = isVisible ? fragrances.countByExternalSourceAndCreatedByUserId("COMMUNITY", target.getId()) : 0;
     List<CollectionItemDto> communityFragrances = isVisible
       ? listCommunityFragrances(target.getId(), isOwner)
       : List.of();
+    long communityFragranceCount = communityFragrances.size();
     List<CollectionItemDto> collectionItems = isVisible
       ? collectionService.listForUser(target.getId())
       : List.of();
@@ -192,6 +193,7 @@ public class UserService {
       wishlistItems,
       topFragrances,
       communityFragrances,
+      followsYou,
       isFollowing,
       followRequested
     );
@@ -246,6 +248,7 @@ public class UserService {
         f.getName(),
         f.getBrand(),
         f.getImageUrl(),
+        null,
         null,
         f.getCreatedAt() == null ? null : f.getCreatedAt().toInstant()
       ))

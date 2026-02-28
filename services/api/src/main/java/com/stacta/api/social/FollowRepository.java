@@ -20,6 +20,7 @@ public interface FollowRepository extends JpaRepository<FollowRelationship, UUID
       fr.id AS id,
       u.username AS username,
       u.display_name AS displayName,
+      u.avatar_object_key AS avatarObjectKey,
       u.avatar_url AS avatarUrl,
       fr.created_at AS requestedAt
     FROM user_follow fr
@@ -48,6 +49,7 @@ public interface FollowRepository extends JpaRepository<FollowRelationship, UUID
       fr.id AS id,
       u.username AS username,
       u.display_name AS displayName,
+      u.avatar_object_key AS avatarObjectKey,
       u.avatar_url AS avatarUrl,
       u.is_private AS isPrivate,
       EXISTS (
@@ -85,6 +87,7 @@ public interface FollowRepository extends JpaRepository<FollowRelationship, UUID
       fr.id AS id,
       u.username AS username,
       u.display_name AS displayName,
+      u.avatar_object_key AS avatarObjectKey,
       u.avatar_url AS avatarUrl,
       u.is_private AS isPrivate,
       TRUE AS isFollowing,
@@ -121,6 +124,7 @@ public interface FollowRepository extends JpaRepository<FollowRelationship, UUID
     UUID getId();
     String getUsername();
     String getDisplayName();
+    String getAvatarObjectKey();
     String getAvatarUrl();
     Instant getRequestedAt();
   }
@@ -129,6 +133,7 @@ public interface FollowRepository extends JpaRepository<FollowRelationship, UUID
     UUID getId();
     String getUsername();
     String getDisplayName();
+    String getAvatarObjectKey();
     String getAvatarUrl();
     Boolean getIsPrivate();
     Boolean getIsFollowing();

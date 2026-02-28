@@ -3,6 +3,7 @@ package com.stacta.api.social;
 import com.stacta.api.config.ApiException;
 import com.stacta.api.social.dto.ReviewCommentItem;
 import com.stacta.api.social.dto.ReviewThreadResponse;
+import com.stacta.api.upload.UploadImageUrlResolver;
 import com.stacta.api.user.User;
 import com.stacta.api.user.UserRepository;
 import java.time.Instant;
@@ -23,17 +24,20 @@ public class ReviewCommentService {
   private final ActivityEventRepository activities;
   private final FollowService follows;
   private final JdbcTemplate jdbc;
+  private final UploadImageUrlResolver imageUrlResolver;
 
   public ReviewCommentService(
     UserRepository users,
     ActivityEventRepository activities,
     FollowService follows,
-    JdbcTemplate jdbc
+    JdbcTemplate jdbc,
+    UploadImageUrlResolver imageUrlResolver
   ) {
     this.users = users;
     this.activities = activities;
     this.follows = follows;
     this.jdbc = jdbc;
+    this.imageUrlResolver = imageUrlResolver;
   }
 
   @Transactional(readOnly = true)
@@ -161,6 +165,26 @@ public class ReviewCommentService {
       throw new ApiException("COMMENT_NOT_FOUND");
     }
 
+    // Keep comment/reply notifications stateful: if comment is deleted, remove related notifications.
+    jdbc.update(
+      """
+      WITH RECURSIVE tree AS (
+        SELECT id
+        FROM review_comment
+        WHERE id = ?
+          AND review_id = ?
+        UNION ALL
+        SELECT c.id
+        FROM review_comment c
+        JOIN tree t ON c.parent_comment_id = t.id
+      )
+      DELETE FROM notification_event ne
+      WHERE ne.source_comment_id IN (SELECT id FROM tree)
+      """,
+      commentId,
+      review.getId()
+    );
+
     int deleted = jdbc.update(
       """
       DELETE FROM review_comment
@@ -247,6 +271,7 @@ public class ReviewCommentService {
         c.created_at,
         u.username,
         u.display_name,
+        u.avatar_object_key,
         u.avatar_url,
         CASE WHEN c.author_user_id = ? THEN true ELSE false END AS viewer_can_delete
       FROM review_comment c
@@ -260,7 +285,7 @@ public class ReviewCommentService {
         rs.getObject("parent_comment_id", UUID.class),
         rs.getString("username"),
         rs.getString("display_name"),
-        rs.getString("avatar_url"),
+        imageUrlResolver.resolveWithFallback(rs.getString("avatar_object_key"), rs.getString("avatar_url")),
         rs.getString("body"),
         rs.getTimestamp("created_at").toInstant(),
         rs.getBoolean("viewer_can_delete")
@@ -281,6 +306,7 @@ public class ReviewCommentService {
         c.created_at,
         u.username,
         u.display_name,
+        u.avatar_object_key,
         u.avatar_url,
         CASE WHEN c.author_user_id = ? THEN true ELSE false END AS viewer_can_delete
       FROM review_comment c
@@ -294,7 +320,7 @@ public class ReviewCommentService {
           rs.getObject("parent_comment_id", UUID.class),
           rs.getString("username"),
           rs.getString("display_name"),
-          rs.getString("avatar_url"),
+          imageUrlResolver.resolveWithFallback(rs.getString("avatar_object_key"), rs.getString("avatar_url")),
           rs.getString("body"),
           rs.getTimestamp("created_at").toInstant(),
           rs.getBoolean("viewer_can_delete")
@@ -362,10 +388,14 @@ public class ReviewCommentService {
   private com.stacta.api.social.dto.FeedItem mapFeed(ActivityEventRepository.ActivityFeedView row) {
     return new com.stacta.api.social.dto.FeedItem(
       row.getId(),
+      row.getSourceReviewId(),
       row.getType(),
       row.getActorUsername(),
       row.getActorDisplayName(),
-      row.getActorAvatarUrl(),
+      imageUrlResolver.resolveWithFallback(row.getActorAvatarObjectKey(), row.getActorAvatarUrl()),
+      row.getRepostActorUsername(),
+      row.getRepostActorDisplayName(),
+      imageUrlResolver.resolveWithFallback(row.getRepostActorAvatarObjectKey(), row.getRepostActorAvatarUrl()),
       row.getTargetUsername(),
       row.getTargetDisplayName(),
       row.getFragranceName(),
@@ -382,6 +412,7 @@ public class ReviewCommentService {
       row.getCommentsCount(),
       row.getRepostsCount(),
       row.getViewerHasLiked(),
+      row.getViewerHasReposted(),
       row.getCreatedAt()
     );
   }
