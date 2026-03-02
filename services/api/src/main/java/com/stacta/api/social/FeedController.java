@@ -48,4 +48,23 @@ public class FeedController {
   ) {
     return feedService.listUserReviews(jwt.getSubject(), username, limit, cursor);
   }
+
+  @GetMapping("/me/posts")
+  public FeedResponse listMinePosts(
+    @AuthenticationPrincipal Jwt jwt,
+    @RequestParam(name = "limit", defaultValue = "20") int limit,
+    @RequestParam(name = "cursor", required = false) String cursor
+  ) {
+    return feedService.listMinePosts(jwt.getSubject(), limit, cursor);
+  }
+
+  @GetMapping("/users/{username}/posts")
+  public FeedResponse listUserPosts(
+    @AuthenticationPrincipal Jwt jwt,
+    @PathVariable("username") String username,
+    @RequestParam(name = "limit", defaultValue = "20") int limit,
+    @RequestParam(name = "cursor", required = false) String cursor
+  ) {
+    return feedService.listUserPosts(jwt.getSubject(), username, limit, cursor);
+  }
 }

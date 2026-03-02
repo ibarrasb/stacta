@@ -145,8 +145,17 @@ export default function ReviewCard({
 
   return (
     <article
-      className="rounded-3xl border border-white/15 p-4 text-white"
+      className={[
+        "rounded-3xl border border-white/15 p-4 text-white",
+        onOpenComments ? "cursor-pointer" : "",
+      ].join(" ")}
       style={{ background: "linear-gradient(180deg, rgba(18,18,18,0.92), rgba(18,18,18,0.78))", backdropFilter: "blur(14px)" }}
+      onClick={(e) => {
+        if (!onOpenComments) return;
+        const target = e.target as HTMLElement | null;
+        if (target?.closest("button,a,input,textarea,select,[role='button']")) return;
+        onOpenComments();
+      }}
     >
       <div className="flex items-start justify-between gap-3">
         <button className="flex min-w-0 items-center gap-2 text-left" onClick={onOpenUser}>

@@ -8,6 +8,7 @@ import com.stacta.api.fragrance.Fragrance;
 import com.stacta.api.fragrance.FragranceRepository;
 import com.stacta.api.social.ActivityEvent;
 import com.stacta.api.social.ActivityEventRepository;
+import com.stacta.api.upload.UploadImageUrlResolver;
 import com.stacta.api.user.User;
 import com.stacta.api.user.UserRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -41,6 +42,7 @@ public class UserCollectionService {
   private final UserRepository users;
   private final JdbcTemplate jdbc;
   private final FragranceRepository fragrances;
+  private final UploadImageUrlResolver imageUrlResolver;
 
   public UserCollectionService(
     UserCollectionItemRepository items,
@@ -49,7 +51,8 @@ public class UserCollectionService {
     ActivityEventRepository activities,
     UserRepository users,
     JdbcTemplate jdbc,
-    FragranceRepository fragrances
+    FragranceRepository fragrances,
+    UploadImageUrlResolver imageUrlResolver
   ) {
     this.items = items;
     this.wishlistItems = wishlistItems;
@@ -58,6 +61,7 @@ public class UserCollectionService {
     this.users = users;
     this.jdbc = jdbc;
     this.fragrances = fragrances;
+    this.imageUrlResolver = imageUrlResolver;
   }
 
   @Transactional
@@ -104,9 +108,10 @@ public class UserCollectionService {
     Map<String, Double> ratingByKey = getRatingsByFragrance(userId, rows.stream()
       .map(row -> new FragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))
       .toList());
-    return rows.stream()
+    List<CollectionItemDto> dtos = rows.stream()
       .map(row -> toDto(row, ratingByKey.get(fragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))))
       .toList();
+    return withBestFragranceImages(dtos);
   }
 
   @Transactional
@@ -178,9 +183,10 @@ public class UserCollectionService {
     Map<String, Double> ratingByKey = getRatingsByFragrance(userId, rows.stream()
       .map(row -> new FragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))
       .toList());
-    return rows.stream()
+    List<CollectionItemDto> dtos = rows.stream()
       .map(row -> toDto(row, ratingByKey.get(fragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))))
       .toList();
+    return withBestFragranceImages(dtos);
   }
 
   @Transactional(readOnly = true)
@@ -242,9 +248,40 @@ public class UserCollectionService {
     Map<String, Double> ratingByKey = getRatingsByFragrance(userId, rows.stream()
       .map(row -> new FragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))
       .toList());
-    return rows.stream()
+    List<CollectionItemDto> dtos = rows.stream()
       .map(row -> toDto(row, ratingByKey.get(fragranceKey(row.getFragranceSource(), row.getFragranceExternalId()))))
       .toList();
+    return withBestFragranceImages(dtos);
+  }
+
+  private List<CollectionItemDto> withBestFragranceImages(List<CollectionItemDto> items) {
+    if (items == null || items.isEmpty()) return List.of();
+
+    Map<String, String> resolvedImageByFragrance = new HashMap<>();
+    return items.stream().map(item -> {
+      String cacheKey = fragranceKey(item.source(), item.externalId());
+      String bestImage = resolvedImageByFragrance.containsKey(cacheKey)
+        ? resolvedImageByFragrance.get(cacheKey)
+        : resolveBestImage(item.source(), item.externalId(), item.imageUrl());
+      resolvedImageByFragrance.put(cacheKey, bestImage);
+
+      return new CollectionItemDto(
+        item.source(),
+        item.externalId(),
+        item.name(),
+        item.brand(),
+        bestImage,
+        item.collectionTag(),
+        item.userRating(),
+        item.addedAt()
+      );
+    }).toList();
+  }
+
+  private String resolveBestImage(String source, String externalId, String fallbackImageUrl) {
+    return fragrances.findByExternalSourceAndExternalId(source, externalId)
+      .map(fragrance -> imageUrlResolver.resolveWithFallback(fragrance.getImageObjectKey(), fragrance.getImageUrl()))
+      .orElse(fallbackImageUrl);
   }
 
   private CollectionItemDto toDto(UserCollectionItem row, Double userRating) {

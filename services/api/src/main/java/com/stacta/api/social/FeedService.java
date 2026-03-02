@@ -151,6 +151,67 @@ public class FeedService {
     return new FeedResponse(items, nextCursor);
   }
 
+  @Transactional(readOnly = true)
+  public FeedResponse listMinePosts(String viewerSub, int limit, String cursor) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    int safeLimit = Math.max(1, Math.min(limit, 50));
+    var token = parseFollowingCursor(cursor);
+    var rows = activities.listMyScentPosts(
+      me.getId(),
+      me.getId(),
+      token == null ? null : token.createdAt(),
+      token == null ? null : token.id(),
+      PageRequest.of(0, safeLimit + 1)
+    );
+
+    boolean hasMore = rows.size() > safeLimit;
+    var pageRows = hasMore ? rows.subList(0, safeLimit) : rows;
+    var items = pageRows.stream().map(this::mapView).toList();
+
+    String nextCursor = null;
+    if (hasMore && !pageRows.isEmpty()) {
+      var last = pageRows.get(pageRows.size() - 1);
+      nextCursor = encodeFollowingCursor(last.getCreatedAt(), last.getId());
+    }
+    return new FeedResponse(items, nextCursor);
+  }
+
+  @Transactional(readOnly = true)
+  public FeedResponse listUserPosts(String viewerSub, String username, int limit, String cursor) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    String normalizedUsername = normalizeUsername(username);
+    User target = users.findByUsernameIgnoreCase(normalizedUsername)
+      .orElseThrow(() -> new ApiException("USER_NOT_FOUND"));
+
+    boolean isOwner = me.getId().equals(target.getId());
+    boolean isFollowing = follows.isFollowing(me.getId(), target.getId());
+    boolean isVisible = !target.isPrivate() || isOwner || isFollowing;
+    if (!isVisible) {
+      return new FeedResponse(List.of(), null);
+    }
+
+    int safeLimit = Math.max(1, Math.min(limit, 50));
+    var token = parseFollowingCursor(cursor);
+    var rows = activities.listMyScentPosts(
+      target.getId(),
+      me.getId(),
+      token == null ? null : token.createdAt(),
+      token == null ? null : token.id(),
+      PageRequest.of(0, safeLimit + 1)
+    );
+
+    boolean hasMore = rows.size() > safeLimit;
+    var pageRows = hasMore ? rows.subList(0, safeLimit) : rows;
+    var items = pageRows.stream().map(this::mapView).toList();
+
+    String nextCursor = null;
+    if (hasMore && !pageRows.isEmpty()) {
+      var last = pageRows.get(pageRows.size() - 1);
+      nextCursor = encodeFollowingCursor(last.getCreatedAt(), last.getId());
+    }
+    return new FeedResponse(items, nextCursor);
+  }
+
   private FeedItem mapView(ActivityEventRepository.ActivityFeedView row) {
     return new FeedItem(
       row.getId(),
@@ -194,7 +255,7 @@ public class FeedService {
     if (raw == null || raw.isBlank() || "ALL".equalsIgnoreCase(raw.trim())) return null;
     String normalized = raw.trim().toUpperCase();
     return switch (normalized) {
-      case "REVIEW_POSTED", "COLLECTION_ITEM_ADDED", "WISHLIST_ITEM_ADDED", "USER_FOLLOWED_USER", "REVIEW_REPOSTED" -> normalized;
+      case "REVIEW_POSTED", "SCENT_POSTED", "COLLECTION_ITEM_ADDED", "WISHLIST_ITEM_ADDED", "USER_FOLLOWED_USER", "REVIEW_REPOSTED" -> normalized;
       default -> throw new ApiException("INVALID_FEED_FILTER");
     };
   }

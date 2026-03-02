@@ -1,6 +1,7 @@
 package com.stacta.api.social;
 
 import com.stacta.api.social.dto.CreateReviewRequest;
+import com.stacta.api.social.dto.CreateScentPostRequest;
 import com.stacta.api.social.dto.CreateReviewCommentRequest;
 import com.stacta.api.social.dto.ReportReviewCommentRequest;
 import com.stacta.api.social.dto.ReviewCommentItem;
@@ -39,6 +40,14 @@ public class ReviewController {
     @Valid @RequestBody CreateReviewRequest request
   ) {
     reviewService.submit(jwt.getSubject(), request);
+  }
+
+  @PostMapping("/scent-of-day")
+  public void submitScentPost(
+    @AuthenticationPrincipal Jwt jwt,
+    @Valid @RequestBody CreateScentPostRequest request
+  ) {
+    reviewService.submitScentPost(jwt.getSubject(), request);
   }
 
   @DeleteMapping("/{reviewId}")

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Crown, Eye, Lock, LockOpen, Repeat2, Trash2 } from "lucide-react";
+import { Ellipsis, Heart, Lock, LockOpen, MessageCircle, Repeat2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
@@ -17,8 +17,8 @@ import { uploadImageFile } from "@/lib/api/uploads";
 import { deleteReview } from "@/lib/api/reviews";
 import { addTopFragrance, removeFromCollection, removeFromWishlist, removeTopFragrance } from "@/lib/api/collection";
 import { listFollowers, listFollowing, unfollowUser } from "@/lib/api/follows";
-import { listMyReviewFeed } from "@/lib/api/feed";
-import type { FeedItem, FollowConnectionItem, MeResponse } from "@/lib/api/types";
+import { listMyPostFeed, listMyReviewFeed } from "@/lib/api/feed";
+import type { CollectionItem, FeedItem, FollowConnectionItem, MeResponse } from "@/lib/api/types";
 import fragranceFallbackImg from "@/assets/illustrations/NotFound.png";
 
 const FALLBACK_FRAGRANCE_IMG = fragranceFallbackImg;
@@ -130,8 +130,36 @@ function PrivacyToggle({
   );
 }
 
-type ProfileTab = "overview" | "reviews" | "wishlist" | "community";
+type ProfileTab = "overview" | "reviews" | "wishlist" | "community" | "posts";
 type ConnectionsView = "followers" | "following";
+
+type ScentSelection = {
+  source: "FRAGELLA" | "COMMUNITY";
+  externalId: string;
+  name: string;
+};
+
+function parseScentSelections(payload: string | null | undefined): ScentSelection[] {
+  if (!payload) return [];
+  try {
+    const parsed = JSON.parse(payload) as Array<Record<string, unknown>>;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        const source: "FRAGELLA" | "COMMUNITY" =
+          String(item.source ?? "").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+        return {
+          source,
+        externalId: String(item.externalId ?? "").trim(),
+        name: String(item.name ?? "").trim(),
+        };
+      })
+      .filter((item) => item.externalId && item.name)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -145,9 +173,9 @@ export default function ProfilePage() {
   const [uploadingProfileImage, setUploadingProfileImage] = useState(false);
   const [draftAvatarFile, setDraftAvatarFile] = useState<File | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
-  const [removingCollectionKey, setRemovingCollectionKey] = useState<string | null>(null);
   const [removingWishlistKey, setRemovingWishlistKey] = useState<string | null>(null);
-  const [togglingTopKey, setTogglingTopKey] = useState<string | null>(null);
+  const [collectionActionItem, setCollectionActionItem] = useState<CollectionItem | null>(null);
+  const [collectionActionLoading, setCollectionActionLoading] = useState<string | null>(null);
   const [draftDisplayName, setDraftDisplayName] = useState("");
   const [draftBio, setDraftBio] = useState("");
   const [draftIsPrivate, setDraftIsPrivate] = useState(false);
@@ -166,6 +194,12 @@ export default function ProfilePage() {
   const [reviewsLoadingMore, setReviewsLoadingMore] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
+  const [postItems, setPostItems] = useState<FeedItem[]>([]);
+  const [postCursor, setPostCursor] = useState<string | null>(null);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsLoadingMore, setPostsLoadingMore] = useState(false);
+  const [postsError, setPostsError] = useState<string | null>(null);
+  const [postsLoaded, setPostsLoaded] = useState(false);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [pendingDeleteReviewId, setPendingDeleteReviewId] = useState<string | null>(null);
 
@@ -236,6 +270,13 @@ export default function ProfilePage() {
     setReviewsLoaded(false);
   }, [me?.reviewCount]);
 
+  useEffect(() => {
+    setPostItems([]);
+    setPostCursor(null);
+    setPostsError(null);
+    setPostsLoaded(false);
+  }, [me?.updatedAt]);
+
   const loadReviews = useCallback(async () => {
     setReviewsLoading(true);
     setReviewsError(null);
@@ -253,10 +294,32 @@ export default function ProfilePage() {
     }
   }, []);
 
+  const loadPosts = useCallback(async () => {
+    setPostsLoading(true);
+    setPostsError(null);
+    try {
+      const page = await listMyPostFeed({ limit: 20 });
+      setPostItems(page.items);
+      setPostCursor(page.nextCursor);
+      setPostsLoaded(true);
+    } catch (e: any) {
+      setPostsError(e?.message || "Failed to load your posts.");
+      setPostItems([]);
+      setPostCursor(null);
+    } finally {
+      setPostsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!me || activeTab !== "reviews" || reviewsLoaded || reviewsLoading) return;
     void loadReviews();
   }, [activeTab, loadReviews, me, reviewsLoaded, reviewsLoading]);
+
+  useEffect(() => {
+    if (!me || activeTab !== "posts" || postsLoaded || postsLoading) return;
+    void loadPosts();
+  }, [activeTab, loadPosts, me, postsLoaded, postsLoading]);
 
   async function onLoadMoreConnections() {
     if (!connectionsCursor || connectionsLoadingMore) return;
@@ -290,14 +353,33 @@ export default function ProfilePage() {
     }
   }
 
+  async function onLoadMorePosts() {
+    if (!postCursor || postsLoadingMore) return;
+    setPostsLoadingMore(true);
+    setPostsError(null);
+    try {
+      const page = await listMyPostFeed({ limit: 20, cursor: postCursor });
+      setPostItems((prev) => [...prev, ...page.items]);
+      setPostCursor(page.nextCursor);
+    } catch (e: any) {
+      setPostsError(e?.message || "Failed to load more posts.");
+    } finally {
+      setPostsLoadingMore(false);
+    }
+  }
+
   async function onDeleteReview(reviewId: string) {
     if (!reviewId) return;
+    const deletedWasReview = reviewItems.some((x) => x.id === reviewId);
     setDeletingReviewId(reviewId);
     setReviewsError(null);
     try {
       await deleteReview(reviewId);
       setReviewItems((prev) => prev.filter((x) => x.id !== reviewId));
-      setMe((prev) => prev ? { ...prev, reviewCount: Math.max(0, prev.reviewCount - 1) } : prev);
+      setPostItems((prev) => prev.filter((x) => x.id !== reviewId));
+      if (deletedWasReview) {
+        setMe((prev) => prev ? { ...prev, reviewCount: Math.max(0, prev.reviewCount - 1) } : prev);
+      }
     } catch (e: any) {
       setReviewsError(e?.message || "Failed to delete review.");
     } finally {
@@ -398,9 +480,8 @@ export default function ProfilePage() {
   async function onRemoveCollectionItem(source: string, externalId: string) {
     if (!me) return;
     const sourceUpper = source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
-    const key = `${sourceUpper}:${externalId}`;
-    setRemovingCollectionKey(key);
     setError(null);
+    setCollectionActionLoading("remove");
     try {
       await removeFromCollection({ source: sourceUpper, externalId });
       setMe((prev) => {
@@ -417,53 +498,81 @@ export default function ProfilePage() {
           collectionCount: Math.max(0, prev.collectionCount - 1),
         };
       });
+      setCollectionActionItem(null);
     } catch (e: any) {
       setError(e?.message || "Failed to remove from collection.");
     } finally {
-      setRemovingCollectionKey(null);
+      setCollectionActionLoading(null);
     }
   }
 
-  async function onToggleTopFragrance(source: string, externalId: string) {
+  async function onRemoveFromTopFragrance(source: string, externalId: string) {
     if (!me) return;
     const sourceUpper = source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
-    const key = `${sourceUpper}:${externalId}`;
-    const item = me.collectionItems.find((x) => x.source.toUpperCase() === sourceUpper && x.externalId === externalId);
-    if (!item) return;
-
     const exists = me.topFragrances.some((x) => x.source.toUpperCase() === sourceUpper && x.externalId === externalId);
-    if (!exists && me.topFragrances.length >= 3) {
+    if (!exists) return;
+
+    setError(null);
+    setCollectionActionLoading("remove-top");
+    try {
+      await removeTopFragrance({ source: sourceUpper, externalId });
+      setMe((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          topFragrances: prev.topFragrances.filter(
+            (x) => !(x.source.toUpperCase() === sourceUpper && x.externalId === externalId)
+          ),
+        };
+      });
+      setCollectionActionItem(null);
+    } catch (e: any) {
+      setError(e?.message || "Failed to update top fragrances.");
+    } finally {
+      setCollectionActionLoading(null);
+    }
+  }
+
+  async function onSetTopFragrancePosition(item: CollectionItem, position: 1 | 2 | 3) {
+    if (!me) return;
+    const normalizedSource = item.source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+    const keyFor = (x: { source: string; externalId: string }) => `${x.source.toUpperCase()}:${x.externalId}`;
+    const selectedKey = `${normalizedSource}:${item.externalId}`;
+
+    const targetItem = me.collectionItems.find((x) => keyFor(x) === selectedKey);
+    if (!targetItem) return;
+
+    const topWithoutTarget = me.topFragrances.filter((x) => keyFor(x) !== selectedKey);
+    const insertAt = Math.max(0, Math.min(position - 1, topWithoutTarget.length));
+    const desiredTop = [...topWithoutTarget];
+    desiredTop.splice(insertAt, 0, targetItem);
+    const nextTop = desiredTop.slice(0, 3);
+
+    if (
+      nextTop.length === me.topFragrances.length &&
+      nextTop.every((x, idx) => keyFor(x) === keyFor(me.topFragrances[idx]))
+    ) {
+      setCollectionActionItem(null);
       return;
     }
 
     setError(null);
-    setTogglingTopKey(key);
+    setCollectionActionLoading(`set-${position}`);
     try {
-      if (exists) {
-        await removeTopFragrance({ source: sourceUpper, externalId });
-        setMe((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            topFragrances: prev.topFragrances.filter(
-              (x) => !(x.source.toUpperCase() === sourceUpper && x.externalId === externalId)
-            ),
-          };
-        });
-      } else {
-        await addTopFragrance({ source: sourceUpper, externalId });
-        setMe((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            topFragrances: [...prev.topFragrances, item],
-          };
-        });
+      for (const topItem of me.topFragrances) {
+        const topSource = topItem.source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+        await removeTopFragrance({ source: topSource, externalId: topItem.externalId });
       }
+      for (const topItem of nextTop) {
+        const topSource = topItem.source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+        await addTopFragrance({ source: topSource, externalId: topItem.externalId });
+      }
+      setMe((prev) => (prev ? { ...prev, topFragrances: nextTop } : prev));
+      setCollectionActionItem(null);
     } catch (e: any) {
-      setError(e?.message || "Failed to update top fragrances.");
+      setError(e?.message || "Failed to set top fragrance position.");
     } finally {
-      setTogglingTopKey(null);
+      setCollectionActionLoading(null);
     }
   }
 
@@ -518,6 +627,12 @@ export default function ProfilePage() {
           }
         : undefined,
     });
+  }
+
+  function topFragranceRank(item: CollectionItem): number {
+    if (!me) return -1;
+    const key = `${item.source.toUpperCase()}:${item.externalId}`;
+    return me.topFragrances.findIndex((x) => `${x.source.toUpperCase()}:${x.externalId}` === key);
   }
 
   function openFeedFragrance(item: FeedItem) {
@@ -781,6 +896,7 @@ export default function ProfilePage() {
                       { id: "reviews" as const, label: "Reviews", count: me.reviewCount },
                       { id: "wishlist" as const, label: "Wishlist", count: me.wishlistCount },
                       { id: "community" as const, label: "Community", count: me.communityFragranceCount },
+                      { id: "posts" as const, label: "Posts", count: undefined },
                     ].map((tab) => (
                       <button
                         key={tab.id}
@@ -816,6 +932,12 @@ export default function ProfilePage() {
                           {tab.id === "community" ? (
                             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM8 13a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM8 14c-2.7 0-5 1.3-5 3v2h10v-2c0-1.7-2.3-3-5-3zM16 12c-2 0-4 1-4 2.5V19h9v-1.5c0-1.5-2.2-2.5-5-2.5z" />
+                            </svg>
+                          ) : null}
+                          {tab.id === "posts" ? (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M4 5h16v14H4z" />
+                              <path d="M8 9h8M8 13h8" />
                             </svg>
                           ) : null}
                         </span>
@@ -897,117 +1019,56 @@ export default function ProfilePage() {
                           {me.collectionItems.map((item) => (
                             <div
                               key={`${item.source}:${item.externalId}`}
-                              className="rounded-2xl border border-white/10 bg-black/20 p-3"
+                              className="relative rounded-2xl border border-white/10 bg-black/20 p-4 transition hover:bg-white/[0.06]"
                             >
-                              <div className="flex flex-col gap-3">
-                                <button
-                                  type="button"
-                                  className="flex min-w-0 items-start gap-3 text-left"
-                                  onClick={() => openFragranceDetail(item.source, item.externalId)}
-                                >
-                                  <img
-                                    src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
-                                    alt={item.name}
-                                    className="h-20 w-16 rounded-xl border border-white/15 object-cover bg-white/5"
-                                    loading="lazy"
-                                    onError={(e) => {
-                                      const img = e.currentTarget;
-                                      if (img.dataset.fallbackApplied === "1") return;
-                                      img.dataset.fallbackApplied = "1";
-                                      img.src = FALLBACK_FRAGRANCE_IMG;
-                                    }}
-                                  />
-                                  <div className="min-w-0">
-                                    <div className="text-sm font-semibold leading-snug text-white/95 break-words">{item.name}</div>
-                                    <div className="mt-1 text-xs text-white/65 break-words">{item.brand || "—"}</div>
-                                    <div className="mt-1 flex items-center gap-2 text-amber-100/80">
-                                      {Number(item.userRating ?? 0) >= 1 ? (
-                                        <>
-                                          <HalfStars value={Number(item.userRating)} />
-                                          <span className="text-xs">{fragranceRatingLabel(item.userRating)}</span>
-                                        </>
-                                      ) : (
-                                        <span className="text-xs">Not rated</span>
-                                      )}
-                                    </div>
-                                    {me.topFragrances.some(
-                                      (x) => x.source.toUpperCase() === item.source.toUpperCase() && x.externalId === item.externalId
-                                    ) ? (
-                                      <div className="mt-1 inline-flex items-center rounded-full border border-amber-300/30 bg-amber-300/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-100">
-                                        Top 3
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                </button>
-                                <div className="grid w-full grid-cols-2 gap-2">
-                                  <Button
-                                    variant="secondary"
-                                    className="h-8 w-full rounded-lg border border-white/12 bg-white/8 px-3 text-xs font-medium text-white/90 hover:bg-white/14"
-                                    onClick={() => openFragranceDetail(item.source, item.externalId)}
-                                  >
-                                    <span className="inline-flex items-center gap-1.5">
-                                      <Eye className="h-3.5 w-3.5" />
-                                      <span>View</span>
-                                    </span>
-                                  </Button>
-                                  <Button
-                                    variant="secondary"
-                                    className="h-8 w-full rounded-lg border border-red-300/20 bg-red-400/10 px-3 text-xs font-medium text-red-100 hover:bg-red-400/18"
-                                    disabled={removingCollectionKey === `${item.source}:${item.externalId}`}
-                                    onClick={() => onRemoveCollectionItem(item.source, item.externalId)}
-                                  >
-                                    {removingCollectionKey === `${item.source}:${item.externalId}` ? (
-                                      <span className="inline-flex items-center gap-1.5">
-                                        <InlineSpinner className="h-3 w-3" />
-                                        <span>Removing</span>
-                                      </span>
+                              <button
+                                type="button"
+                                className="flex w-full min-w-0 items-start gap-4 text-left transition hover:opacity-95"
+                                onClick={() => openFragranceDetail(item.source, item.externalId)}
+                              >
+                                <img
+                                  src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                                  alt={item.name}
+                                  className="h-24 w-20 rounded-xl border border-white/15 object-cover bg-white/5"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    const img = e.currentTarget;
+                                    if (img.dataset.fallbackApplied === "1") return;
+                                    img.dataset.fallbackApplied = "1";
+                                    img.src = FALLBACK_FRAGRANCE_IMG;
+                                  }}
+                                />
+                                <div className="min-w-0 pr-10">
+                                  <div className="text-base font-semibold leading-snug text-white/95 break-words">{item.name}</div>
+                                  <div className="mt-1 text-sm text-white/65 break-words">{item.brand || "—"}</div>
+                                  <div className="mt-2 flex items-center gap-2 text-amber-100/80">
+                                    {Number(item.userRating ?? 0) >= 1 ? (
+                                      <>
+                                        <HalfStars value={Number(item.userRating)} />
+                                        <span className="text-sm">{fragranceRatingLabel(item.userRating)}</span>
+                                      </>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1.5">
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                        <span>Remove</span>
-                                      </span>
+                                      <span className="text-sm">Not rated</span>
                                     )}
-                                  </Button>
-                                  <Button
-                                    variant="secondary"
-                                    className="col-span-2 h-8 w-full rounded-lg border border-amber-300/30 bg-amber-300/12 px-3 text-xs font-medium text-amber-100 hover:bg-amber-300/18 disabled:opacity-60"
-                                    disabled={
-                                      togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ||
-                                      (!me.topFragrances.some(
-                                        (x) => x.source.toUpperCase() === item.source.toUpperCase() && x.externalId === item.externalId
-                                      ) &&
-                                        me.topFragrances.length >= 3)
-                                    }
-                                    onClick={() => onToggleTopFragrance(item.source, item.externalId)}
-                                  >
-                                    {me.topFragrances.some(
-                                      (x) => x.source.toUpperCase() === item.source.toUpperCase() && x.externalId === item.externalId
-                                    )
-                                      ? (togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ? (
-                                        <span className="inline-flex items-center gap-1.5">
-                                          <InlineSpinner className="h-3 w-3" />
-                                          <span>Updating</span>
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1.5">
-                                          <Crown className="h-3.5 w-3.5" />
-                                          <span>In Top 3</span>
-                                        </span>
-                                      ))
-                                      : (togglingTopKey === `${item.source.toUpperCase()}:${item.externalId}` ? (
-                                        <span className="inline-flex items-center gap-1.5">
-                                          <InlineSpinner className="h-3 w-3" />
-                                          <span>Updating</span>
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1.5">
-                                          <Crown className="h-3.5 w-3.5" />
-                                          <span>Set Top 3</span>
-                                        </span>
-                                      ))}
-                                  </Button>
+                                  </div>
+                                  {topFragranceRank(item) >= 0 ? (
+                                    <div className="mt-2 inline-flex items-center rounded-full border border-amber-300/30 bg-amber-300/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-100">
+                                      Top {topFragranceRank(item) + 1}
+                                    </div>
+                                  ) : null}
                                 </div>
-                              </div>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Manage ${item.name}`}
+                                className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center text-white/65 transition hover:text-white"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCollectionActionItem(item);
+                                }}
+                              >
+                                <Ellipsis className="h-4 w-4" />
+                              </button>
                             </div>
                           ))}
                           </div>
@@ -1043,7 +1104,7 @@ export default function ProfilePage() {
                             timeAgo={timeAgo(item.createdAt)}
                             onOpenUser={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/profile" } } })}
                             onOpenFragrance={() => openFeedFragrance(item)}
-                            onOpenComments={() => navigate(`/reviews/${encodeURIComponent(item.id)}`, { state: { from: { pathname: "/profile" } } })}
+                            onOpenComments={() => navigate(`/posts/${encodeURIComponent(item.id)}`, { state: { from: { pathname: "/profile" } } })}
                             onDelete={() => setPendingDeleteReviewId(item.id)}
                             deleting={deletingReviewId === item.id}
                           />
@@ -1100,6 +1161,153 @@ export default function ProfilePage() {
                         void onDeleteReview(pendingDeleteReviewId);
                       }}
                     />
+                  </div>
+                ) : null}
+
+                {activeTab === "posts" ? (
+                  <div>
+                    <div className="text-sm font-semibold">Posts</div>
+                    <div className="mt-1 text-xs text-white/60">Your scent-of-the-day posts.</div>
+                    {postsError ? (
+                      <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                        {postsError}
+                      </div>
+                    ) : null}
+                    {postsLoading ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                        <LoadingSpinner label="Loading your posts..." />
+                      </div>
+                    ) : postItems.length === 0 ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        No posts yet. Share your scent of the day from Home.
+                      </div>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {postItems.map((item) => (
+                          <article
+                            key={item.id}
+                            className="cursor-pointer rounded-3xl border border-white/15 bg-[linear-gradient(140deg,rgba(34,211,238,0.08),rgba(244,114,182,0.07),rgba(0,0,0,0.28))] p-4"
+                            onClick={(e) => {
+                              const target = e.target as HTMLElement | null;
+                              if (target?.closest("button,a,input,textarea,select,[role='button']")) return;
+                              navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/profile" } } });
+                            }}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <button
+                                className="flex min-w-0 items-center gap-2 text-left"
+                                onClick={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/profile" } } })}
+                              >
+                                <img
+                                  src={item.actorAvatarUrl?.trim() ? item.actorAvatarUrl : DEFAULT_AVATAR_IMG}
+                                  alt={`${item.actorUsername} avatar`}
+                                  className="h-9 w-9 rounded-full border border-white/15 object-cover"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    const img = e.currentTarget;
+                                    if (img.dataset.fallbackApplied === "1") return;
+                                    img.dataset.fallbackApplied = "1";
+                                    img.src = DEFAULT_AVATAR_IMG;
+                                  }}
+                                />
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-semibold text-white">{item.actorDisplayName || item.actorUsername}</div>
+                                  <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>
+                                </div>
+                              </button>
+                              <span className="rounded-full border border-cyan-300/30 bg-cyan-300/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100">
+                                Scent of the day
+                              </span>
+                            </div>
+
+                            <div className="mt-3 text-sm text-white/88">Today&apos;s scent picks</div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {parseScentSelections(item.reviewPerformance).map((scent) => (
+                                <button
+                                  key={`${item.id}:${scent.source}:${scent.externalId}`}
+                                  type="button"
+                                  className="rounded-full border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/90 transition hover:bg-white/14"
+                                  onClick={() => openFragranceDetail(scent.source, scent.externalId)}
+                                >
+                                  {scent.name}
+                                </button>
+                              ))}
+                            </div>
+                            {item.reviewExcerpt ? (
+                              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/80">{item.reviewExcerpt}</p>
+                            ) : null}
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/55">
+                              <div>{timeAgo(item.createdAt)}</div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  title="Like"
+                                  aria-label="Like post"
+                                  className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                                  disabled
+                                >
+                                  <Heart className="h-4 w-4" />
+                                  <span>{item.likesCount}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Comment"
+                                  aria-label="Comment on post"
+                                  className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                                  onClick={() => navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/profile" } } })}
+                                >
+                                  <MessageCircle className="h-4 w-4" />
+                                  <span>{item.commentsCount}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Repost"
+                                  aria-label="Repost post"
+                                  className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                                  disabled
+                                >
+                                  <Repeat2 className="h-4 w-4" />
+                                  <span>{item.repostsCount}</span>
+                                </button>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {postCursor ? (
+                        <Button
+                          variant="secondary"
+                          className="h-9 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                          onClick={onLoadMorePosts}
+                          disabled={postsLoadingMore}
+                        >
+                          {postsLoadingMore ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <InlineSpinner className="h-3 w-3" />
+                              <span>Loading</span>
+                            </span>
+                          ) : "Load more posts"}
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="secondary"
+                        className="h-9 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                        onClick={() => {
+                          setPostItems([]);
+                          setPostCursor(null);
+                          setPostsLoaded(false);
+                          void loadPosts();
+                        }}
+                        disabled={postsLoading}
+                      >
+                        Refresh
+                      </Button>
+                      <Button className="h-9 rounded-xl px-4" onClick={() => navigate("/home")}>
+                        Create new post
+                      </Button>
+                    </div>
                   </div>
                 ) : null}
 
@@ -1235,6 +1443,89 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 ) : null}
+
+                <Dialog
+                  open={Boolean(collectionActionItem)}
+                  onOpenChange={(open) => {
+                    if (!open && !collectionActionLoading) setCollectionActionItem(null);
+                  }}
+                >
+                  <DialogContent className="w-[calc(100vw-24px)] max-w-md rounded-3xl border-white/15 bg-[#090a0f] p-0 text-white">
+                    <DialogHeader className="border-b border-white/10 px-5 py-4">
+                      <DialogTitle className="text-base">
+                        Manage Collection Item
+                      </DialogTitle>
+                    </DialogHeader>
+                    {collectionActionItem ? (
+                      <div className="space-y-4 p-5">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                          <div className="text-sm font-semibold text-white">{collectionActionItem.name}</div>
+                          <div className="mt-1 text-xs text-white/60">{collectionActionItem.brand || "—"}</div>
+                          {topFragranceRank(collectionActionItem) >= 0 ? (
+                            <div className="mt-2 inline-flex rounded-full border border-amber-300/30 bg-amber-300/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-100">
+                              Top {topFragranceRank(collectionActionItem) + 1}
+                            </div>
+                          ) : (
+                            <div className="mt-2 inline-flex rounded-full border border-white/15 bg-white/8 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/70">
+                              Not in Top 3
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="text-xs uppercase tracking-[0.12em] text-white/60">Top 3</div>
+                          {([1, 2, 3] as const).map((slot) => (
+                            <Button
+                              key={`set-top-${slot}`}
+                              variant="secondary"
+                              className="h-9 w-full justify-start rounded-xl border border-amber-300/30 bg-amber-300/12 px-3 text-xs font-medium text-amber-100 hover:bg-amber-300/20 disabled:opacity-60"
+                              disabled={Boolean(collectionActionLoading)}
+                              onClick={() => void onSetTopFragrancePosition(collectionActionItem, slot)}
+                            >
+                              {collectionActionLoading === `set-${slot}` ? (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <InlineSpinner className="h-3 w-3" />
+                                  <span>Setting Top {slot}</span>
+                                </span>
+                              ) : `Set #${slot} fragrance`}
+                            </Button>
+                          ))}
+                          {topFragranceRank(collectionActionItem) >= 0 ? (
+                            <Button
+                              variant="secondary"
+                              className="h-9 w-full justify-start rounded-xl border border-white/15 bg-white/8 px-3 text-xs font-medium text-white/80 hover:bg-white/14 disabled:opacity-60"
+                              disabled={Boolean(collectionActionLoading)}
+                              onClick={() => void onRemoveFromTopFragrance(collectionActionItem.source, collectionActionItem.externalId)}
+                            >
+                              {collectionActionLoading === "remove-top" ? (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <InlineSpinner className="h-3 w-3" />
+                                  <span>Removing from Top 3</span>
+                                </span>
+                              ) : "Remove from Top 3"}
+                            </Button>
+                          ) : null}
+                        </div>
+
+                        <Separator className="bg-white/10" />
+
+                        <Button
+                          variant="secondary"
+                          className="h-9 w-full justify-start rounded-xl border border-red-300/20 bg-red-400/10 px-3 text-xs font-medium text-red-100 hover:bg-red-400/18 disabled:opacity-60"
+                          disabled={Boolean(collectionActionLoading)}
+                          onClick={() => void onRemoveCollectionItem(collectionActionItem.source, collectionActionItem.externalId)}
+                        >
+                          {collectionActionLoading === "remove" ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <InlineSpinner className="h-3 w-3" />
+                              <span>Removing from collection</span>
+                            </span>
+                          ) : "Remove from collection"}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </DialogContent>
+                </Dialog>
 
                 <Dialog open={showConnections} onOpenChange={setShowConnections}>
                   <DialogContent className="w-[calc(100vw-24px)] max-w-3xl rounded-3xl border-white/15 bg-[#090a0f] p-0">

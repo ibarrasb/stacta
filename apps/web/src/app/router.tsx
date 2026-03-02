@@ -148,6 +148,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "/posts/:reviewId",
+        element: (
+          <RequireAuth>
+            <ReviewThreadPage />
+          </RequireAuth>
+        ),
+      },
+      {
         path: "/reviews/:reviewId",
         element: (
           <RequireAuth>

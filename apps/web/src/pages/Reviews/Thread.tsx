@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Ellipsis, Flag, MessageCircle, Reply, Trash2 } from "lucide-react";
+import { Ellipsis, Flag, Heart, MessageCircle, Repeat2, Reply, Trash2 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReviewCard from "@/components/feed/ReviewCard";
 import LoadingSpinner from "@/components/ui/loading-spinner";
@@ -27,6 +27,34 @@ const COMMENT_REPORT_REASONS = [
   { value: "HARASSMENT", label: "Harassment" },
   { value: "OTHER", label: "Other" },
 ] as const;
+
+type ScentSelection = {
+  source: "FRAGELLA" | "COMMUNITY";
+  externalId: string;
+  name: string;
+};
+
+function parseScentSelections(payload: string | null | undefined): ScentSelection[] {
+  if (!payload) return [];
+  try {
+    const parsed = JSON.parse(payload) as Array<Record<string, unknown>>;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        const source: "FRAGELLA" | "COMMUNITY" =
+          String(item.source ?? "").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+        return {
+          source,
+          externalId: String(item.externalId ?? "").trim(),
+          name: String(item.name ?? "").trim(),
+        };
+      })
+      .filter((item) => item.externalId && item.name)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
 
 function timeAgo(iso: string) {
   const then = new Date(iso).getTime();
@@ -341,8 +369,8 @@ export default function ReviewThreadPage() {
         <div className="mb-4 rounded-3xl border border-white/15 bg-black/30 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Review thread</div>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight">Comments</h1>
+              <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Post thread</div>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight">Post</h1>
             </div>
             <Button
               variant="secondary"
@@ -364,24 +392,106 @@ export default function ReviewThreadPage() {
           </div>
         ) : !thread ? (
           <div className="rounded-2xl border border-white/12 bg-black/25 px-4 py-3 text-sm text-white/65">
-            Review not found.
+            Post not found.
           </div>
         ) : (
           <div className="space-y-4">
-            <ReviewCard
-              item={thread.review}
-              timeAgo={timeAgo(thread.review.createdAt)}
-              onOpenUser={() => navigate(`/u/${thread.review.actorUsername}`)}
-              onOpenFragrance={() => {
-                if (!thread.review.fragranceExternalId) return;
-                const source = String(thread.review.fragranceSource ?? "FRAGELLA").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
-                navigate(`/fragrances/${encodeURIComponent(thread.review.fragranceExternalId)}?source=${source}`);
-              }}
-              onToggleLike={() => onToggleReviewLike(thread.review.sourceReviewId, Boolean(thread.review.viewerHasLiked))}
-              onToggleRepost={() => onToggleReviewRepost(thread.review.sourceReviewId, Boolean(thread.review.viewerHasReposted))}
-              liking={likingReviewId === thread.review.sourceReviewId}
-              reposting={repostingReviewId === thread.review.sourceReviewId}
-            />
+            {thread.review.type === "SCENT_POSTED" ? (
+              <article className="rounded-3xl border border-white/15 bg-[linear-gradient(140deg,rgba(34,211,238,0.08),rgba(244,114,182,0.07),rgba(0,0,0,0.28))] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    className="flex min-w-0 items-center gap-2 text-left"
+                    onClick={() => navigate(`/u/${thread.review.actorUsername}`)}
+                  >
+                    <img
+                      src={thread.review.actorAvatarUrl?.trim() ? thread.review.actorAvatarUrl : DEFAULT_AVATAR_IMG}
+                      alt={`${thread.review.actorUsername} avatar`}
+                      className="h-9 w-9 rounded-full border border-white/15 object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (img.dataset.fallbackApplied === "1") return;
+                        img.dataset.fallbackApplied = "1";
+                        img.src = DEFAULT_AVATAR_IMG;
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-white">
+                        {thread.review.actorDisplayName || thread.review.actorUsername}
+                      </div>
+                      <div className="truncate text-xs text-white/60">@{thread.review.actorUsername}</div>
+                    </div>
+                  </button>
+                  <span className="rounded-full border border-cyan-300/30 bg-cyan-300/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100">
+                    Scent of the day
+                  </span>
+                </div>
+
+                <div className="mt-3 text-sm text-white/88">Today&apos;s scent picks</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {parseScentSelections(thread.review.reviewPerformance).map((scent) => (
+                    <button
+                      key={`${thread.review.id}:${scent.source}:${scent.externalId}`}
+                      type="button"
+                      className="rounded-full border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/90 transition hover:bg-white/14"
+                      onClick={() => navigate(`/fragrances/${encodeURIComponent(scent.externalId)}?source=${scent.source}`)}
+                    >
+                      {scent.name}
+                    </button>
+                  ))}
+                </div>
+                {thread.review.reviewExcerpt ? (
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/80">{thread.review.reviewExcerpt}</p>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/55">
+                  <div>{timeAgo(thread.review.createdAt)}</div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      title="Like"
+                      aria-label="Like post"
+                      className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                      onClick={() => onToggleReviewLike(thread.review.sourceReviewId, Boolean(thread.review.viewerHasLiked))}
+                      disabled={likingReviewId === thread.review.sourceReviewId}
+                    >
+                      <Heart className="h-4 w-4" />
+                      <span>{thread.review.likesCount}</span>
+                    </button>
+                    <span className="inline-flex h-7 items-center justify-center gap-1 text-white/60">
+                      <MessageCircle className="h-4 w-4" />
+                      <span>{thread.review.commentsCount}</span>
+                    </span>
+                    <button
+                      type="button"
+                      title="Repost"
+                      aria-label="Repost post"
+                      className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                      onClick={() => onToggleReviewRepost(thread.review.sourceReviewId, Boolean(thread.review.viewerHasReposted))}
+                      disabled={repostingReviewId === thread.review.sourceReviewId}
+                    >
+                      <Repeat2 className="h-4 w-4" />
+                      <span>{thread.review.repostsCount}</span>
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ) : (
+              <ReviewCard
+                item={thread.review}
+                timeAgo={timeAgo(thread.review.createdAt)}
+                onOpenUser={() => navigate(`/u/${thread.review.actorUsername}`)}
+                onOpenFragrance={() => {
+                  if (!thread.review.fragranceExternalId) return;
+                  const source = String(thread.review.fragranceSource ?? "FRAGELLA").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+                  navigate(`/fragrances/${encodeURIComponent(thread.review.fragranceExternalId)}?source=${source}`);
+                }}
+                onToggleLike={() => onToggleReviewLike(thread.review.sourceReviewId, Boolean(thread.review.viewerHasLiked))}
+                onToggleRepost={() => onToggleReviewRepost(thread.review.sourceReviewId, Boolean(thread.review.viewerHasReposted))}
+                liking={likingReviewId === thread.review.sourceReviewId}
+                reposting={repostingReviewId === thread.review.sourceReviewId}
+              />
+            )}
 
             <section ref={composerRef} className="rounded-3xl border border-white/15 bg-black/25 p-4 backdrop-blur-xl">
               <div className="mb-2 text-sm font-semibold text-white">
@@ -461,7 +571,7 @@ export default function ReviewThreadPage() {
             onClick={focusComposer}
           >
             <MessageCircle className="mr-1.5 h-4 w-4" />
-            Comment
+            Reply
           </Button>
         </div>
       ) : null}

@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Heart, MessageCircle, Repeat2 } from "lucide-react";
+import { ArrowLeft, Check, Heart, MessageCircle, Paperclip, PenSquare, Repeat2, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
 import ReviewCard from "@/components/feed/ReviewCard";
 import { getMe } from "@/lib/api/me";
-import { deleteReview, likeReview, repostReview, unlikeReview, unrepostReview } from "@/lib/api/reviews";
-import { getUnreadNotificationsCount } from "@/lib/api/notifications";
+import { deleteReview, likeReview, repostReview, submitScentPost, unlikeReview, unrepostReview } from "@/lib/api/reviews";
 import { listFeed, type FeedFilter, type FeedTab } from "@/lib/api/feed";
-import type { FeedItem } from "@/lib/api/types";
+import type { CollectionItem, FeedItem } from "@/lib/api/types";
+import fragranceFallbackImg from "@/assets/illustrations/NotFound.png";
 
 const DEFAULT_AVATAR_IMG = "/stacta.png";
+const FALLBACK_FRAGRANCE_IMG = fragranceFallbackImg;
 
 function timeAgo(iso: string) {
   const then = new Date(iso).getTime();
@@ -29,6 +31,7 @@ function timeAgo(iso: string) {
 
 function eventLabel(item: FeedItem) {
   if (item.type === "REVIEW_POSTED") return "posted a review";
+  if (item.type === "SCENT_POSTED") return "shared scent of the day";
   if (item.type === "COLLECTION_ITEM_ADDED") return "added to collection";
   if (item.type === "WISHLIST_ITEM_ADDED") return "added to wishlist";
   if (item.type === "REVIEW_REPOSTED") return "reposted a review";
@@ -37,6 +40,7 @@ function eventLabel(item: FeedItem) {
 
 function kindPill(type: FeedItem["type"]) {
   if (type === "REVIEW_POSTED") return "Review";
+  if (type === "SCENT_POSTED") return "Post";
   if (type === "COLLECTION_ITEM_ADDED") return "Collection";
   if (type === "WISHLIST_ITEM_ADDED") return "Wishlist";
   if (type === "REVIEW_REPOSTED") return "Repost";
@@ -55,9 +59,38 @@ function collectionTagLabel(tag: string | null | undefined) {
   return null;
 }
 
+type ScentSelection = {
+  source: "FRAGELLA" | "COMMUNITY";
+  externalId: string;
+  name: string;
+};
+
+type ComposerPostType = "SCENT_OF_DAY" | "QUESTION" | "GENERAL";
+
+function parseScentSelections(payload: string | null | undefined): ScentSelection[] {
+  if (!payload) return [];
+  try {
+    const parsed = JSON.parse(payload) as Array<Record<string, unknown>>;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        const source: "FRAGELLA" | "COMMUNITY" =
+          String(item.source ?? "").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+        return {
+          source,
+        externalId: String(item.externalId ?? "").trim(),
+        name: String(item.name ?? "").trim(),
+        };
+      })
+      .filter((item) => item.externalId && item.name)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
-  const [unreadCount, setUnreadCount] = useState(0);
   const [tab, setTab] = useState<FeedTab>("FOLLOWING");
   const [filter, setFilter] = useState<FeedFilter>("ALL");
   const [items, setItems] = useState<FeedItem[]>([]);
@@ -66,24 +99,21 @@ export default function HomePage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewerUsername, setViewerUsername] = useState<string | null>(null);
+  const [collectionItems, setCollectionItems] = useState<CollectionItem[]>([]);
+  const [composerPostType, setComposerPostType] = useState<ComposerPostType>("GENERAL");
+  const [postText, setPostText] = useState("");
+  const [selectedScentKeys, setSelectedScentKeys] = useState<string[]>([]);
+  const [posting, setPosting] = useState(false);
   const [pendingDeleteReviewId, setPendingDeleteReviewId] = useState<string | null>(null);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [likingReviewId, setLikingReviewId] = useState<string | null>(null);
   const [repostingReviewId, setRepostingReviewId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getUnreadNotificationsCount()
-      .then((res) => {
-        if (!cancelled) setUnreadCount(Math.max(0, Number(res?.count ?? 0)));
-      })
-      .catch(() => {
-        if (!cancelled) setUnreadCount(0);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [mobileComposerOpen, setMobileComposerOpen] = useState(false);
+  const [mobileScentPickerView, setMobileScentPickerView] = useState(false);
+  const [scentPickerOpen, setScentPickerOpen] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,10 +121,12 @@ export default function HomePage() {
       .then((me) => {
         if (cancelled) return;
         setViewerUsername(me.username ?? null);
+        setCollectionItems(me.collectionItems ?? []);
       })
       .catch(() => {
         if (cancelled) return;
         setViewerUsername(null);
+        setCollectionItems([]);
       });
     return () => {
       cancelled = true;
@@ -120,6 +152,18 @@ export default function HomePage() {
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  useEffect(() => {
+    function onPointerDown(event: MouseEvent) {
+      if (!filterMenuRef.current) return;
+      if (filterMenuRef.current.contains(event.target as Node)) return;
+      setFilterMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, []);
 
   async function loadMore() {
     if (!cursor || loadingMore) return;
@@ -205,52 +249,234 @@ export default function HomePage() {
     }
   }
 
-  const unreadLabel = useMemo(() => {
-    if (unreadCount <= 0) return null;
-    return unreadCount > 99 ? "99+" : String(unreadCount);
-  }, [unreadCount]);
+  const selectedScents = useMemo(() => {
+    const selectedSet = new Set(selectedScentKeys);
+    return collectionItems.filter((item) => selectedSet.has(`${item.source.toUpperCase()}:${item.externalId}`));
+  }, [collectionItems, selectedScentKeys]);
+
+  function toggleScent(item: CollectionItem) {
+    const key = `${item.source.toUpperCase()}:${item.externalId}`;
+    setSelectedScentKeys((prev) => {
+      if (prev.includes(key)) return prev.filter((x) => x !== key);
+      if (prev.length >= 3) return prev;
+      return [...prev, key];
+    });
+  }
+
+  async function onSubmitScentPost() {
+    if (!selectedScents.length || posting) return;
+    setPosting(true);
+    setError(null);
+    try {
+      await submitScentPost({
+        text: postText.trim() || null,
+        scents: selectedScents.map((item) => ({
+          source: item.source.toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA",
+          externalId: item.externalId,
+        })),
+      });
+      setComposerPostType("GENERAL");
+      setPostText("");
+      setSelectedScentKeys([]);
+      setMobileComposerOpen(false);
+      setMobileScentPickerView(false);
+      setScentPickerOpen(false);
+      await loadFeed();
+    } catch (e: any) {
+      setError(e?.message || "Failed to post scent of the day.");
+    } finally {
+      setPosting(false);
+    }
+  }
 
   const filterOptions: Array<{ value: FeedFilter; label: string }> = [
     { value: "ALL", label: "All" },
     { value: "REVIEW_POSTED", label: "Reviews" },
+    { value: "SCENT_POSTED", label: "Posts" },
     { value: "COLLECTION_ITEM_ADDED", label: "Collection" },
     { value: "WISHLIST_ITEM_ADDED", label: "Wishlist" },
     { value: "USER_FOLLOWED_USER", label: "Follows" },
   ];
 
-  const feedHeading = tab === "FOLLOWING" ? "Following activity" : "Popular activity";
-  const feedDescription =
-    tab === "FOLLOWING"
-      ? "Reviews and social activity from people you follow."
-      : "Trending reviews and social activity from the community.";
+  const composerTypeOptions: Array<{ value: ComposerPostType; label: string; description: string }> = [
+    { value: "GENERAL", label: "General", description: "Quick status, thought, or update." },
+    { value: "SCENT_OF_DAY", label: "Scent of day", description: "Pick up to three fragrances from your collection." },
+    { value: "QUESTION", label: "Question", description: "Ask for feedback, advice, or opinions." },
+  ];
+  const selectedComposerType = composerTypeOptions.find((option) => option.value === composerPostType) ?? composerTypeOptions[0];
+  const selectedFilterLabel = filterOptions.find((option) => option.value === filter)?.label ?? "All";
+  function applyFilter(next: FeedFilter) {
+    setFilter(next);
+    setFilterMenuOpen(false);
+    setMobileFilterOpen(false);
+  }
+  function openScentPicker() {
+    if (mobileComposerOpen) {
+      setMobileScentPickerView(true);
+      return;
+    }
+    setScentPickerOpen(true);
+  }
+  function closeScentPicker() {
+    setScentPickerOpen(false);
+  }
+  const composerForm = (
+    <>
+      <div className="space-y-3">
+        <div className="text-xs uppercase tracking-[0.14em] text-white/55">Create post</div>
+        <div className="no-scrollbar overflow-x-auto">
+          <div className="flex min-w-max gap-2">
+            {composerTypeOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={[
+                  "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                  composerPostType === option.value
+                    ? "border-cyan-300/55 bg-cyan-300/16 text-cyan-50"
+                    : "border-white/18 bg-white/5 text-white/80 hover:bg-white/10",
+                ].join(" ")}
+                onClick={() => setComposerPostType(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="text-xs text-white/60">{selectedComposerType.description}</div>
+        <textarea
+          value={postText}
+          onChange={(e) => setPostText(e.target.value)}
+          maxLength={1200}
+          placeholder={
+            composerPostType === "SCENT_OF_DAY"
+              ? "What are you wearing today?"
+              : "What do you want to share?"
+          }
+          className="min-h-28 w-full rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300/45"
+        />
+        <div className="flex flex-col gap-2 text-[11px] text-white/45 sm:flex-row sm:items-center sm:justify-between">
+          <div>{postText.trim().length}/1200</div>
+          <div className="flex items-center justify-between gap-2 sm:justify-start">
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/[0.04] text-white/75 transition hover:bg-white/[0.1] hover:text-white"
+              aria-label="Attach image"
+              title="Attach image (coming soon)"
+              disabled
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
+            {composerPostType !== "SCENT_OF_DAY" ? (
+              <div className="text-right sm:text-left">Publishing for this type is coming next.</div>
+            ) : (
+              <div className="text-right sm:text-left">Image uploads are coming next.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {composerPostType === "SCENT_OF_DAY" ? (
+        <div className="mt-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs uppercase tracking-[0.12em] text-white/60">Select up to 3 fragrances</div>
+            <div className="text-xs text-cyan-100/75">{selectedScents.length}/3 selected</div>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <Button
+              variant="secondary"
+              className="h-8 rounded-lg border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/18"
+              onClick={openScentPicker}
+              disabled={!collectionItems.length}
+            >
+              Select fragrances
+            </Button>
+            {selectedScents.length ? (
+              <button
+                type="button"
+                className="text-xs text-white/60 transition hover:text-white"
+                onClick={() => setSelectedScentKeys([])}
+              >
+                Clear selection
+              </button>
+            ) : null}
+          </div>
+          {!collectionItems.length ? (
+            <div className="mt-2 rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white/70">
+              Add fragrances to your collection first.
+            </div>
+          ) : !selectedScents.length ? (
+            <div className="mt-2 rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white/70">
+              No fragrances selected yet.
+            </div>
+          ) : (
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {selectedScents.map((item) => {
+                const key = `${item.source.toUpperCase()}:${item.externalId}`;
+                return (
+                  <div
+                    key={key}
+                    className="flex items-center gap-3 rounded-xl border border-cyan-300/35 bg-cyan-300/12 px-3 py-2 text-left"
+                  >
+                    <img
+                      src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                      alt={item.name}
+                      className="h-12 w-12 rounded-lg border border-white/15 object-cover bg-white/5"
+                      loading="lazy"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (img.dataset.fallbackApplied === "1") return;
+                        img.dataset.fallbackApplied = "1";
+                        img.src = FALLBACK_FRAGRANCE_IMG;
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-white/95">{item.name}</div>
+                      <div className="truncate text-xs text-white/65">{item.brand || "—"}</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-md border border-white/15 px-2 py-1 text-[11px] text-white/70 transition hover:bg-white/10 hover:text-white"
+                      onClick={() => toggleScent(item)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <div className="mt-3 hidden md:flex md:justify-end">
+        <Button
+          className="h-9 rounded-xl px-4"
+          disabled={posting || composerPostType !== "SCENT_OF_DAY" || !selectedScents.length}
+          onClick={() => {
+            if (composerPostType !== "SCENT_OF_DAY") return;
+            void onSubmitScentPost();
+          }}
+        >
+          {posting ? (
+            <span className="inline-flex items-center gap-2">
+              <InlineSpinner className="h-3.5 w-3.5" />
+              <span>Posting</span>
+            </span>
+          ) : composerPostType === "SCENT_OF_DAY" ? "Post scent of the day" : "Coming soon"}
+        </Button>
+      </div>
+    </>
+  );
 
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
       <div className="mx-auto max-w-7xl px-4 pb-10">
-        <div className="mb-5 rounded-3xl border border-white/15 bg-black/30 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Home feed</div>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight">{feedHeading}</h1>
-              <p className="mt-1 text-sm text-white/65">{feedDescription}</p>
-            </div>
-            <Button
-              variant="secondary"
-              className="relative h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-              onClick={() => navigate("/notifications")}
-            >
-              Notifications
-              {unreadLabel ? (
-                <span className="absolute -right-2 -top-2 rounded-full border border-white/25 bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                  {unreadLabel}
-                </span>
-              ) : null}
-            </Button>
-          </div>
-
-          <div className="mt-4 space-y-1">
-            <div className="no-scrollbar overflow-x-auto" role="tablist" aria-label="Feed scope">
-              <div className="flex min-w-max items-center gap-6 border-b border-white/10 px-1">
+        <div className="mb-4">
+          <div className="mb-1 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-white/10 pb-1">
+            <div aria-hidden="true" />
+            <div className="no-scrollbar overflow-x-auto justify-self-center" role="tablist" aria-label="Feed scope">
+              <div className="flex min-w-max items-center gap-6 px-1">
                 {[
                   { id: "FOLLOWING" as const, label: "Following" },
                   { id: "POPULAR" as const, label: "Popular" },
@@ -288,34 +514,43 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
-
-            <div className="no-scrollbar overflow-x-auto" role="tablist" aria-label="Feed event filter">
-              <div className="flex min-w-max items-center gap-6 border-b border-white/10 px-1">
-                {filterOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="tab"
-                    aria-selected={filter === option.value}
-                    onClick={() => setFilter(option.value)}
-                    className={[
-                      "group relative inline-flex items-center gap-2 py-3 text-sm font-medium transition",
-                      filter === option.value ? "text-white" : "text-white/65 hover:text-white",
-                    ].join(" ")}
-                  >
-                    <span>{option.label}</span>
-                    <span
-                      className={[
-                        "absolute -bottom-px left-0 right-0 h-[2px] rounded-full transition-all duration-200",
-                        filter === option.value ? "bg-cyan-300/95" : "bg-transparent group-hover:bg-white/30",
-                      ].join(" ")}
-                    />
-                  </button>
-                ))}
-              </div>
+            <div ref={filterMenuRef} className="relative shrink-0 justify-self-end">
+              <button
+                type="button"
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 text-xs font-semibold text-white transition hover:bg-white/16"
+                onClick={() => {
+                  if (window.matchMedia("(max-width: 767px)").matches) {
+                    setMobileFilterOpen(true);
+                    return;
+                  }
+                  setFilterMenuOpen((prev) => !prev);
+                }}
+                aria-expanded={filterMenuOpen || mobileFilterOpen}
+                aria-haspopup="menu"
+              >
+                <SlidersHorizontal className="h-4 w-4 text-cyan-200" />
+                <span>{selectedFilterLabel}</span>
+              </button>
+              {filterMenuOpen ? (
+                <div className="absolute right-0 z-30 mt-2 w-44 rounded-xl border border-white/15 bg-[#101114]/95 p-1.5 shadow-[0_14px_28px_rgba(0,0,0,0.45)] backdrop-blur">
+                  {filterOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium text-white/85 transition hover:bg-white/10"
+                      onClick={() => applyFilter(option.value)}
+                    >
+                      <span>{option.label}</span>
+                      {filter === option.value ? <Check className="h-3.5 w-3.5 text-cyan-200" /> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            <div className="px-1 pt-1 text-[11px] text-white/45 sm:hidden">Swipe right to see more tabs.</div>
           </div>
+        </div>
+        <div className="mb-5 hidden rounded-3xl border border-white/15 bg-black/30 p-3 sm:p-5 md:block">
+          <div className="px-0 sm:px-1">{composerForm}</div>
         </div>
 
         {error ? (
@@ -379,11 +614,118 @@ export default function HomePage() {
                         ? () => onToggleReviewRepost(item.sourceReviewId, Boolean(item.viewerHasReposted))
                         : undefined
                     }
-                    onOpenComments={() => navigate(`/reviews/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/home" } } })}
+                    onOpenComments={() => navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/home" } } })}
                     liking={likingReviewId === item.sourceReviewId}
                     reposting={repostingReviewId === item.sourceReviewId}
                     deleting={deletingReviewId === item.id}
                   />
+                ) : item.type === "SCENT_POSTED" ? (
+                  <article
+                    key={item.id}
+                    className="cursor-pointer rounded-3xl border border-white/15 bg-[linear-gradient(140deg,rgba(34,211,238,0.08),rgba(244,114,182,0.07),rgba(0,0,0,0.28))] p-4"
+                    style={{ animationDelay: `${Math.min(idx * 28, 260)}ms` }}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement | null;
+                      if (target?.closest("button,a,input,textarea,select,[role='button']")) return;
+                      navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/home" } } });
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <button
+                        className="flex min-w-0 items-center gap-2 text-left"
+                        onClick={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/home" } } })}
+                      >
+                        <img
+                          src={item.actorAvatarUrl?.trim() ? item.actorAvatarUrl : DEFAULT_AVATAR_IMG}
+                          alt={`${item.actorUsername} avatar`}
+                          className="h-9 w-9 rounded-full border border-white/15 object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            if (img.dataset.fallbackApplied === "1") return;
+                            img.dataset.fallbackApplied = "1";
+                            img.src = DEFAULT_AVATAR_IMG;
+                          }}
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-white">{item.actorDisplayName || item.actorUsername}</div>
+                          <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>
+                        </div>
+                      </button>
+                      <span className="rounded-full border border-cyan-300/30 bg-cyan-300/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100">
+                        Scent of the day
+                      </span>
+                    </div>
+
+                    <div className="mt-3 text-sm text-white/88">
+                      Today&apos;s scent picks
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {parseScentSelections(item.reviewPerformance).map((scent) => (
+                        <button
+                          key={`${item.id}:${scent.source}:${scent.externalId}`}
+                          type="button"
+                          className="rounded-full border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/90 transition hover:bg-white/14"
+                          onClick={() => navigate(`/fragrances/${encodeURIComponent(scent.externalId)}?source=${scent.source}`, {
+                            state: {
+                              fragrance: {
+                                source: scent.source,
+                                externalId: scent.externalId,
+                                name: scent.name,
+                                brand: null,
+                                imageUrl: null,
+                              },
+                              from: { pathname: "/home" },
+                            },
+                          })}
+                        >
+                          {scent.name}
+                        </button>
+                      ))}
+                    </div>
+                    {item.reviewExcerpt ? (
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/80">{item.reviewExcerpt}</p>
+                    ) : null}
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/55">
+                      <div>{timeAgo(item.createdAt)}</div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          title="Like"
+                          aria-label="Like post"
+                          className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                          onClick={() => onToggleReviewLike(item.sourceReviewId, Boolean(item.viewerHasLiked))}
+                          disabled={likingReviewId === item.sourceReviewId || (viewerUsername?.toLowerCase() === item.actorUsername.toLowerCase())}
+                        >
+                          <Heart className="h-4 w-4" />
+                          <span>{item.likesCount}</span>
+                        </button>
+                        <button
+                          type="button"
+                          title="Comment"
+                          aria-label="Comment on post"
+                          className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                          onClick={() => navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/home" } } })}
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          <span>{item.commentsCount}</span>
+                        </button>
+                        <button
+                          type="button"
+                          title="Repost"
+                          aria-label="Repost post"
+                          className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                          onClick={() => onToggleReviewRepost(item.sourceReviewId, Boolean(item.viewerHasReposted))}
+                          disabled={repostingReviewId === item.sourceReviewId || (viewerUsername?.toLowerCase() === item.actorUsername.toLowerCase())}
+                        >
+                          <Repeat2 className="h-4 w-4" />
+                          <span>{item.repostsCount}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </article>
                 ) : (
                   <article
                     key={item.id}
@@ -531,6 +873,243 @@ export default function HomePage() {
           </aside>
         </div>
       </div>
+      <button
+        type="button"
+        className="fixed bottom-20 right-4 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full border border-cyan-200/45 bg-cyan-300/20 text-cyan-50 shadow-[0_14px_34px_rgba(34,211,238,0.25)] transition hover:bg-cyan-300/30 md:hidden"
+        onClick={() => {
+          setMobileScentPickerView(false);
+          setMobileComposerOpen(true);
+        }}
+        aria-label="Create post"
+        title="Create post"
+      >
+        <PenSquare className="h-6 w-6" />
+      </button>
+      <Dialog open={mobileComposerOpen} onOpenChange={setMobileComposerOpen}>
+        <DialogContent className="h-screen w-screen max-w-none rounded-none border-0 bg-[#090a0f] p-0 text-white md:hidden [&>button]:hidden">
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <button
+                type="button"
+                className="inline-flex h-9 w-9 items-center justify-center text-white/80 transition hover:text-white"
+                onClick={() => {
+                  if (mobileScentPickerView) {
+                    setMobileScentPickerView(false);
+                    return;
+                  }
+                  setMobileComposerOpen(false);
+                }}
+                aria-label="Go back"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div className="text-sm font-semibold">{mobileScentPickerView ? "Select fragrances" : "Create post"}</div>
+              {mobileScentPickerView ? (
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center rounded-lg border border-cyan-300/35 bg-cyan-300/18 px-3 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/28"
+                  onClick={() => setMobileScentPickerView(false)}
+                >
+                  Done
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center rounded-lg border border-cyan-300/35 bg-cyan-300/18 px-3 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/28 disabled:cursor-not-allowed disabled:opacity-55"
+                  disabled={posting || composerPostType !== "SCENT_OF_DAY" || !selectedScents.length}
+                  onClick={() => {
+                    if (composerPostType !== "SCENT_OF_DAY") return;
+                    void onSubmitScentPost();
+                  }}
+                >
+                  {posting ? "Posting" : "Post"}
+                </button>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {mobileScentPickerView ? (
+                <div>
+                  <div className="mb-3 text-xs text-white/60">Pick up to 3 for your scent stack.</div>
+                  {!collectionItems.length ? (
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white/70">
+                      Add fragrances to your collection first.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {collectionItems.map((item) => {
+                        const key = `${item.source.toUpperCase()}:${item.externalId}`;
+                        const selected = selectedScentKeys.includes(key);
+                        const reachedLimit = selectedScentKeys.length >= 3 && !selected;
+                        const rank = selected ? selectedScentKeys.indexOf(key) + 1 : null;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className={[
+                              "group relative overflow-hidden rounded-xl border text-left transition",
+                              selected
+                                ? "border-cyan-300/45 bg-cyan-300/14"
+                                : "border-white/12 bg-white/[0.03] hover:bg-white/[0.07]",
+                              reachedLimit ? "cursor-not-allowed opacity-55" : "",
+                            ].join(" ")}
+                            onClick={() => {
+                              if (reachedLimit) return;
+                              toggleScent(item);
+                            }}
+                            disabled={reachedLimit}
+                          >
+                            <img
+                              src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                              alt={item.name}
+                              className="h-36 w-full border-b border-white/10 object-cover bg-white/5"
+                              loading="lazy"
+                              onError={(e) => {
+                                const img = e.currentTarget;
+                                if (img.dataset.fallbackApplied === "1") return;
+                                img.dataset.fallbackApplied = "1";
+                                img.src = FALLBACK_FRAGRANCE_IMG;
+                              }}
+                            />
+                            {rank ? (
+                              <span className="absolute left-2 top-2 rounded-full border border-cyan-200/50 bg-cyan-300/30 px-2 py-0.5 text-[11px] font-semibold text-cyan-50">
+                                #{rank}
+                              </span>
+                            ) : null}
+                            <div className="p-3">
+                              <div className="line-clamp-1 text-sm font-semibold text-white/95">{item.name}</div>
+                              <div className="line-clamp-1 text-xs text-white/65">{item.brand || "—"}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="mt-4 flex items-center justify-start gap-2">
+                    <button
+                      type="button"
+                      className="text-xs text-white/60 transition hover:text-white"
+                      onClick={() => setSelectedScentKeys([])}
+                      disabled={!selectedScentKeys.length}
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                </div>
+              ) : composerForm}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={scentPickerOpen}
+        onOpenChange={(next) => {
+          setScentPickerOpen(next);
+        }}
+      >
+        <DialogContent className="w-[calc(100vw-24px)] max-h-[85vh] max-w-3xl overflow-hidden rounded-2xl border border-white/15 bg-[#090a0f] p-0 text-white [&>button]:hidden">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+            <div>
+              <div className="text-sm font-semibold">Select fragrances</div>
+              <div className="text-xs text-white/60">Pick up to 3 for your scent stack.</div>
+            </div>
+            <div className="text-xs text-cyan-100/80">{selectedScents.length}/3 selected</div>
+          </div>
+          <div className="max-h-[62vh] overflow-y-auto p-4">
+            {!collectionItems.length ? (
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white/70">
+                Add fragrances to your collection first.
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {collectionItems.map((item) => {
+                  const key = `${item.source.toUpperCase()}:${item.externalId}`;
+                  const selected = selectedScentKeys.includes(key);
+                  const reachedLimit = selectedScentKeys.length >= 3 && !selected;
+                  const rank = selected ? selectedScentKeys.indexOf(key) + 1 : null;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className={[
+                        "group relative overflow-hidden rounded-xl border text-left transition",
+                        selected
+                          ? "border-cyan-300/45 bg-cyan-300/14"
+                          : "border-white/12 bg-white/[0.03] hover:bg-white/[0.07]",
+                        reachedLimit ? "cursor-not-allowed opacity-55" : "",
+                      ].join(" ")}
+                      onClick={() => {
+                        if (reachedLimit) return;
+                        toggleScent(item);
+                      }}
+                      disabled={reachedLimit}
+                    >
+                      <img
+                        src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
+                        alt={item.name}
+                        className="h-36 w-full border-b border-white/10 object-cover bg-white/5"
+                        loading="lazy"
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          if (img.dataset.fallbackApplied === "1") return;
+                          img.dataset.fallbackApplied = "1";
+                          img.src = FALLBACK_FRAGRANCE_IMG;
+                        }}
+                      />
+                      {rank ? (
+                        <span className="absolute left-2 top-2 rounded-full border border-cyan-200/50 bg-cyan-300/30 px-2 py-0.5 text-[11px] font-semibold text-cyan-50">
+                          #{rank}
+                        </span>
+                      ) : null}
+                      <div className="p-3">
+                        <div className="line-clamp-1 text-sm font-semibold text-white/95">{item.name}</div>
+                        <div className="line-clamp-1 text-xs text-white/65">{item.brand || "—"}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-white/10 px-4 py-3">
+            <button
+              type="button"
+              className="text-xs text-white/60 transition hover:text-white"
+              onClick={() => setSelectedScentKeys([])}
+              disabled={!selectedScentKeys.length}
+            >
+              Clear all
+            </button>
+            <Button
+              className="h-9 rounded-lg px-4"
+              onClick={closeScentPicker}
+            >
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
+        <DialogContent className="md:hidden left-0 top-auto bottom-0 w-screen max-w-none translate-x-0 rounded-t-2xl rounded-b-none border-x-0 border-b-0 border-t border-white/15 bg-[#090a0f] p-0 text-white shadow-[0_-20px_50px_rgba(0,0,0,0.55)] transition-all duration-300 ease-out data-[state=open]:translate-y-0 data-[state=closed]:translate-y-full [&>button]:hidden">
+          <div className="border-b border-white/10 px-4 py-2.5">
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/20" />
+            <div className="text-sm font-semibold">Filter feed</div>
+            <div className="text-xs text-white/60">Choose what appears in your feed.</div>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto p-3">
+            {filterOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm text-white/90 transition hover:bg-white/10"
+                onClick={() => applyFilter(option.value)}
+              >
+                <span>{option.label}</span>
+                {filter === option.value ? <Check className="h-4 w-4 text-cyan-200" /> : null}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={Boolean(pendingDeleteReviewId)}
         title="Delete review?"

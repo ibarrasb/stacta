@@ -2,15 +2,18 @@ package com.stacta.api.social;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stacta.api.collection.UserCollectionItemRepository;
 import com.stacta.api.config.ApiException;
 import com.stacta.api.fragrance.Fragrance;
 import com.stacta.api.fragrance.FragranceRepository;
 import com.stacta.api.social.dto.CreateReviewRequest;
+import com.stacta.api.social.dto.CreateScentPostRequest;
 import com.stacta.api.social.dto.ReviewLikeResponse;
 import com.stacta.api.social.dto.ReviewRepostResponse;
 import com.stacta.api.user.User;
 import com.stacta.api.user.UserRepository;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -26,19 +29,22 @@ public class ReviewService {
   private final ObjectMapper objectMapper;
   private final JdbcTemplate jdbc;
   private final FragranceRepository fragrances;
+  private final UserCollectionItemRepository collectionItems;
 
   public ReviewService(
     ActivityEventRepository activities,
     UserRepository users,
     ObjectMapper objectMapper,
     JdbcTemplate jdbc,
-    FragranceRepository fragrances
+    FragranceRepository fragrances,
+    UserCollectionItemRepository collectionItems
   ) {
     this.activities = activities;
     this.users = users;
     this.objectMapper = objectMapper;
     this.jdbc = jdbc;
     this.fragrances = fragrances;
+    this.collectionItems = collectionItems;
   }
 
   @Transactional
@@ -74,10 +80,57 @@ public class ReviewService {
   }
 
   @Transactional
+  public void submitScentPost(String viewerSub, CreateScentPostRequest req) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    if (req.scents() == null || req.scents().isEmpty() || req.scents().size() > 3) {
+      throw new ApiException("INVALID_REVIEW");
+    }
+
+    List<Map<String, String>> scents = req.scents().stream()
+      .map(selection -> {
+        String source = normalizeSource(selection.source());
+        String externalId = safeTrim(selection.externalId()).toLowerCase(Locale.ROOT);
+        if (externalId.isEmpty()) throw new ApiException("INVALID_REVIEW");
+
+        var owned = collectionItems.findByUserIdAndFragranceSourceAndFragranceExternalId(me.getId(), source, externalId)
+          .orElseThrow(() -> new ApiException("INVALID_REVIEW"));
+        Map<String, String> item = new LinkedHashMap<>();
+        item.put("source", source);
+        item.put("externalId", externalId);
+        item.put("name", safeTrim(owned.getFragranceName()));
+        item.put("brand", safeTrim(owned.getFragranceBrand()));
+        return item;
+      })
+      .toList();
+
+    String excerpt = safeTrim(req.text());
+    if (excerpt.length() > 1200) {
+      excerpt = excerpt.substring(0, 1200);
+    }
+    if (excerpt.isEmpty()) {
+      excerpt = "Scent of the day";
+    }
+
+    String joinedNames = scents.stream()
+      .map(item -> safeTrim(item.get("name")))
+      .filter(name -> !name.isEmpty())
+      .reduce((a, b) -> a + " + " + b)
+      .orElse("Scent of the day");
+
+    ActivityEvent event = new ActivityEvent();
+    event.setActorUserId(me.getId());
+    event.setType("SCENT_POSTED");
+    event.setFragranceName(joinedNames);
+    event.setReviewExcerpt(excerpt);
+    event.setReviewPerformance(toJsonOrNullRaw(scents));
+    activities.save(event);
+  }
+
+  @Transactional
   public void delete(String viewerSub, UUID reviewId) {
     User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
     ActivityEvent event = activities.findById(reviewId).orElseThrow(() -> new ApiException("REVIEW_NOT_FOUND"));
-    if (!"REVIEW_POSTED".equalsIgnoreCase(String.valueOf(event.getType()))) {
+    if (!isEngageablePostType(event.getType())) {
       throw new ApiException("REVIEW_NOT_FOUND");
     }
     if (!me.getId().equals(event.getActorUserId())) {
@@ -89,7 +142,7 @@ public class ReviewService {
   @Transactional
   public ReviewLikeResponse like(String viewerSub, UUID reviewId) {
     User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
-    ActivityEvent review = getReviewOrThrow(reviewId);
+    ActivityEvent review = getEngageablePostOrThrow(reviewId);
     if (me.getId().equals(review.getActorUserId())) {
       throw new ApiException("REVIEW_FORBIDDEN");
     }
@@ -115,7 +168,7 @@ public class ReviewService {
   @Transactional
   public ReviewLikeResponse unlike(String viewerSub, UUID reviewId) {
     User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
-    ActivityEvent review = getReviewOrThrow(reviewId);
+    ActivityEvent review = getEngageablePostOrThrow(reviewId);
     if (me.getId().equals(review.getActorUserId())) {
       throw new ApiException("REVIEW_FORBIDDEN");
     }
@@ -141,7 +194,7 @@ public class ReviewService {
   @Transactional
   public ReviewRepostResponse repost(String viewerSub, UUID reviewId) {
     User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
-    ActivityEvent review = getReviewOrThrow(reviewId);
+    ActivityEvent review = getEngageablePostOrThrow(reviewId);
     if (me.getId().equals(review.getActorUserId())) {
       throw new ApiException("REVIEW_FORBIDDEN");
     }
@@ -166,7 +219,7 @@ public class ReviewService {
   @Transactional
   public ReviewRepostResponse unrepost(String viewerSub, UUID reviewId) {
     User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
-    ActivityEvent review = getReviewOrThrow(reviewId);
+    ActivityEvent review = getEngageablePostOrThrow(reviewId);
     if (me.getId().equals(review.getActorUserId())) {
       throw new ApiException("REVIEW_FORBIDDEN");
     }
@@ -197,12 +250,17 @@ public class ReviewService {
     return new ReviewRepostResponse(getRepostsCount(reviewId), false);
   }
 
-  private ActivityEvent getReviewOrThrow(UUID reviewId) {
+  private ActivityEvent getEngageablePostOrThrow(UUID reviewId) {
     ActivityEvent event = activities.findById(reviewId).orElseThrow(() -> new ApiException("REVIEW_NOT_FOUND"));
-    if (!"REVIEW_POSTED".equalsIgnoreCase(String.valueOf(event.getType()))) {
+    if (!isEngageablePostType(event.getType())) {
       throw new ApiException("REVIEW_NOT_FOUND");
     }
     return event;
+  }
+
+  private boolean isEngageablePostType(String type) {
+    String normalized = safeTrim(type).toUpperCase(Locale.ROOT);
+    return "REVIEW_POSTED".equals(normalized) || "SCENT_POSTED".equals(normalized);
   }
 
   private int getLikesCount(UUID reviewId) {
@@ -331,6 +389,15 @@ public class ReviewService {
     if (map == null || map.isEmpty()) return null;
     try {
       return objectMapper.writeValueAsString(map);
+    } catch (JsonProcessingException e) {
+      throw new ApiException("INVALID_REVIEW");
+    }
+  }
+
+  private String toJsonOrNullRaw(Object value) {
+    if (value == null) return null;
+    try {
+      return objectMapper.writeValueAsString(value);
     } catch (JsonProcessingException e) {
       throw new ApiException("INVALID_REVIEW");
     }

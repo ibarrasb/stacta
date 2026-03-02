@@ -247,7 +247,7 @@ public class UserService {
         f.getExternalId(),
         f.getName(),
         f.getBrand(),
-        f.getImageUrl(),
+        imageUrlResolver.resolveWithFallback(f.getImageObjectKey(), f.getImageUrl()),
         null,
         null,
         f.getCreatedAt() == null ? null : f.getCreatedAt().toInstant()

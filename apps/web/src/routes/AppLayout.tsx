@@ -22,6 +22,7 @@ export default function AppLayout() {
     pathname.startsWith("/notifications") ||
     pathname === "/settings" ||
     pathname.startsWith("/u/") ||
+    pathname.startsWith("/posts/") ||
     pathname.startsWith("/reviews/") ||
     pathname.startsWith("/fragrances/");
 
@@ -30,7 +31,7 @@ export default function AppLayout() {
       <GlobalBackground />
       {isAuthedRoute ? <Navbar /> : null}
       <Suspense fallback={<RouteFallback />}>
-        <div className={isAuthedRoute ? "pt-28 pb-[env(safe-area-inset-bottom)] sm:pt-24" : ""}>
+        <div className={isAuthedRoute ? "pt-24 pb-[calc(env(safe-area-inset-bottom)+86px)] sm:pt-24 sm:pb-[env(safe-area-inset-bottom)]" : ""}>
           <Outlet />
         </div>
       </Suspense>

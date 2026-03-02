@@ -14,8 +14,23 @@ export type SubmitReviewRequest = {
   occasion?: Record<string, number>;
 };
 
+export type SubmitScentPostRequest = {
+  text?: string | null;
+  scents: Array<{
+    source: "FRAGELLA" | "COMMUNITY";
+    externalId: string;
+  }>;
+};
+
 export function submitReview(body: SubmitReviewRequest) {
   return authedFetch<void>("/api/v1/reviews", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function submitScentPost(body: SubmitScentPostRequest) {
+  return authedFetch<void>("/api/v1/reviews/scent-of-day", {
     method: "POST",
     body: JSON.stringify(body),
   });

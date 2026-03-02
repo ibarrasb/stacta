@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { Eye } from "lucide-react";
+import { Heart, MessageCircle, Repeat2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
@@ -10,7 +10,7 @@ import InlineSpinner from "@/components/ui/inline-spinner";
 import ReviewCard from "@/components/feed/ReviewCard";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
 import { followUser, unfollowUser } from "@/lib/api/follows";
-import { listUserReviewFeed } from "@/lib/api/feed";
+import { listUserPostFeed, listUserReviewFeed } from "@/lib/api/feed";
 import { likeReview, repostReview, unlikeReview, unrepostReview } from "@/lib/api/reviews";
 import { getUserProfile } from "@/lib/api/users";
 import type { FeedItem, UserProfileResponse } from "@/lib/api/types";
@@ -75,7 +75,35 @@ function HalfStars({ value }: { value: number }) {
   );
 }
 
-type PublicProfileTab = "overview" | "reviews" | "wishlist" | "community";
+type PublicProfileTab = "overview" | "reviews" | "posts" | "wishlist" | "community";
+
+type ScentSelection = {
+  source: "FRAGELLA" | "COMMUNITY";
+  externalId: string;
+  name: string;
+};
+
+function parseScentSelections(payload: string | null | undefined): ScentSelection[] {
+  if (!payload) return [];
+  try {
+    const parsed = JSON.parse(payload) as Array<Record<string, unknown>>;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        const source: "FRAGELLA" | "COMMUNITY" =
+          String(item.source ?? "").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+        return {
+          source,
+          externalId: String(item.externalId ?? "").trim(),
+          name: String(item.name ?? "").trim(),
+        };
+      })
+      .filter((item) => item.externalId && item.name)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
 
 export default function PublicProfilePage() {
   const navigate = useNavigate();
@@ -94,6 +122,12 @@ export default function PublicProfilePage() {
   const [reviewsLoadingMore, setReviewsLoadingMore] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
+  const [postItems, setPostItems] = useState<FeedItem[]>([]);
+  const [postCursor, setPostCursor] = useState<string | null>(null);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsLoadingMore, setPostsLoadingMore] = useState(false);
+  const [postsError, setPostsError] = useState<string | null>(null);
+  const [postsLoaded, setPostsLoaded] = useState(false);
   const [likingReviewId, setLikingReviewId] = useState<string | null>(null);
   const [repostingReviewId, setRepostingReviewId] = useState<string | null>(null);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
@@ -145,6 +179,10 @@ export default function PublicProfilePage() {
     setReviewCursor(null);
     setReviewsError(null);
     setReviewsLoaded(false);
+    setPostItems([]);
+    setPostCursor(null);
+    setPostsError(null);
+    setPostsLoaded(false);
   }, [profile?.username, profile?.reviewCount]);
 
   useEffect(() => {
@@ -177,6 +215,36 @@ export default function PublicProfilePage() {
     };
   }, [activeTab, profile, reviewsLoaded]);
 
+  useEffect(() => {
+    if (!profile || activeTab !== "posts" || !profile.isVisible || postsLoaded) return;
+    let cancelled = false;
+    const targetUsername = profile.username;
+
+    async function loadPosts() {
+      setPostsLoading(true);
+      setPostsError(null);
+      try {
+        const page = await listUserPostFeed(targetUsername, { limit: 20 });
+        if (cancelled) return;
+        setPostItems(page.items);
+        setPostCursor(page.nextCursor);
+        setPostsLoaded(true);
+      } catch (e: any) {
+        if (cancelled) return;
+        setPostsError(e?.message || "Failed to load posts.");
+        setPostItems([]);
+        setPostCursor(null);
+      } finally {
+        if (!cancelled) setPostsLoading(false);
+      }
+    }
+
+    void loadPosts();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, postsLoaded, profile]);
+
   async function onLoadMoreReviews() {
     if (!profile || !reviewCursor || reviewsLoadingMore) return;
     setReviewsLoadingMore(true);
@@ -189,6 +257,21 @@ export default function PublicProfilePage() {
       setReviewsError(e?.message || "Failed to load more reviews.");
     } finally {
       setReviewsLoadingMore(false);
+    }
+  }
+
+  async function onLoadMorePosts() {
+    if (!profile || !postCursor || postsLoadingMore) return;
+    setPostsLoadingMore(true);
+    setPostsError(null);
+    try {
+      const page = await listUserPostFeed(profile.username, { limit: 20, cursor: postCursor });
+      setPostItems((prev) => [...prev, ...page.items]);
+      setPostCursor(page.nextCursor);
+    } catch (e: any) {
+      setPostsError(e?.message || "Failed to load more posts.");
+    } finally {
+      setPostsLoadingMore(false);
     }
   }
 
@@ -241,6 +324,60 @@ export default function PublicProfilePage() {
         return { ...item, viewerHasReposted: currentlyReposted, repostsCount: revertedReposts };
       }));
       setReviewsError(e?.message || "Failed to update repost.");
+    } finally {
+      setRepostingReviewId(null);
+    }
+  }
+
+  async function onTogglePostLike(reviewId: string, currentlyLiked: boolean) {
+    if (!reviewId || likingReviewId === reviewId) return;
+    setLikingReviewId(reviewId);
+    setPostItems((prev) => prev.map((item) => {
+      if (item.sourceReviewId !== reviewId) return item;
+      const nextLikes = Math.max(0, item.likesCount + (currentlyLiked ? -1 : 1));
+      return { ...item, viewerHasLiked: !currentlyLiked, likesCount: nextLikes };
+    }));
+    try {
+      const res = currentlyLiked ? await unlikeReview(reviewId) : await likeReview(reviewId);
+      setPostItems((prev) => prev.map((item) => (
+        item.sourceReviewId === reviewId
+          ? { ...item, viewerHasLiked: res.viewerHasLiked, likesCount: res.likesCount }
+          : item
+      )));
+    } catch (e: any) {
+      setPostItems((prev) => prev.map((item) => {
+        if (item.sourceReviewId !== reviewId) return item;
+        const revertedLikes = Math.max(0, item.likesCount + (currentlyLiked ? 1 : -1));
+        return { ...item, viewerHasLiked: currentlyLiked, likesCount: revertedLikes };
+      }));
+      setPostsError(e?.message || "Failed to update like.");
+    } finally {
+      setLikingReviewId(null);
+    }
+  }
+
+  async function onTogglePostRepost(reviewId: string, currentlyReposted: boolean) {
+    if (!reviewId || repostingReviewId === reviewId) return;
+    setRepostingReviewId(reviewId);
+    setPostItems((prev) => prev.map((item) => {
+      if (item.sourceReviewId !== reviewId) return item;
+      const nextReposts = Math.max(0, item.repostsCount + (currentlyReposted ? -1 : 1));
+      return { ...item, viewerHasReposted: !currentlyReposted, repostsCount: nextReposts };
+    }));
+    try {
+      const res = currentlyReposted ? await unrepostReview(reviewId) : await repostReview(reviewId);
+      setPostItems((prev) => prev.map((item) => (
+        item.sourceReviewId === reviewId
+          ? { ...item, viewerHasReposted: res.viewerHasReposted, repostsCount: res.repostsCount }
+          : item
+      )));
+    } catch (e: any) {
+      setPostItems((prev) => prev.map((item) => {
+        if (item.sourceReviewId !== reviewId) return item;
+        const revertedReposts = Math.max(0, item.repostsCount + (currentlyReposted ? 1 : -1));
+        return { ...item, viewerHasReposted: currentlyReposted, repostsCount: revertedReposts };
+      }));
+      setPostsError(e?.message || "Failed to update repost.");
     } finally {
       setRepostingReviewId(null);
     }
@@ -502,6 +639,7 @@ export default function PublicProfilePage() {
                     {[
                       { id: "overview" as const, label: "Overview", count: profile.isVisible ? profile.collectionCount : undefined },
                       { id: "reviews" as const, label: "Reviews", count: profile.isVisible ? profile.reviewCount : undefined },
+                      { id: "posts" as const, label: "Posts", count: undefined },
                       { id: "wishlist" as const, label: "Wishlist", count: profile.isVisible ? profile.wishlistCount : undefined },
                       { id: "community" as const, label: "Community", count: profile.isVisible ? profile.communityFragranceCount : undefined },
                     ].map((tab) => (
@@ -529,6 +667,11 @@ export default function PublicProfilePage() {
                             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M4 5h16v12H8l-4 4V5z" />
                               <path d="M8 9h8M8 13h5" />
+                            </svg>
+                          ) : null}
+                          {tab.id === "posts" ? (
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M4 5h16M4 12h16M4 19h10" />
                             </svg>
                           ) : null}
                           {tab.id === "wishlist" ? (
@@ -625,19 +768,17 @@ export default function PublicProfilePage() {
                           <div className="mb-3 text-[11px] uppercase tracking-[0.12em] text-white/70">Showcase Shelf</div>
                           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                             {profile.collectionItems.map((item) => (
-                              <div
+                              <button
                                 key={`${item.source}:${item.externalId}`}
-                                className="rounded-2xl border border-white/10 bg-black/20 p-3 text-left"
+                                type="button"
+                                className="w-full rounded-2xl border border-white/10 bg-black/20 p-4 text-left transition hover:bg-white/[0.06]"
+                                onClick={() => openFragranceDetail(item.source, item.externalId)}
                               >
-                                <button
-                                  type="button"
-                                  className="flex w-full items-start gap-3 text-left"
-                                  onClick={() => openFragranceDetail(item.source, item.externalId)}
-                                >
+                                <div className="flex items-start gap-4 text-left">
                                   <img
                                     src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
                                     alt={item.name}
-                                    className="h-20 w-16 rounded-xl border border-white/15 object-cover bg-white/5"
+                                    className="h-24 w-20 rounded-xl border border-white/15 object-cover bg-white/5"
                                     loading="lazy"
                                     onError={(e) => {
                                       const img = e.currentTarget;
@@ -647,33 +788,21 @@ export default function PublicProfilePage() {
                                     }}
                                   />
                                   <div className="min-w-0">
-                                    <div className="text-sm font-semibold leading-snug text-white/95 break-words">{item.name}</div>
-                                    <div className="mt-1 text-xs text-white/65 break-words">{item.brand || "—"}</div>
-                                    <div className="mt-1 flex items-center gap-2 text-amber-100/80">
+                                    <div className="text-base font-semibold leading-snug text-white/95 break-words">{item.name}</div>
+                                    <div className="mt-1 text-sm text-white/65 break-words">{item.brand || "—"}</div>
+                                    <div className="mt-2 flex items-center gap-2 text-amber-100/80">
                                       {Number(item.userRating ?? 0) >= 1 ? (
                                         <>
                                           <HalfStars value={Number(item.userRating)} />
-                                          <span className="text-xs">{fragranceRatingLabel(item.userRating)}</span>
+                                          <span className="text-sm">{fragranceRatingLabel(item.userRating)}</span>
                                         </>
                                       ) : (
-                                        <span className="text-xs">Not rated</span>
+                                        <span className="text-sm">Not rated</span>
                                       )}
                                     </div>
                                   </div>
-                                </button>
-                                <div className="mt-3 flex justify-center">
-                                  <Button
-                                    variant="secondary"
-                                    className="h-8 rounded-lg border border-white/12 bg-white/8 px-3 text-xs font-medium text-white/90 hover:bg-white/14"
-                                    onClick={() => openFragranceDetail(item.source, item.externalId)}
-                                  >
-                                    <span className="inline-flex items-center gap-1.5">
-                                      <Eye className="h-3.5 w-3.5" />
-                                      <span>View</span>
-                                    </span>
-                                  </Button>
                                 </div>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         </div>
@@ -720,7 +849,7 @@ export default function PublicProfilePage() {
                             }}
                             onToggleLike={profile.isOwner ? undefined : () => onToggleReviewLike(item.sourceReviewId, Boolean(item.viewerHasLiked))}
                             onToggleRepost={profile.isOwner ? undefined : () => onToggleReviewRepost(item.sourceReviewId, Boolean(item.viewerHasReposted))}
-                            onOpenComments={() => navigate(`/reviews/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: `/u/${profile.username}` } } })}
+                            onOpenComments={() => navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: `/u/${profile.username}` } } })}
                             liking={likingReviewId === item.sourceReviewId}
                             reposting={repostingReviewId === item.sourceReviewId}
                           />
@@ -747,6 +876,147 @@ export default function PublicProfilePage() {
                   </div>
                 ) : null}
 
+                {activeTab === "posts" ? (
+                  <div>
+                    <div className="text-sm font-semibold">Posts</div>
+                    <div className="mt-1 text-xs text-white/60">
+                      {profile.isVisible
+                        ? `${profile.displayName || profile.username}'s posts.`
+                        : "Follow to view this user's posts."}
+                    </div>
+                    {!profile.isVisible ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        Follow to view this user's posts.
+                      </div>
+                    ) : postsError ? (
+                      <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                        {postsError}
+                      </div>
+                    ) : postsLoading ? (
+                      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-5">
+                        <LoadingSpinner label="Loading posts..." />
+                      </div>
+                    ) : !postItems.length ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                        No posts yet.
+                      </div>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {postItems.map((item) => (
+                          <article
+                            key={item.id}
+                            className="cursor-pointer rounded-3xl border border-white/15 bg-[linear-gradient(140deg,rgba(34,211,238,0.08),rgba(244,114,182,0.07),rgba(0,0,0,0.28))] p-4"
+                            onClick={(e) => {
+                              const target = e.target as HTMLElement | null;
+                              if (target?.closest("button,a,input,textarea,select,[role='button']")) return;
+                              navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: `/u/${profile.username}` } } });
+                            }}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <button
+                                className="flex min-w-0 items-center gap-2 text-left"
+                                onClick={() => navigate(`/u/${item.actorUsername}`)}
+                              >
+                                <img
+                                  src={item.actorAvatarUrl?.trim() ? item.actorAvatarUrl : DEFAULT_AVATAR_IMG}
+                                  alt={`${item.actorUsername} avatar`}
+                                  className="h-9 w-9 rounded-full border border-white/15 object-cover"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    const img = e.currentTarget;
+                                    if (img.dataset.fallbackApplied === "1") return;
+                                    img.dataset.fallbackApplied = "1";
+                                    img.src = DEFAULT_AVATAR_IMG;
+                                  }}
+                                />
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-semibold text-white">{item.actorDisplayName || item.actorUsername}</div>
+                                  <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>
+                                </div>
+                              </button>
+                              <span className="rounded-full border border-cyan-300/30 bg-cyan-300/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100">
+                                Scent of the day
+                              </span>
+                            </div>
+
+                            <div className="mt-3 text-sm text-white/88">Today&apos;s scent picks</div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {parseScentSelections(item.reviewPerformance).map((scent) => (
+                                <button
+                                  key={`${item.id}:${scent.source}:${scent.externalId}`}
+                                  type="button"
+                                  className="rounded-full border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/90 transition hover:bg-white/14"
+                                  onClick={() => openFragranceDetail(scent.source, scent.externalId)}
+                                >
+                                  {scent.name}
+                                </button>
+                              ))}
+                            </div>
+                            {item.reviewExcerpt ? (
+                              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/80">{item.reviewExcerpt}</p>
+                            ) : null}
+
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/55">
+                              <div>{timeAgo(item.createdAt)}</div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  title="Like"
+                                  aria-label="Like post"
+                                  className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                                  onClick={() => onTogglePostLike(item.sourceReviewId, Boolean(item.viewerHasLiked))}
+                                  disabled={likingReviewId === item.sourceReviewId || profile.isOwner}
+                                >
+                                  <Heart className="h-4 w-4" />
+                                  <span>{item.likesCount}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Comment"
+                                  aria-label="Comment on post"
+                                  className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                                  onClick={() => navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: `/u/${profile.username}` } } })}
+                                >
+                                  <MessageCircle className="h-4 w-4" />
+                                  <span>{item.commentsCount}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Repost"
+                                  aria-label="Repost post"
+                                  className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
+                                  onClick={() => onTogglePostRepost(item.sourceReviewId, Boolean(item.viewerHasReposted))}
+                                  disabled={repostingReviewId === item.sourceReviewId || profile.isOwner}
+                                >
+                                  <Repeat2 className="h-4 w-4" />
+                                  <span>{item.repostsCount}</span>
+                                </button>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                        {postCursor ? (
+                          <div className="pt-1">
+                            <Button
+                              variant="secondary"
+                              className="h-9 rounded-xl border border-white/12 bg-white/8 px-3 text-sm text-white hover:bg-white/14"
+                              onClick={onLoadMorePosts}
+                              disabled={postsLoadingMore}
+                            >
+                              {postsLoadingMore ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <InlineSpinner />
+                                  <span>Loading...</span>
+                                </span>
+                              ) : "Load more posts"}
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
                 {activeTab === "wishlist" ? (
                   <div>
                     <div className="text-sm font-semibold">Wishlist</div>
@@ -764,19 +1034,17 @@ export default function PublicProfilePage() {
                     ) : (
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         {profile.wishlistItems.map((item) => (
-                          <div
+                          <button
                             key={`${item.source}:${item.externalId}`}
-                            className="group rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left"
+                            type="button"
+                            className="group w-full rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.08]"
+                            onClick={() => openFragranceDetail(item.source, item.externalId)}
                           >
-                            <button
-                              type="button"
-                              className="flex w-full items-center gap-3 text-left"
-                              onClick={() => openFragranceDetail(item.source, item.externalId)}
-                            >
+                            <div className="flex w-full items-center gap-4 text-left">
                               <img
                                 src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
                                 alt={item.name}
-                                className="h-16 w-16 rounded-xl border border-white/15 object-cover bg-white/5"
+                                className="h-20 w-20 rounded-xl border border-white/15 object-cover bg-white/5"
                                 loading="lazy"
                                 onError={(e) => {
                                   const img = e.currentTarget;
@@ -786,34 +1054,22 @@ export default function PublicProfilePage() {
                                 }}
                               />
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-semibold text-white/95">{item.name}</div>
-                                <div className="truncate text-xs text-white/70">{item.brand || "—"}</div>
-                                <div className="mt-1 flex items-center gap-2 text-amber-100/80">
+                                <div className="truncate text-base font-semibold text-white/95">{item.name}</div>
+                                <div className="truncate text-sm text-white/70">{item.brand || "—"}</div>
+                                <div className="mt-2 flex items-center gap-2 text-amber-100/80">
                                   {Number(item.userRating ?? 0) >= 1 ? (
                                     <>
                                       <HalfStars value={Number(item.userRating)} />
-                                      <span className="text-xs">{fragranceRatingLabel(item.userRating)}</span>
+                                      <span className="text-sm">{fragranceRatingLabel(item.userRating)}</span>
                                     </>
                                   ) : (
-                                    <span className="text-xs">Not rated</span>
+                                    <span className="text-sm">Not rated</span>
                                   )}
                                 </div>
-                                <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-cyan-100/80">Wishlist</div>
+                                <div className="mt-2 text-[11px] uppercase tracking-[0.12em] text-cyan-100/80">Wishlist</div>
                               </div>
-                            </button>
-                            <div className="relative mt-3 flex justify-center">
-                              <Button
-                                variant="secondary"
-                                className="h-8 rounded-lg border border-white/12 bg-white/8 px-3 text-xs font-medium text-white/90 hover:bg-white/14"
-                                onClick={() => openFragranceDetail(item.source, item.externalId)}
-                              >
-                                <span className="inline-flex items-center gap-1.5">
-                                  <Eye className="h-3.5 w-3.5" />
-                                  <span>View</span>
-                                </span>
-                              </Button>
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     )}
@@ -839,19 +1095,17 @@ export default function PublicProfilePage() {
                     ) : (
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         {profile.communityFragrances.map((item) => (
-                          <div
+                          <button
                             key={`${item.source}:${item.externalId}`}
-                            className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left"
+                            type="button"
+                            className="w-full rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:bg-white/[0.08]"
+                            onClick={() => openFragranceDetail(item.source, item.externalId)}
                           >
-                            <button
-                              type="button"
-                              className="flex w-full items-center gap-3 text-left"
-                              onClick={() => openFragranceDetail(item.source, item.externalId)}
-                            >
+                            <div className="flex w-full items-center gap-4 text-left">
                               <img
                                 src={item.imageUrl?.trim() ? item.imageUrl : FALLBACK_FRAGRANCE_IMG}
                                 alt={item.name}
-                                className="h-14 w-14 rounded-xl border border-white/10 object-cover bg-white/5"
+                                className="h-[4.5rem] w-[4.5rem] rounded-xl border border-white/10 object-cover bg-white/5"
                                 loading="lazy"
                                 onError={(e) => {
                                   const img = e.currentTarget;
@@ -861,23 +1115,11 @@ export default function PublicProfilePage() {
                                 }}
                               />
                               <div className="min-w-0">
-                                <div className="truncate text-sm font-semibold text-white/90">{item.name}</div>
-                                <div className="truncate text-xs text-white/60">{item.brand || "—"}</div>
+                                <div className="truncate text-base font-semibold text-white/90">{item.name}</div>
+                                <div className="truncate text-sm text-white/60">{item.brand || "—"}</div>
                               </div>
-                            </button>
-                            <div className="mt-3 flex justify-center">
-                              <Button
-                                variant="secondary"
-                                className="h-8 rounded-lg border border-white/12 bg-white/8 px-3 text-xs font-medium text-white/90 hover:bg-white/14"
-                                onClick={() => openFragranceDetail(item.source, item.externalId)}
-                              >
-                                <span className="inline-flex items-center gap-1.5">
-                                  <Eye className="h-3.5 w-3.5" />
-                                  <span>View</span>
-                                </span>
-                              </Button>
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     )}

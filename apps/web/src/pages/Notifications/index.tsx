@@ -304,7 +304,7 @@ export default function NotificationsPage() {
                               (item.type === "REVIEW_COMMENTED" || item.type === "REVIEW_COMMENT_REPLIED") &&
                               item.sourceReviewId
                             ) {
-                              navigate(`/reviews/${encodeURIComponent(item.sourceReviewId)}`, {
+                              navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, {
                                 state: { from: { pathname: "/notifications" } },
                               });
                               return;

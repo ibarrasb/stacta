@@ -200,7 +200,7 @@ export type FragranceReportListResponse = {
 export type FeedItem = {
   id: string;
   sourceReviewId: string;
-  type: "USER_FOLLOWED_USER" | "REVIEW_POSTED" | "COLLECTION_ITEM_ADDED" | "WISHLIST_ITEM_ADDED" | "REVIEW_REPOSTED";
+  type: "USER_FOLLOWED_USER" | "REVIEW_POSTED" | "SCENT_POSTED" | "COLLECTION_ITEM_ADDED" | "WISHLIST_ITEM_ADDED" | "REVIEW_REPOSTED";
   actorUsername: string;
   actorDisplayName: string;
   actorAvatarUrl: string | null;

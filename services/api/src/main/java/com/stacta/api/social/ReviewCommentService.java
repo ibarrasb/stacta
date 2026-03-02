@@ -248,7 +248,8 @@ public class ReviewCommentService {
 
   private ActivityEvent requireVisibleReview(User viewer, UUID reviewId) {
     ActivityEvent review = activities.findById(reviewId).orElseThrow(() -> new ApiException("REVIEW_NOT_FOUND"));
-    if (!"REVIEW_POSTED".equalsIgnoreCase(String.valueOf(review.getType()))) {
+    String type = String.valueOf(review.getType());
+    if (!"REVIEW_POSTED".equalsIgnoreCase(type) && !"SCENT_POSTED".equalsIgnoreCase(type)) {
       throw new ApiException("REVIEW_NOT_FOUND");
     }
     User actor = users.findById(review.getActorUserId()).orElseThrow(() -> new ApiException("REVIEW_NOT_FOUND"));
