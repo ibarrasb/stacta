@@ -7,5 +7,7 @@ test("authenticated user can open home feed", async ({ page }) => {
 
   await page.goto("/home");
   await expect(page).toHaveURL(/\/home$/);
-  await expect(page.getByRole("heading", { name: "Following activity" })).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Feed scope" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Following", selected: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /all|reviews|posts/i })).toBeVisible();
 });
