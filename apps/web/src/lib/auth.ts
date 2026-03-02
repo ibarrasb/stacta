@@ -10,6 +10,12 @@ import {
   resendSignUpCode,
 } from "aws-amplify/auth";
 
+declare global {
+  interface Window {
+    __STACTA_E2E_ACCESS_TOKEN__?: string;
+  }
+}
+
 // SIGN UP (Cognito sends the confirmation code email if verification is enabled)
 export async function authSignUp(email: string, password: string) {
   return signUp({
@@ -104,6 +110,11 @@ export async function authConfirmForgotPassword(
 
 // TOKEN for calling your backend
 export async function getAccessToken(): Promise<string | null> {
+  // Playwright can set this token to bypass Cognito during E2E smoke tests.
+  if (typeof window !== "undefined" && typeof window.__STACTA_E2E_ACCESS_TOKEN__ === "string") {
+    return window.__STACTA_E2E_ACCESS_TOKEN__;
+  }
+
   const session = await fetchAuthSession({ forceRefresh: false });
   const token = session.tokens?.accessToken?.toString() ?? null;
   if (token) return token;
