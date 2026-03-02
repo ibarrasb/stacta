@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Ellipsis, Heart, Lock, LockOpen, MessageCircle, Repeat2 } from "lucide-react";
+import { Ellipsis, Heart, Lock, LockOpen, MessageCircle, Repeat2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
@@ -656,34 +656,6 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
       <div className="mx-auto max-w-5xl px-4 pb-10">
-        {/* Top bar */}
-        <div className="mb-7 flex flex-col gap-3 rounded-3xl border border-white/15 bg-black/30 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-xs uppercase tracking-[0.15em] text-amber-200/80">Identity</div>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">My profile</h1>
-            <p className="mt-1 text-sm text-white/65">
-              Keep your identity polished and control who can see your profile.
-            </p>
-          </div>
-
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-            <Button
-              variant="secondary"
-              className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-              onClick={() => navigate("/settings")}
-            >
-              Settings
-            </Button>
-            <Button
-              variant="secondary"
-              className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-              onClick={() => navigate("/home")}
-            >
-              Back
-            </Button>
-          </div>
-        </div>
-
         <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
             {loading && (
               <div className="rounded-2xl border border-white/10 bg-black/25 p-6">
@@ -830,7 +802,16 @@ export default function ProfilePage() {
                   ) : null}
 
                   {/* Actions */}
-                  <div className="flex shrink-0 flex-col gap-2 sm:min-w-[140px]">
+                  <div className="flex shrink-0 items-center gap-2 sm:min-w-[140px] sm:flex-col sm:items-stretch">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-10 w-10 rounded-xl border border-white/12 bg-white/10 p-0 text-white hover:bg-white/15 sm:w-full sm:justify-center"
+                      aria-label="Open settings"
+                      onClick={() => navigate("/settings")}
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
                     {!isEditing ? (
                       <Button
                         className="h-10 rounded-xl px-4"

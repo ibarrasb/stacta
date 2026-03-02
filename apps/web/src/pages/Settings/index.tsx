@@ -166,7 +166,7 @@ export default function SettingsPage() {
               </Button>
               <Button
                 variant="secondary"
-                className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
                 onClick={() => {
                   setDisplayName("");
                   setUsername("");
@@ -193,7 +193,7 @@ export default function SettingsPage() {
           <CardContent className="flex flex-col gap-3">
             <Button
               variant="secondary"
-              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
               onClick={onChangePassword}
             >
               Change password
@@ -201,7 +201,7 @@ export default function SettingsPage() {
 
             <Button
               variant="secondary"
-              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
               onClick={onSignOut}
             >
               Sign out
@@ -259,7 +259,7 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-3 pt-2">
               <Button
                 variant="secondary"
-                className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+                className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
                 onClick={() => navigate("/settings/blocked")}
               >
                 Blocked users
@@ -341,7 +341,7 @@ export default function SettingsPage() {
           <CardContent className="flex flex-col gap-3">
             <Button
               variant="secondary"
-              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
               onClick={onExportData}
             >
               Export my data
@@ -367,7 +367,7 @@ export default function SettingsPage() {
           <CardContent className="flex flex-col gap-3">
             <Button
               variant="secondary"
-              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
               onClick={() => navigate("/terms")}
             >
               Terms of Service
@@ -375,7 +375,7 @@ export default function SettingsPage() {
 
             <Button
               variant="secondary"
-              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
               onClick={() => navigate("/privacy")}
             >
               Privacy Policy
@@ -383,7 +383,7 @@ export default function SettingsPage() {
 
             <Button
               variant="secondary"
-              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15"
+              className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
               onClick={() => navigate("/support")}
             >
               Contact support
