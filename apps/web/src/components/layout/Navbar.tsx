@@ -97,13 +97,15 @@ export default function Navbar() {
     <>
       <div className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-5">
         <div className="pointer-events-auto mx-auto flex w-full max-w-7xl flex-col gap-2 rounded-2xl border border-white/15 bg-black/35 px-3 py-2 text-white shadow-[0_20px_50px_rgba(0,0,0,0.4)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="relative flex min-w-0 items-center justify-between gap-2">
           <img
             src="/stacta.png"
             alt="Stacta"
             className="h-8 w-8 object-contain"
           />
-          <div className="text-xs text-white/70">{activeLabel}</div>
+          <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-xs text-white/70 sm:hidden">
+            {activeLabel}
+          </div>
           <Button
             variant="secondary"
             className="h-8 rounded-xl border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20 sm:hidden"

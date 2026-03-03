@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Check, Heart, MessageCircle, Paperclip, PenSquare, Repeat2, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, BarChart3, Check, Heart, MessageCircle, MoreHorizontal, Paperclip, PenSquare, Repeat2, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
@@ -110,10 +110,15 @@ export default function HomePage() {
   const [repostingReviewId, setRepostingReviewId] = useState<string | null>(null);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [postActionMenuId, setPostActionMenuId] = useState<string | null>(null);
   const [mobileComposerOpen, setMobileComposerOpen] = useState(false);
   const [mobileScentPickerView, setMobileScentPickerView] = useState(false);
   const [scentPickerOpen, setScentPickerOpen] = useState(false);
+  const [composerAttachments, setComposerAttachments] = useState<File[]>([]);
+  const [composerPollOpen, setComposerPollOpen] = useState(false);
+  const [composerPollOptions, setComposerPollOptions] = useState<string[]>(["", ""]);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +170,18 @@ export default function HomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-post-menu-root='true']")) return;
+      setPostActionMenuId(null);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, []);
+
   async function loadMore() {
     if (!cursor || loadingMore) return;
     setLoadingMore(true);
@@ -195,8 +212,10 @@ export default function HomePage() {
     }
   }
 
-  async function onToggleReviewLike(reviewId: string, currentlyLiked: boolean) {
+  async function onToggleReviewLike(reviewId: string, currentlyLiked: boolean, actorUsername?: string) {
     if (!reviewId || likingReviewId === reviewId) return;
+    if (!viewerUsername) return;
+    if (actorUsername && actorUsername.toLowerCase() === viewerUsername.toLowerCase()) return;
     setLikingReviewId(reviewId);
     setItems((prev) => prev.map((item) => {
       if (item.sourceReviewId !== reviewId) return item;
@@ -222,8 +241,10 @@ export default function HomePage() {
     }
   }
 
-  async function onToggleReviewRepost(reviewId: string, currentlyReposted: boolean) {
+  async function onToggleReviewRepost(reviewId: string, currentlyReposted: boolean, actorUsername?: string) {
     if (!reviewId || repostingReviewId === reviewId) return;
+    if (!viewerUsername) return;
+    if (actorUsername && actorUsername.toLowerCase() === viewerUsername.toLowerCase()) return;
     setRepostingReviewId(reviewId);
     setItems((prev) => prev.map((item) => {
       if (item.sourceReviewId !== reviewId) return item;
@@ -278,6 +299,9 @@ export default function HomePage() {
       setComposerPostType("GENERAL");
       setPostText("");
       setSelectedScentKeys([]);
+      setComposerAttachments([]);
+      setComposerPollOpen(false);
+      setComposerPollOptions(["", ""]);
       setMobileComposerOpen(false);
       setMobileScentPickerView(false);
       setScentPickerOpen(false);
@@ -320,6 +344,32 @@ export default function HomePage() {
   function closeScentPicker() {
     setScentPickerOpen(false);
   }
+
+  function onAttachmentPick(fileList: FileList | null) {
+    if (!fileList?.length) return;
+    const picked = Array.from(fileList).slice(0, 4);
+    setComposerAttachments((prev) => [...prev, ...picked].slice(0, 4));
+  }
+
+  function onRemoveAttachment(index: number) {
+    setComposerAttachments((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function onUpdatePollOption(index: number, value: string) {
+    setComposerPollOptions((prev) => prev.map((option, i) => (i === index ? value : option)));
+  }
+
+  function onAddPollOption() {
+    setComposerPollOptions((prev) => (prev.length >= 4 ? prev : [...prev, ""]));
+  }
+
+  function onRemovePollOption(index: number) {
+    setComposerPollOptions((prev) => {
+      if (prev.length <= 2) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
   const composerForm = (
     <>
       <div className="space-y-3">
@@ -356,23 +406,109 @@ export default function HomePage() {
           className="min-h-28 w-full rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm text-white outline-none transition focus:border-cyan-300/45"
         />
         <div className="flex flex-col gap-2 text-[11px] text-white/45 sm:flex-row sm:items-center sm:justify-between">
-          <div>{postText.trim().length}/1200</div>
-          <div className="flex items-center justify-between gap-2 sm:justify-start">
+          <div className="flex items-center gap-3">
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/[0.04] text-white/75 transition hover:bg-white/[0.1] hover:text-white"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white/65 transition hover:bg-white/5 hover:text-cyan-100"
               aria-label="Attach image"
-              title="Attach image (coming soon)"
-              disabled
+              title="Attach image"
+              onClick={() => attachmentInputRef.current?.click()}
             >
               <Paperclip className="h-4 w-4" />
             </button>
-            {composerPostType !== "SCENT_OF_DAY" ? (
-              <div className="text-right sm:text-left">Publishing for this type is coming next.</div>
-            ) : (
-              <div className="text-right sm:text-left">Image uploads are coming next.</div>
-            )}
+            <button
+              type="button"
+              className={[
+                "inline-flex h-8 items-center gap-1.5 rounded-md px-1.5 text-xs font-semibold transition",
+                composerPollOpen
+                  ? "text-cyan-100"
+                  : "text-white/65 hover:bg-white/5 hover:text-cyan-100",
+              ].join(" ")}
+              aria-label="Add poll"
+              onClick={() => {
+                setComposerPollOpen((prev) => !prev);
+                if (composerPostType !== "QUESTION") setComposerPostType("QUESTION");
+              }}
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              <span>Poll</span>
+            </button>
           </div>
+          <div>{postText.trim().length}/1200</div>
+        </div>
+        {composerAttachments.length ? (
+          <div className="flex flex-wrap gap-2">
+            {composerAttachments.map((file, idx) => (
+              <div
+                key={`${file.name}-${idx}`}
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-xs text-white/80"
+              >
+                <Paperclip className="h-3.5 w-3.5 text-cyan-200" />
+                <span className="max-w-[200px] truncate">{file.name}</span>
+                <button
+                  type="button"
+                  className="text-white/65 transition hover:text-white"
+                  aria-label={`Remove attachment ${file.name}`}
+                  onClick={() => onRemoveAttachment(idx)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {composerPollOpen ? (
+          <div className="space-y-2 rounded-xl border border-white/12 bg-black/20 p-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs uppercase tracking-[0.12em] text-white/60">Poll options</div>
+              {composerPollOptions.length < 4 ? (
+                <button
+                  type="button"
+                  className="text-xs text-cyan-100/80 transition hover:text-cyan-100"
+                  onClick={onAddPollOption}
+                >
+                  Add option
+                </button>
+              ) : null}
+            </div>
+            {composerPollOptions.map((option, index) => (
+              <div key={`poll-option-${index}`} className="flex items-center gap-2">
+                <input
+                  value={option}
+                  onChange={(e) => onUpdatePollOption(index, e.target.value)}
+                  maxLength={80}
+                  placeholder={`Option ${index + 1}`}
+                  className="h-9 w-full rounded-lg border border-white/12 bg-white/5 px-3 text-sm text-white outline-none transition focus:border-cyan-300/45"
+                />
+                {composerPollOptions.length > 2 ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 bg-white/5 text-white/70 transition hover:bg-white/10 hover:text-white"
+                    aria-label={`Remove option ${index + 1}`}
+                    onClick={() => onRemovePollOption(index)}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <input
+          ref={attachmentInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            onAttachmentPick(e.target.files);
+            e.currentTarget.value = "";
+          }}
+        />
+        <div className="text-[11px] text-white/45">
+          {composerPostType !== "SCENT_OF_DAY"
+            ? "General, question, attachments, and poll publishing will be wired next."
+            : "Image uploads and poll publishing for scent posts are coming next."}
         </div>
       </div>
 
@@ -549,8 +685,8 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-        <div className="mb-5 hidden rounded-3xl border border-white/15 bg-black/30 p-3 sm:p-5 md:block">
-          <div className="px-0 sm:px-1">{composerForm}</div>
+        <div className="mb-4 hidden border-b border-white/10 pb-4 md:block">
+          <div>{composerForm}</div>
         </div>
 
         {error ? (
@@ -606,12 +742,12 @@ export default function HomePage() {
                     }
                     onToggleLike={
                       viewerUsername && item.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
-                        ? () => onToggleReviewLike(item.sourceReviewId, Boolean(item.viewerHasLiked))
+                        ? () => onToggleReviewLike(item.sourceReviewId, Boolean(item.viewerHasLiked), item.actorUsername)
                         : undefined
                     }
                     onToggleRepost={
                       viewerUsername && item.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
-                        ? () => onToggleReviewRepost(item.sourceReviewId, Boolean(item.viewerHasReposted))
+                        ? () => onToggleReviewRepost(item.sourceReviewId, Boolean(item.viewerHasReposted), item.actorUsername)
                         : undefined
                     }
                     onOpenComments={() => navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/home" } } })}
@@ -652,13 +788,52 @@ export default function HomePage() {
                           <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>
                         </div>
                       </button>
-                      <span className="rounded-full border border-cyan-300/30 bg-cyan-300/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100">
-                        Scent of the day
-                      </span>
-                    </div>
-
-                    <div className="mt-3 text-sm text-white/88">
-                      Today&apos;s scent picks
+                      <div className="flex items-center gap-1">
+                        <span className="rounded-full border border-cyan-300/30 bg-cyan-300/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100">
+                          Scent of the day
+                        </span>
+                        <div className="relative" data-post-menu-root="true">
+                          <button
+                            type="button"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/65 transition hover:bg-white/10 hover:text-white"
+                            aria-label="Post actions"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPostActionMenuId((prev) => (prev === item.id ? null : item.id));
+                            }}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                          {postActionMenuId === item.id ? (
+                            <div className="absolute right-0 z-30 mt-1.5 min-w-[148px] rounded-xl border border-white/15 bg-[#101114]/95 p-1.5 shadow-[0_14px_28px_rgba(0,0,0,0.45)] backdrop-blur">
+                              <button
+                                type="button"
+                                className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium text-white/85 transition hover:bg-white/10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPostActionMenuId(null);
+                                  navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/home" } } });
+                                }}
+                              >
+                                <span>View post</span>
+                              </button>
+                              {viewerUsername && item.actorUsername.toLowerCase() === viewerUsername.toLowerCase() ? (
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium text-red-200 transition hover:bg-red-500/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPostActionMenuId(null);
+                                    setPendingDeleteReviewId(item.sourceReviewId);
+                                  }}
+                                >
+                                  <span>Delete post</span>
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -666,7 +841,7 @@ export default function HomePage() {
                         <button
                           key={`${item.id}:${scent.source}:${scent.externalId}`}
                           type="button"
-                          className="rounded-full border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/90 transition hover:bg-white/14"
+                          className="rounded-full border border-cyan-200/40 bg-gradient-to-r from-cyan-300/20 via-white/10 to-amber-300/20 px-3 py-1.5 text-xs font-semibold text-white transition hover:from-cyan-300/30 hover:via-white/15 hover:to-amber-300/30"
                           onClick={() => navigate(`/fragrances/${encodeURIComponent(scent.externalId)}?source=${scent.source}`, {
                             state: {
                               fragrance: {
@@ -696,8 +871,8 @@ export default function HomePage() {
                           title="Like"
                           aria-label="Like post"
                           className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
-                          onClick={() => onToggleReviewLike(item.sourceReviewId, Boolean(item.viewerHasLiked))}
-                          disabled={likingReviewId === item.sourceReviewId || (viewerUsername?.toLowerCase() === item.actorUsername.toLowerCase())}
+                          onClick={() => onToggleReviewLike(item.sourceReviewId, Boolean(item.viewerHasLiked), item.actorUsername)}
+                          disabled={!viewerUsername || likingReviewId === item.sourceReviewId || (viewerUsername.toLowerCase() === item.actorUsername.toLowerCase())}
                         >
                           <Heart className="h-4 w-4" />
                           <span>{item.likesCount}</span>
@@ -717,8 +892,8 @@ export default function HomePage() {
                           title="Repost"
                           aria-label="Repost post"
                           className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
-                          onClick={() => onToggleReviewRepost(item.sourceReviewId, Boolean(item.viewerHasReposted))}
-                          disabled={repostingReviewId === item.sourceReviewId || (viewerUsername?.toLowerCase() === item.actorUsername.toLowerCase())}
+                          onClick={() => onToggleReviewRepost(item.sourceReviewId, Boolean(item.viewerHasReposted), item.actorUsername)}
+                          disabled={!viewerUsername || repostingReviewId === item.sourceReviewId || (viewerUsername.toLowerCase() === item.actorUsername.toLowerCase())}
                         >
                           <Repeat2 className="h-4 w-4" />
                           <span>{item.repostsCount}</span>
@@ -754,9 +929,54 @@ export default function HomePage() {
                           <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>
                         </div>
                       </button>
-                      <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">
-                        {kindPill(item.type)}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">
+                          {kindPill(item.type)}
+                        </span>
+                        {item.sourceReviewId ? (
+                          <div className="relative" data-post-menu-root="true">
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/65 transition hover:bg-white/10 hover:text-white"
+                              aria-label="Post actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPostActionMenuId((prev) => (prev === item.id ? null : item.id));
+                              }}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                            {postActionMenuId === item.id ? (
+                              <div className="absolute right-0 z-30 mt-1.5 min-w-[148px] rounded-xl border border-white/15 bg-[#101114]/95 p-1.5 shadow-[0_14px_28px_rgba(0,0,0,0.45)] backdrop-blur">
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium text-white/85 transition hover:bg-white/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPostActionMenuId(null);
+                                    navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/home" } } });
+                                  }}
+                                >
+                                  <span>View post</span>
+                                </button>
+                                {viewerUsername && item.actorUsername.toLowerCase() === viewerUsername.toLowerCase() ? (
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium text-red-200 transition hover:bg-red-500/10"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPostActionMenuId(null);
+                                      setPendingDeleteReviewId(item.sourceReviewId);
+                                    }}
+                                  >
+                                    <span>Delete post</span>
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
 
                     <div className="mt-3 text-sm text-white/85">

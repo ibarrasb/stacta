@@ -102,34 +102,6 @@ function HalfStars({ value }: { value: number }) {
   );
 }
 
-function PrivacyToggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className={[
-        "relative h-7 w-12 rounded-full border transition",
-        checked ? "border-cyan-200/40 bg-cyan-300/30" : "border-white/15 bg-white/10",
-      ].join(" ")}
-      aria-pressed={checked}
-      aria-label="Private profile"
-    >
-      <span
-        className={[
-          "absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white transition",
-          checked ? "left-6" : "left-1",
-        ].join(" ")}
-      />
-    </button>
-  );
-}
-
 type ProfileTab = "overview" | "reviews" | "wishlist" | "community" | "posts";
 type ConnectionsView = "followers" | "following";
 
@@ -178,7 +150,6 @@ export default function ProfilePage() {
   const [collectionActionLoading, setCollectionActionLoading] = useState<string | null>(null);
   const [draftDisplayName, setDraftDisplayName] = useState("");
   const [draftBio, setDraftBio] = useState("");
-  const [draftIsPrivate, setDraftIsPrivate] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
   const [connectionsView, setConnectionsView] = useState<ConnectionsView>("followers");
   const [connections, setConnections] = useState<FollowConnectionItem[]>([]);
@@ -200,6 +171,7 @@ export default function ProfilePage() {
   const [postsLoadingMore, setPostsLoadingMore] = useState(false);
   const [postsError, setPostsError] = useState<string | null>(null);
   const [postsLoaded, setPostsLoaded] = useState(false);
+  const [postActionMenuId, setPostActionMenuId] = useState<string | null>(null);
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [pendingDeleteReviewId, setPendingDeleteReviewId] = useState<string | null>(null);
 
@@ -217,7 +189,6 @@ export default function ProfilePage() {
         setMe(data);
         setDraftDisplayName(data.displayName ?? "");
         setDraftBio(data.bio ?? "");
-        setDraftIsPrivate(Boolean(data.isPrivate));
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Failed to load profile.");
       } finally {
@@ -321,6 +292,18 @@ export default function ProfilePage() {
     void loadPosts();
   }, [activeTab, loadPosts, me, postsLoaded, postsLoading]);
 
+  useEffect(() => {
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-post-menu-root='true']")) return;
+      setPostActionMenuId(null);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, []);
+
   async function onLoadMoreConnections() {
     if (!connectionsCursor || connectionsLoadingMore) return;
     setConnectionsLoadingMore(true);
@@ -370,13 +353,13 @@ export default function ProfilePage() {
 
   async function onDeleteReview(reviewId: string) {
     if (!reviewId) return;
-    const deletedWasReview = reviewItems.some((x) => x.id === reviewId);
+    const deletedWasReview = reviewItems.some((x) => x.id === reviewId || x.sourceReviewId === reviewId);
     setDeletingReviewId(reviewId);
     setReviewsError(null);
     try {
       await deleteReview(reviewId);
-      setReviewItems((prev) => prev.filter((x) => x.id !== reviewId));
-      setPostItems((prev) => prev.filter((x) => x.id !== reviewId));
+      setReviewItems((prev) => prev.filter((x) => x.id !== reviewId && x.sourceReviewId !== reviewId));
+      setPostItems((prev) => prev.filter((x) => x.id !== reviewId && x.sourceReviewId !== reviewId));
       if (deletedWasReview) {
         setMe((prev) => prev ? { ...prev, reviewCount: Math.max(0, prev.reviewCount - 1) } : prev);
       }
@@ -435,7 +418,6 @@ export default function ProfilePage() {
     setIsEditing(false);
     setDraftDisplayName(me?.displayName ?? "");
     setDraftBio(me?.bio ?? "");
-    setDraftIsPrivate(Boolean(me?.isPrivate));
     setDraftAvatarFile(null);
     setPhotoError(null);
   }
@@ -456,12 +438,10 @@ export default function ProfilePage() {
         displayName: draftDisplayName.trim(),
         bio: draftBio.trim() || null,
         ...(avatarObjectKey ? { avatarObjectKey } : {}),
-        isPrivate: draftIsPrivate,
       });
       setMe(updated);
       setDraftDisplayName(updated.displayName ?? "");
       setDraftBio(updated.bio ?? "");
-      setDraftIsPrivate(Boolean(updated.isPrivate));
       setDraftAvatarFile(null);
       setIsEditing(false);
     } catch (e: any) {
@@ -670,10 +650,25 @@ export default function ProfilePage() {
             )}
 
             {!loading && !error && me && (
-              <div className="space-y-6">
+              <div className="relative space-y-6">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 z-10 h-10 w-10 rounded-xl border border-transparent p-0 text-white/75 transition hover:border-white/20 hover:bg-white/10 hover:text-white sm:hidden"
+                  aria-label="Open settings"
+                  onClick={() => navigate("/settings")}
+                >
+                  <Settings className="size-6" />
+                </Button>
                 {/* Profile header */}
                 <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex min-w-0 items-start gap-4 sm:gap-5">
+                  <div
+                    className={[
+                      "flex min-w-0 items-start gap-4 sm:gap-5",
+                      isEditing ? "flex-col sm:flex-row" : "flex-row",
+                    ].join(" ")}
+                  >
                     <ProfilePhotoPicker
                       fallbackText={initials(me.displayName)}
                       initialUrl={me.avatarUrl}
@@ -686,7 +681,7 @@ export default function ProfilePage() {
                     />
 
                     {/* Name + username + bio */}
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 w-full flex-1">
                       {!isEditing ? (
                         <>
                           <div className="flex flex-wrap items-center gap-2">
@@ -771,17 +766,6 @@ export default function ProfilePage() {
                             </div>
                           </div>
 
-                          <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <div className="text-xs font-semibold text-white/85">Private profile</div>
-                              <div className="mt-0.5 text-[11px] text-white/55">
-                                Only approved followers can see profile activity.
-                              </div>
-                            </div>
-                            <div className="self-start sm:self-auto">
-                              <PrivacyToggle checked={draftIsPrivate} onChange={setDraftIsPrivate} />
-                            </div>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -802,15 +786,16 @@ export default function ProfilePage() {
                   ) : null}
 
                   {/* Actions */}
-                  <div className="flex shrink-0 items-center gap-2 sm:min-w-[140px] sm:flex-col sm:items-stretch">
+                  <div className="flex shrink-0 items-center gap-2 sm:self-start">
                     <Button
                       type="button"
-                      variant="secondary"
-                      className="h-10 w-10 rounded-xl border border-white/12 bg-white/10 p-0 text-white hover:bg-white/15 sm:w-full sm:justify-center"
+                      variant="ghost"
+                      size="icon"
+                      className="hidden h-10 w-10 rounded-xl border border-transparent p-0 text-white/75 transition hover:border-white/20 hover:bg-white/10 hover:text-white sm:inline-flex"
                       aria-label="Open settings"
                       onClick={() => navigate("/settings")}
                     >
-                      <Settings className="h-4 w-4" />
+                      <Settings className="size-6" />
                     </Button>
                     {!isEditing ? (
                       <Button
@@ -1148,7 +1133,6 @@ export default function ProfilePage() {
                 {activeTab === "posts" ? (
                   <div>
                     <div className="text-sm font-semibold">Posts</div>
-                    <div className="mt-1 text-xs text-white/60">Your scent-of-the-day posts.</div>
                     {postsError ? (
                       <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
                         {postsError}
@@ -1196,18 +1180,58 @@ export default function ProfilePage() {
                                   <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>
                                 </div>
                               </button>
-                              <span className="rounded-full border border-cyan-300/30 bg-cyan-300/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100">
-                                Scent of the day
-                              </span>
+                              <div className="flex items-center gap-1">
+                                <span className="rounded-full border border-cyan-300/30 bg-cyan-300/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100">
+                                  Scent of the day
+                                </span>
+                                <div className="relative" data-post-menu-root="true">
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white/65 transition hover:bg-white/10 hover:text-white"
+                                    aria-label="Post actions"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPostActionMenuId((prev) => (prev === item.id ? null : item.id));
+                                    }}
+                                  >
+                                    <Ellipsis className="h-4 w-4" />
+                                  </button>
+                                  {postActionMenuId === item.id ? (
+                                    <div className="absolute right-0 z-30 mt-1.5 min-w-[148px] rounded-xl border border-white/15 bg-[#101114]/95 p-1.5 shadow-[0_14px_28px_rgba(0,0,0,0.45)] backdrop-blur">
+                                      <button
+                                        type="button"
+                                        className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium text-white/85 transition hover:bg-white/10"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPostActionMenuId(null);
+                                          navigate(`/posts/${encodeURIComponent(item.sourceReviewId)}`, { state: { from: { pathname: "/profile" } } });
+                                        }}
+                                      >
+                                        <span>View post</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-medium text-red-200 transition hover:bg-red-500/10"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPostActionMenuId(null);
+                                          setPendingDeleteReviewId(item.sourceReviewId);
+                                        }}
+                                      >
+                                        <span>Delete post</span>
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
                             </div>
 
-                            <div className="mt-3 text-sm text-white/88">Today&apos;s scent picks</div>
                             <div className="mt-3 flex flex-wrap gap-2">
                               {parseScentSelections(item.reviewPerformance).map((scent) => (
                                 <button
                                   key={`${item.id}:${scent.source}:${scent.externalId}`}
                                   type="button"
-                                  className="rounded-full border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/90 transition hover:bg-white/14"
+                                  className="rounded-full border border-cyan-200/40 bg-gradient-to-r from-cyan-300/20 via-white/10 to-amber-300/20 px-3 py-1.5 text-xs font-semibold text-white transition hover:from-cyan-300/30 hover:via-white/15 hover:to-amber-300/30"
                                   onClick={() => openFragranceDetail(scent.source, scent.externalId)}
                                 >
                                   {scent.name}

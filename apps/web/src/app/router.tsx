@@ -19,6 +19,9 @@ const ProfilePage = lazy(() => import("@/pages/Profile"));
 const SearchPage = lazy(() => import("@/pages/Search/index"));
 const FragranceDetailPage = lazy(() => import("@/pages/Fragrances/FragranceDetail"));
 const SettingsPage = lazy(() => import("@/pages/Settings"));
+const TermsPage = lazy(() => import("@/pages/Legal/Terms"));
+const PrivacyPage = lazy(() => import("@/pages/Legal/Privacy"));
+const SupportPage = lazy(() => import("@/pages/Support/Contact"));
 const UsersSearchPage = lazy(() => import("@/pages/Users/Search"));
 const PublicProfilePage = lazy(() => import("@/pages/Users/PublicProfile"));
 const NotificationsPage = lazy(() => import("@/pages/Notifications"));
@@ -112,6 +115,54 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth>
             <SettingsPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "/terms",
+        element: (
+          <RequireAuth>
+            <TermsPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "/settings/terms",
+        element: (
+          <RequireAuth>
+            <TermsPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "/privacy",
+        element: (
+          <RequireAuth>
+            <PrivacyPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "/settings/privacy",
+        element: (
+          <RequireAuth>
+            <PrivacyPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "/support",
+        element: (
+          <RequireAuth>
+            <SupportPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "/settings/support",
+        element: (
+          <RequireAuth>
+            <SupportPage />
           </RequireAuth>
         ),
       },

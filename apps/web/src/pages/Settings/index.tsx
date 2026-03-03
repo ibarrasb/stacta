@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,17 +13,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import NoticeDialog from "@/components/ui/notice-dialog";
+import { getMe, updateMe } from "@/lib/api/me";
 
 function ToggleRow({
   label,
   description,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   description?: string;
   value: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
@@ -38,9 +41,10 @@ function ToggleRow({
         type="button"
         onClick={() => onChange(!value)}
         className={[
-          "relative h-6 w-11 rounded-full border transition",
+          "relative h-6 w-11 rounded-full border transition disabled:cursor-not-allowed disabled:opacity-60",
           value ? "bg-white/20 border-white/20" : "bg-white/10 border-white/12",
         ].join(" ")}
+        disabled={disabled}
         aria-pressed={value}
         aria-label={label}
       >
@@ -64,6 +68,9 @@ export default function SettingsPage() {
 
   // privacy & safety
   const [isPrivate, setIsPrivate] = useState(false);
+  const [profileSnapshot, setProfileSnapshot] = useState<{ displayName: string; bio: string | null } | null>(null);
+  const [privateLoading, setPrivateLoading] = useState(true);
+  const [privateSaving, setPrivateSaving] = useState(false);
   const [hideActivity, setHideActivity] = useState(false);
   const [hideCollections, setHideCollections] = useState(false);
 
@@ -78,6 +85,54 @@ export default function SettingsPage() {
   const isProfileDirty = useMemo(() => {
     return displayName.trim().length > 0 || username.trim().length > 0;
   }, [displayName, username]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMe() {
+      try {
+        const me = await getMe();
+        if (cancelled) return;
+        setIsPrivate(Boolean(me.isPrivate));
+        setProfileSnapshot({
+          displayName: me.displayName,
+          bio: me.bio,
+        });
+      } catch (e: any) {
+        if (cancelled) return;
+        setNotice(e?.message || "Failed to load current privacy setting.");
+      } finally {
+        if (!cancelled) setPrivateLoading(false);
+      }
+    }
+    void loadMe();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function onTogglePrivateProfile(nextValue: boolean) {
+    if (privateSaving || privateLoading || !profileSnapshot) return;
+    const previousValue = isPrivate;
+    setIsPrivate(nextValue);
+    setPrivateSaving(true);
+    try {
+      const updated = await updateMe({
+        displayName: profileSnapshot.displayName,
+        bio: profileSnapshot.bio,
+        isPrivate: nextValue,
+      });
+      setIsPrivate(Boolean(updated.isPrivate));
+      setProfileSnapshot({
+        displayName: updated.displayName,
+        bio: updated.bio,
+      });
+    } catch (e: any) {
+      setIsPrivate(previousValue);
+      setNotice(e?.message || "Failed to update private profile setting.");
+    } finally {
+      setPrivateSaving(false);
+    }
+  }
 
   async function onSaveProfile() {
     // TODO: call your API: PATCH /api/v1/me (or similar)
@@ -230,10 +285,8 @@ export default function SettingsPage() {
               label="Private profile"
               description="Only approved followers can see your profile and activity."
               value={isPrivate}
-              onChange={(v) => {
-                setIsPrivate(v);
-                // TODO: PATCH /api/v1/me/privacy
-              }}
+              onChange={onTogglePrivateProfile}
+              disabled={privateLoading || privateSaving}
             />
 
             <ToggleRow
@@ -368,7 +421,7 @@ export default function SettingsPage() {
             <Button
               variant="secondary"
               className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
-              onClick={() => navigate("/terms")}
+              onClick={() => navigate("/settings/terms")}
             >
               Terms of Service
             </Button>
@@ -376,7 +429,7 @@ export default function SettingsPage() {
             <Button
               variant="secondary"
               className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
-              onClick={() => navigate("/privacy")}
+              onClick={() => navigate("/settings/privacy")}
             >
               Privacy Policy
             </Button>
@@ -384,7 +437,7 @@ export default function SettingsPage() {
             <Button
               variant="secondary"
               className="rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15 !backdrop-blur-none"
-              onClick={() => navigate("/support")}
+              onClick={() => navigate("/settings/support")}
             >
               Contact support
             </Button>

@@ -75,7 +75,7 @@ function HalfStars({ value }: { value: number }) {
   );
 }
 
-type PublicProfileTab = "overview" | "reviews" | "posts" | "wishlist" | "community";
+type PublicProfileTab = "overview" | "reviews" | "wishlist" | "community" | "posts";
 
 type ScentSelection = {
   source: "FRAGELLA" | "COMMUNITY";
@@ -639,9 +639,9 @@ export default function PublicProfilePage() {
                     {[
                       { id: "overview" as const, label: "Overview", count: profile.isVisible ? profile.collectionCount : undefined },
                       { id: "reviews" as const, label: "Reviews", count: profile.isVisible ? profile.reviewCount : undefined },
-                      { id: "posts" as const, label: "Posts", count: undefined },
                       { id: "wishlist" as const, label: "Wishlist", count: profile.isVisible ? profile.wishlistCount : undefined },
                       { id: "community" as const, label: "Community", count: profile.isVisible ? profile.communityFragranceCount : undefined },
+                      { id: "posts" as const, label: "Posts", count: undefined },
                     ].map((tab) => (
                       <button
                         key={tab.id}
@@ -939,13 +939,12 @@ export default function PublicProfilePage() {
                               </span>
                             </div>
 
-                            <div className="mt-3 text-sm text-white/88">Today&apos;s scent picks</div>
                             <div className="mt-3 flex flex-wrap gap-2">
                               {parseScentSelections(item.reviewPerformance).map((scent) => (
                                 <button
                                   key={`${item.id}:${scent.source}:${scent.externalId}`}
                                   type="button"
-                                  className="rounded-full border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/90 transition hover:bg-white/14"
+                                  className="rounded-full border border-cyan-200/40 bg-gradient-to-r from-cyan-300/20 via-white/10 to-amber-300/20 px-3 py-1.5 text-xs font-semibold text-white transition hover:from-cyan-300/30 hover:via-white/15 hover:to-amber-300/30"
                                   onClick={() => openFragranceDetail(scent.source, scent.externalId)}
                                 >
                                   {scent.name}

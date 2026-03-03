@@ -21,6 +21,10 @@ export default function AppLayout() {
     pathname === "/users" ||
     pathname.startsWith("/notifications") ||
     pathname === "/settings" ||
+    pathname.startsWith("/settings/") ||
+    pathname === "/terms" ||
+    pathname === "/privacy" ||
+    pathname === "/support" ||
     pathname.startsWith("/u/") ||
     pathname.startsWith("/posts/") ||
     pathname.startsWith("/reviews/") ||

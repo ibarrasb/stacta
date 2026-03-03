@@ -7,6 +7,7 @@ import InlineSpinner from "@/components/ui/inline-spinner";
 import ReportDialog from "@/components/ui/report-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { getMe } from "@/lib/api/me";
 import {
   createReviewComment,
   deleteReviewComment,
@@ -131,6 +132,7 @@ export default function ReviewThreadPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [thread, setThread] = useState<ReviewThreadResponse | null>(null);
+  const [viewerUsername, setViewerUsername] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
   const [replyTarget, setReplyTarget] = useState<ReviewCommentItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -163,6 +165,22 @@ export default function ReviewThreadPage() {
   useEffect(() => {
     void loadThread();
   }, [loadThread]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((me) => {
+        if (cancelled) return;
+        setViewerUsername(me.username ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setViewerUsername(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const commentsByParent = useMemo(() => {
     const grouped = new Map<string | null, ReviewCommentItem[]>();
@@ -239,8 +257,10 @@ export default function ReviewThreadPage() {
     }
   }
 
-  async function onToggleReviewLike(reviewId: string, currentlyLiked: boolean) {
+  async function onToggleReviewLike(reviewId: string, currentlyLiked: boolean, actorUsername?: string) {
     if (!reviewId || likingReviewId === reviewId) return;
+    if (!viewerUsername) return;
+    if (actorUsername && actorUsername.toLowerCase() === viewerUsername.toLowerCase()) return;
     setLikingReviewId(reviewId);
     setThread((prev) => {
       if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
@@ -265,8 +285,10 @@ export default function ReviewThreadPage() {
     }
   }
 
-  async function onToggleReviewRepost(reviewId: string, currentlyReposted: boolean) {
+  async function onToggleReviewRepost(reviewId: string, currentlyReposted: boolean, actorUsername?: string) {
     if (!reviewId || repostingReviewId === reviewId) return;
+    if (!viewerUsername) return;
+    if (actorUsername && actorUsername.toLowerCase() === viewerUsername.toLowerCase()) return;
     setRepostingReviewId(reviewId);
     setThread((prev) => {
       if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
@@ -427,13 +449,12 @@ export default function ReviewThreadPage() {
                   </span>
                 </div>
 
-                <div className="mt-3 text-sm text-white/88">Today&apos;s scent picks</div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {parseScentSelections(thread.review.reviewPerformance).map((scent) => (
                     <button
                       key={`${thread.review.id}:${scent.source}:${scent.externalId}`}
                       type="button"
-                      className="rounded-full border border-white/20 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/90 transition hover:bg-white/14"
+                      className="rounded-full border border-cyan-200/40 bg-gradient-to-r from-cyan-300/20 via-white/10 to-amber-300/20 px-3 py-1.5 text-xs font-semibold text-white transition hover:from-cyan-300/30 hover:via-white/15 hover:to-amber-300/30"
                       onClick={() => navigate(`/fragrances/${encodeURIComponent(scent.externalId)}?source=${scent.source}`)}
                     >
                       {scent.name}
@@ -452,8 +473,8 @@ export default function ReviewThreadPage() {
                       title="Like"
                       aria-label="Like post"
                       className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
-                      onClick={() => onToggleReviewLike(thread.review.sourceReviewId, Boolean(thread.review.viewerHasLiked))}
-                      disabled={likingReviewId === thread.review.sourceReviewId}
+                      onClick={() => onToggleReviewLike(thread.review.sourceReviewId, Boolean(thread.review.viewerHasLiked), thread.review.actorUsername)}
+                      disabled={!viewerUsername || likingReviewId === thread.review.sourceReviewId || viewerUsername.toLowerCase() === thread.review.actorUsername.toLowerCase()}
                     >
                       <Heart className="h-4 w-4" />
                       <span>{thread.review.likesCount}</span>
@@ -467,8 +488,8 @@ export default function ReviewThreadPage() {
                       title="Repost"
                       aria-label="Repost post"
                       className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
-                      onClick={() => onToggleReviewRepost(thread.review.sourceReviewId, Boolean(thread.review.viewerHasReposted))}
-                      disabled={repostingReviewId === thread.review.sourceReviewId}
+                      onClick={() => onToggleReviewRepost(thread.review.sourceReviewId, Boolean(thread.review.viewerHasReposted), thread.review.actorUsername)}
+                      disabled={!viewerUsername || repostingReviewId === thread.review.sourceReviewId || viewerUsername.toLowerCase() === thread.review.actorUsername.toLowerCase()}
                     >
                       <Repeat2 className="h-4 w-4" />
                       <span>{thread.review.repostsCount}</span>
@@ -486,8 +507,16 @@ export default function ReviewThreadPage() {
                   const source = String(thread.review.fragranceSource ?? "FRAGELLA").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
                   navigate(`/fragrances/${encodeURIComponent(thread.review.fragranceExternalId)}?source=${source}`);
                 }}
-                onToggleLike={() => onToggleReviewLike(thread.review.sourceReviewId, Boolean(thread.review.viewerHasLiked))}
-                onToggleRepost={() => onToggleReviewRepost(thread.review.sourceReviewId, Boolean(thread.review.viewerHasReposted))}
+                onToggleLike={
+                  viewerUsername && thread.review.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
+                    ? () => onToggleReviewLike(thread.review.sourceReviewId, Boolean(thread.review.viewerHasLiked), thread.review.actorUsername)
+                    : undefined
+                }
+                onToggleRepost={
+                  viewerUsername && thread.review.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
+                    ? () => onToggleReviewRepost(thread.review.sourceReviewId, Boolean(thread.review.viewerHasReposted), thread.review.actorUsername)
+                    : undefined
+                }
                 liking={likingReviewId === thread.review.sourceReviewId}
                 reposting={repostingReviewId === thread.review.sourceReviewId}
               />

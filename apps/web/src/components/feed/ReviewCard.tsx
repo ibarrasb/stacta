@@ -157,6 +157,17 @@ export default function ReviewCard({
         onOpenComments();
       }}
     >
+      {item.type === "REVIEW_REPOSTED" ? (
+        <button
+          type="button"
+          className="mb-2 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-emerald-200/90 transition hover:text-emerald-100"
+          onClick={onOpenRepostActor}
+          disabled={!onOpenRepostActor}
+        >
+          <Repeat2 className="h-3 w-3" />
+          <span>{(item.repostActorDisplayName || item.repostActorUsername || "Someone")} reposted</span>
+        </button>
+      ) : null}
       <div className="flex items-start justify-between gap-3">
         <button className="flex min-w-0 items-center gap-2 text-left" onClick={onOpenUser}>
           <img
@@ -177,21 +188,9 @@ export default function ReviewCard({
           </div>
         </button>
         <div className="flex items-center gap-2">
-          {item.type === "REVIEW_REPOSTED" ? (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded-full border border-emerald-300/35 bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-100 transition hover:bg-emerald-400/22 disabled:cursor-default"
-              onClick={onOpenRepostActor}
-              disabled={!onOpenRepostActor}
-            >
-              <Repeat2 className="h-3 w-3" />
-              {((item.repostActorDisplayName || item.repostActorUsername || "Someone") + " reposted")}
-            </button>
-          ) : (
-            <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/85">
-              Review
-            </span>
-          )}
+          <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/85">
+            Review
+          </span>
           <div className="relative" ref={menuRef}>
             <button
               type="button"
