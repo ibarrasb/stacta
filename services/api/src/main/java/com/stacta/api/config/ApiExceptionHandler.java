@@ -31,6 +31,7 @@ public class ApiExceptionHandler {
       case "REVIEW_NOT_FOUND" -> HttpStatus.NOT_FOUND;
       case "COMMENT_NOT_FOUND" -> HttpStatus.NOT_FOUND;
       case "COMMENT_REPORT_ALREADY_EXISTS" -> HttpStatus.CONFLICT;
+      case "REVIEW_REPORT_ALREADY_EXISTS" -> HttpStatus.CONFLICT;
       case "COLLECTION_ITEM_NOT_FOUND" -> HttpStatus.NOT_FOUND;
       case "NOT_ONBOARDED" -> HttpStatus.NOT_FOUND;
       case "USER_NOT_FOUND" -> HttpStatus.NOT_FOUND;

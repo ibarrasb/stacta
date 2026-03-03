@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom";
+import { Navigate, createBrowserRouter, useParams } from "react-router-dom";
 import { lazy } from "react";
 
 import AppLayout from "@/routes/AppLayout";
@@ -26,8 +26,13 @@ const UsersSearchPage = lazy(() => import("@/pages/Users/Search"));
 const PublicProfilePage = lazy(() => import("@/pages/Users/PublicProfile"));
 const NotificationsPage = lazy(() => import("@/pages/Notifications"));
 const NotificationRequestsPage = lazy(() => import("@/pages/Notifications/Requests"));
-const ReviewThreadPage = lazy(() => import("@/pages/Reviews/Thread"));
+const PostDetailsPage = lazy(() => import("@/pages/Posts/Details"));
 const AdminNoteReportsPage = lazy(() => import("@/pages/Admin/NoteReports"));
+
+function LegacyReviewPostRedirect() {
+  const { postId = "" } = useParams<{ postId: string }>();
+  return <Navigate to={`/posts/${encodeURIComponent(postId)}`} replace />;
+}
 
 export const router = createBrowserRouter([
   {
@@ -199,18 +204,18 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "/posts/:reviewId",
+        path: "/posts/:postId",
         element: (
           <RequireAuth>
-            <ReviewThreadPage />
+            <PostDetailsPage />
           </RequireAuth>
         ),
       },
       {
-        path: "/reviews/:reviewId",
+        path: "/reviews/:postId",
         element: (
           <RequireAuth>
-            <ReviewThreadPage />
+            <LegacyReviewPostRedirect />
           </RequireAuth>
         ),
       },

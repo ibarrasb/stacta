@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Ellipsis, Flag, Heart, MessageCircle, Repeat2, Reply, Trash2 } from "lucide-react";
+import { ArrowLeft, Ellipsis, Flag, Heart, MessageCircle, Repeat2, Reply, Trash2 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReviewCard from "@/components/feed/ReviewCard";
 import LoadingSpinner from "@/components/ui/loading-spinner";
@@ -9,16 +9,18 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { getMe } from "@/lib/api/me";
 import {
-  createReviewComment,
-  deleteReviewComment,
-  getReviewThread,
-  likeReview,
-  repostReview,
-  reportReviewComment,
-  unlikeReview,
-  unrepostReview,
+  createReviewComment as createPostComment,
+  deleteReview as deletePost,
+  deleteReviewComment as deletePostComment,
+  getReviewThread as getPostThread,
+  likeReview as likePost,
+  repostReview as repostPost,
+  reportReview as reportPost,
+  reportReviewComment as reportPostComment,
+  unlikeReview as unlikePost,
+  unrepostReview as unrepostPost,
 } from "@/lib/api/reviews";
-import type { ReviewCommentItem, ReviewThreadResponse } from "@/lib/api/types";
+import type { FeedItem, ReviewCommentItem as PostCommentItem } from "@/lib/api/types";
 
 const DEFAULT_AVATAR_IMG = "/stacta.png";
 
@@ -29,10 +31,22 @@ const COMMENT_REPORT_REASONS = [
   { value: "OTHER", label: "Other" },
 ] as const;
 
+const POST_REPORT_REASONS = [
+  { value: "INAPPROPRIATE", label: "Inappropriate" },
+  { value: "SPAM", label: "Spam" },
+  { value: "HARASSMENT", label: "Harassment" },
+  { value: "OTHER", label: "Other" },
+] as const;
+
 type ScentSelection = {
   source: "FRAGELLA" | "COMMUNITY";
   externalId: string;
   name: string;
+};
+
+type PostThreadResponse = {
+  post: FeedItem;
+  comments: PostCommentItem[];
 };
 
 function parseScentSelections(payload: string | null | undefined): ScentSelection[] {
@@ -68,6 +82,14 @@ function timeAgo(iso: string) {
   if (hr < 24) return `${hr}h`;
   const day = Math.floor(hr / 24);
   return `${day}d`;
+}
+
+function postTypeLabel(type: string) {
+  if (type === "SCENT_POSTED") return "Scent of the day";
+  if (type === "REVIEW_POSTED" || type === "REVIEW_REPOSTED") return "Review";
+  if (type === "QUESTION_POSTED") return "Question";
+  if (type === "GENERAL_POSTED") return "General";
+  return "Post";
 }
 
 function CommentActionMenu({
@@ -123,18 +145,18 @@ function CommentActionMenu({
   );
 }
 
-export default function ReviewThreadPage() {
+export default function PostDetailsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { reviewId = "" } = useParams<{ reviewId: string }>();
+  const { postId = "" } = useParams<{ postId: string }>();
   const backTarget = (location.state as any)?.from?.pathname || "/home";
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [thread, setThread] = useState<ReviewThreadResponse | null>(null);
+  const [thread, setThread] = useState<PostThreadResponse | null>(null);
   const [viewerUsername, setViewerUsername] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
-  const [replyTarget, setReplyTarget] = useState<ReviewCommentItem | null>(null);
+  const [replyTarget, setReplyTarget] = useState<PostCommentItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [workingCommentId, setWorkingCommentId] = useState<string | null>(null);
   const [openMenuCommentId, setOpenMenuCommentId] = useState<string | null>(null);
@@ -142,29 +164,40 @@ export default function ReviewThreadPage() {
   const [reportCommentId, setReportCommentId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState<"SPAM" | "INAPPROPRIATE" | "HARASSMENT" | "OTHER">("INAPPROPRIATE");
   const [reportDetails, setReportDetails] = useState("");
-  const [likingReviewId, setLikingReviewId] = useState<string | null>(null);
-  const [repostingReviewId, setRepostingReviewId] = useState<string | null>(null);
+  const [postReportDialogOpen, setPostReportDialogOpen] = useState(false);
+  const [postReportReason, setPostReportReason] = useState<"SPAM" | "INAPPROPRIATE" | "HARASSMENT" | "OTHER">("INAPPROPRIATE");
+  const [postReportDetails, setPostReportDetails] = useState("");
+  const [reportingPost, setReportingPost] = useState(false);
+  const [likingPostId, setLikingPostId] = useState<string | null>(null);
+  const [repostingPostId, setRepostingPostId] = useState<string | null>(null);
+  const [threadMenuOpen, setThreadMenuOpen] = useState(false);
+  const [deletingPost, setDeletingPost] = useState(false);
   const composerRef = useRef<HTMLElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const threadMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const loadThread = useCallback(async () => {
-    if (!reviewId) return;
+  const loadPostThread = useCallback(async () => {
+    if (!postId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await getReviewThread(reviewId);
-      setThread(data);
+      const data = await getPostThread(postId);
+      const normalized: PostThreadResponse = {
+        post: data.review,
+        comments: data.comments,
+      };
+      setThread(normalized);
     } catch (e: any) {
       setError(e?.message || "Failed to load comments.");
       setThread(null);
     } finally {
       setLoading(false);
     }
-  }, [reviewId]);
+  }, [postId]);
 
   useEffect(() => {
-    void loadThread();
-  }, [loadThread]);
+    void loadPostThread();
+  }, [loadPostThread]);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,8 +215,21 @@ export default function ReviewThreadPage() {
     };
   }, []);
 
+  useEffect(() => {
+    function onPointerDown(event: MouseEvent) {
+      const node = threadMenuRef.current;
+      if (!node) return;
+      if (node.contains(event.target as Node)) return;
+      setThreadMenuOpen(false);
+    }
+    if (threadMenuOpen) document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [threadMenuOpen]);
+
   const commentsByParent = useMemo(() => {
-    const grouped = new Map<string | null, ReviewCommentItem[]>();
+    const grouped = new Map<string | null, PostCommentItem[]>();
     for (const c of thread?.comments ?? []) {
       const key = c.parentCommentId ?? null;
       if (!grouped.has(key)) grouped.set(key, []);
@@ -196,17 +242,17 @@ export default function ReviewThreadPage() {
 
   async function onSubmitComment() {
     const body = newComment.trim();
-    if (!thread?.review?.id || !body || submitting) return;
+    if (!thread?.post?.id || !body || submitting) return;
     setSubmitting(true);
     setError(null);
     try {
-      await createReviewComment(thread.review.id, {
+      await createPostComment(thread.post.id, {
         body,
         parentCommentId: replyTarget?.id ?? null,
       });
       setNewComment("");
       setReplyTarget(null);
-      await loadThread();
+      await loadPostThread();
     } catch (e: any) {
       setError(e?.message || "Failed to post comment.");
     } finally {
@@ -215,14 +261,14 @@ export default function ReviewThreadPage() {
   }
 
   async function onDeleteComment(commentId: string) {
-    if (!thread?.review?.id || !commentId) return;
+    if (!thread?.post?.id || !commentId) return;
     if (!window.confirm("Delete this comment? Replies under it will also be removed.")) return;
     setWorkingCommentId(commentId);
     setOpenMenuCommentId(null);
     setError(null);
     try {
-      await deleteReviewComment(thread.review.id, commentId);
-      await loadThread();
+      await deletePostComment(thread.post.id, commentId);
+      await loadPostThread();
     } catch (e: any) {
       setError(e?.message || "Failed to delete comment.");
     } finally {
@@ -240,11 +286,11 @@ export default function ReviewThreadPage() {
   }
 
   async function onSubmitReportComment() {
-    if (!thread?.review?.id || !reportCommentId) return;
+    if (!thread?.post?.id || !reportCommentId) return;
     setWorkingCommentId(reportCommentId);
     setError(null);
     try {
-      await reportReviewComment(thread.review.id, reportCommentId, {
+      await reportPostComment(thread.post.id, reportCommentId, {
         reason: reportReason,
         details: reportDetails.trim() || null,
       });
@@ -257,59 +303,98 @@ export default function ReviewThreadPage() {
     }
   }
 
-  async function onToggleReviewLike(reviewId: string, currentlyLiked: boolean, actorUsername?: string) {
-    if (!reviewId || likingReviewId === reviewId) return;
+  async function onTogglePostLike(postId: string, currentlyLiked: boolean, actorUsername?: string) {
+    if (!postId || likingPostId === postId) return;
     if (!viewerUsername) return;
     if (actorUsername && actorUsername.toLowerCase() === viewerUsername.toLowerCase()) return;
-    setLikingReviewId(reviewId);
+    setLikingPostId(postId);
     setThread((prev) => {
-      if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
-      const nextLikes = Math.max(0, prev.review.likesCount + (currentlyLiked ? -1 : 1));
-      return { ...prev, review: { ...prev.review, viewerHasLiked: !currentlyLiked, likesCount: nextLikes } };
+      if (!prev || prev.post.sourceReviewId !== postId) return prev;
+      const nextLikes = Math.max(0, prev.post.likesCount + (currentlyLiked ? -1 : 1));
+      return { ...prev, post: { ...prev.post, viewerHasLiked: !currentlyLiked, likesCount: nextLikes } };
     });
     try {
-      const res = currentlyLiked ? await unlikeReview(reviewId) : await likeReview(reviewId);
+      const res = currentlyLiked ? await unlikePost(postId) : await likePost(postId);
       setThread((prev) => {
-        if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
-        return { ...prev, review: { ...prev.review, viewerHasLiked: res.viewerHasLiked, likesCount: res.likesCount } };
+        if (!prev || prev.post.sourceReviewId !== postId) return prev;
+        return { ...prev, post: { ...prev.post, viewerHasLiked: res.viewerHasLiked, likesCount: res.likesCount } };
       });
     } catch (e: any) {
       setThread((prev) => {
-        if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
-        const revertedLikes = Math.max(0, prev.review.likesCount + (currentlyLiked ? 1 : -1));
-        return { ...prev, review: { ...prev.review, viewerHasLiked: currentlyLiked, likesCount: revertedLikes } };
+        if (!prev || prev.post.sourceReviewId !== postId) return prev;
+        const revertedLikes = Math.max(0, prev.post.likesCount + (currentlyLiked ? 1 : -1));
+        return { ...prev, post: { ...prev.post, viewerHasLiked: currentlyLiked, likesCount: revertedLikes } };
       });
       setError(e?.message || "Failed to update like.");
     } finally {
-      setLikingReviewId(null);
+      setLikingPostId(null);
     }
   }
 
-  async function onToggleReviewRepost(reviewId: string, currentlyReposted: boolean, actorUsername?: string) {
-    if (!reviewId || repostingReviewId === reviewId) return;
+  async function onTogglePostRepost(postId: string, currentlyReposted: boolean, actorUsername?: string) {
+    if (!postId || repostingPostId === postId) return;
     if (!viewerUsername) return;
     if (actorUsername && actorUsername.toLowerCase() === viewerUsername.toLowerCase()) return;
-    setRepostingReviewId(reviewId);
+    setRepostingPostId(postId);
     setThread((prev) => {
-      if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
-      const nextReposts = Math.max(0, prev.review.repostsCount + (currentlyReposted ? -1 : 1));
-      return { ...prev, review: { ...prev.review, viewerHasReposted: !currentlyReposted, repostsCount: nextReposts } };
+      if (!prev || prev.post.sourceReviewId !== postId) return prev;
+      const nextReposts = Math.max(0, prev.post.repostsCount + (currentlyReposted ? -1 : 1));
+      return { ...prev, post: { ...prev.post, viewerHasReposted: !currentlyReposted, repostsCount: nextReposts } };
     });
     try {
-      const res = currentlyReposted ? await unrepostReview(reviewId) : await repostReview(reviewId);
+      const res = currentlyReposted ? await unrepostPost(postId) : await repostPost(postId);
       setThread((prev) => {
-        if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
-        return { ...prev, review: { ...prev.review, viewerHasReposted: res.viewerHasReposted, repostsCount: res.repostsCount } };
+        if (!prev || prev.post.sourceReviewId !== postId) return prev;
+        return { ...prev, post: { ...prev.post, viewerHasReposted: res.viewerHasReposted, repostsCount: res.repostsCount } };
       });
     } catch (e: any) {
       setThread((prev) => {
-        if (!prev || prev.review.sourceReviewId !== reviewId) return prev;
-        const revertedReposts = Math.max(0, prev.review.repostsCount + (currentlyReposted ? 1 : -1));
-        return { ...prev, review: { ...prev.review, viewerHasReposted: currentlyReposted, repostsCount: revertedReposts } };
+        if (!prev || prev.post.sourceReviewId !== postId) return prev;
+        const revertedReposts = Math.max(0, prev.post.repostsCount + (currentlyReposted ? 1 : -1));
+        return { ...prev, post: { ...prev.post, viewerHasReposted: currentlyReposted, repostsCount: revertedReposts } };
       });
       setError(e?.message || "Failed to update repost.");
     } finally {
-      setRepostingReviewId(null);
+      setRepostingPostId(null);
+    }
+  }
+
+  async function onDeleteThreadPost() {
+    if (!thread?.post?.sourceReviewId || deletingPost) return;
+    setDeletingPost(true);
+    setError(null);
+    try {
+      await deletePost(thread.post.sourceReviewId);
+      navigate(backTarget);
+    } catch (e: any) {
+      setError(e?.message || "Failed to delete post.");
+    } finally {
+      setDeletingPost(false);
+      setThreadMenuOpen(false);
+    }
+  }
+
+  function onOpenReportPost() {
+    setThreadMenuOpen(false);
+    setPostReportReason("INAPPROPRIATE");
+    setPostReportDetails("");
+    setPostReportDialogOpen(true);
+  }
+
+  async function onSubmitReportPost() {
+    if (!thread?.post?.sourceReviewId || reportingPost) return;
+    setReportingPost(true);
+    setError(null);
+    try {
+      await reportPost(thread.post.sourceReviewId, {
+        reason: postReportReason,
+        details: postReportDetails.trim() || null,
+      });
+      setPostReportDialogOpen(false);
+    } catch (e: any) {
+      setError(e?.message || "Failed to report post.");
+    } finally {
+      setReportingPost(false);
     }
   }
 
@@ -320,12 +405,12 @@ export default function ReviewThreadPage() {
     }, 160);
   }
 
-  function startReply(comment: ReviewCommentItem) {
+  function startReply(comment: PostCommentItem) {
     setReplyTarget(comment);
     focusComposer();
   }
 
-  function renderComment(comment: ReviewCommentItem, isReply: boolean) {
+  function renderComment(comment: PostCommentItem, isReply: boolean) {
     return (
       <article
         key={comment.id}
@@ -387,20 +472,63 @@ export default function ReviewThreadPage() {
 
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
-      <div className="mx-auto max-w-3xl px-4 pb-10">
-        <div className="mb-4 rounded-3xl border border-white/15 bg-black/30 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Post thread</div>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight">Post</h1>
-            </div>
-            <Button
-              variant="secondary"
-              className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+      <div className="mx-auto -mt-4 max-w-3xl px-4 pb-10">
+        <div className="mb-4">
+          <div className="grid grid-cols-[40px_1fr_40px] items-center">
+            <button
+              type="button"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white/75 transition hover:bg-white/10 hover:text-white"
+              aria-label="Back"
               onClick={() => navigate(backTarget)}
             >
-              Back
-            </Button>
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div className="text-center text-sm font-semibold text-white/90">
+              {thread ? postTypeLabel(thread.post.type) : "Post"}
+            </div>
+            <div className="relative justify-self-end" ref={threadMenuRef}>
+              <button
+                type="button"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white/75 transition hover:bg-white/10 hover:text-white"
+                aria-label="Post actions"
+                onClick={() => setThreadMenuOpen((prev) => !prev)}
+              >
+                <Ellipsis className="h-4 w-4" />
+              </button>
+              {threadMenuOpen && thread ? (
+                <div className="absolute right-0 z-30 mt-1.5 min-w-[156px] rounded-xl border border-white/15 bg-[#101114]/95 p-1.5 shadow-[0_14px_28px_rgba(0,0,0,0.45)] backdrop-blur">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-white/85 transition hover:bg-white/10"
+                    onClick={() => {
+                      setThreadMenuOpen(false);
+                      navigate(`/u/${thread.post.actorUsername}`);
+                    }}
+                  >
+                    <span>View profile</span>
+                  </button>
+                  {viewerUsername && thread.post.actorUsername.toLowerCase() === viewerUsername.toLowerCase() ? (
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-red-200 transition hover:bg-red-500/10"
+                      onClick={() => void onDeleteThreadPost()}
+                      disabled={deletingPost}
+                    >
+                      <span>{deletingPost ? "Deleting..." : "Delete post"}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-white/85 transition hover:bg-white/10"
+                      onClick={onOpenReportPost}
+                    >
+                      <Flag className="h-3.5 w-3.5" />
+                      <span>Report post</span>
+                    </button>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -418,16 +546,16 @@ export default function ReviewThreadPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {thread.review.type === "SCENT_POSTED" ? (
+            {thread.post.type === "SCENT_POSTED" ? (
               <article className="rounded-3xl border border-white/15 bg-[linear-gradient(140deg,rgba(34,211,238,0.08),rgba(244,114,182,0.07),rgba(0,0,0,0.28))] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <button
                     className="flex min-w-0 items-center gap-2 text-left"
-                    onClick={() => navigate(`/u/${thread.review.actorUsername}`)}
+                    onClick={() => navigate(`/u/${thread.post.actorUsername}`)}
                   >
                     <img
-                      src={thread.review.actorAvatarUrl?.trim() ? thread.review.actorAvatarUrl : DEFAULT_AVATAR_IMG}
-                      alt={`${thread.review.actorUsername} avatar`}
+                      src={thread.post.actorAvatarUrl?.trim() ? thread.post.actorAvatarUrl : DEFAULT_AVATAR_IMG}
+                      alt={`${thread.post.actorUsername} avatar`}
                       className="h-9 w-9 rounded-full border border-white/15 object-cover"
                       loading="lazy"
                       onError={(e) => {
@@ -439,20 +567,17 @@ export default function ReviewThreadPage() {
                     />
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-white">
-                        {thread.review.actorDisplayName || thread.review.actorUsername}
+                        {thread.post.actorDisplayName || thread.post.actorUsername}
                       </div>
-                      <div className="truncate text-xs text-white/60">@{thread.review.actorUsername}</div>
+                      <div className="truncate text-xs text-white/60">@{thread.post.actorUsername}</div>
                     </div>
                   </button>
-                  <span className="rounded-full border border-cyan-300/30 bg-cyan-300/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100">
-                    Scent of the day
-                  </span>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {parseScentSelections(thread.review.reviewPerformance).map((scent) => (
+                  {parseScentSelections(thread.post.reviewPerformance).map((scent) => (
                     <button
-                      key={`${thread.review.id}:${scent.source}:${scent.externalId}`}
+                      key={`${thread.post.id}:${scent.source}:${scent.externalId}`}
                       type="button"
                       className="rounded-full border border-cyan-200/40 bg-gradient-to-r from-cyan-300/20 via-white/10 to-amber-300/20 px-3 py-1.5 text-xs font-semibold text-white transition hover:from-cyan-300/30 hover:via-white/15 hover:to-amber-300/30"
                       onClick={() => navigate(`/fragrances/${encodeURIComponent(scent.externalId)}?source=${scent.source}`)}
@@ -461,64 +586,65 @@ export default function ReviewThreadPage() {
                     </button>
                   ))}
                 </div>
-                {thread.review.reviewExcerpt ? (
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/80">{thread.review.reviewExcerpt}</p>
+                {thread.post.reviewExcerpt ? (
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/80">{thread.post.reviewExcerpt}</p>
                 ) : null}
 
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-white/55">
-                  <div>{timeAgo(thread.review.createdAt)}</div>
+                  <div>{timeAgo(thread.post.createdAt)}</div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       title="Like"
                       aria-label="Like post"
                       className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
-                      onClick={() => onToggleReviewLike(thread.review.sourceReviewId, Boolean(thread.review.viewerHasLiked), thread.review.actorUsername)}
-                      disabled={!viewerUsername || likingReviewId === thread.review.sourceReviewId || viewerUsername.toLowerCase() === thread.review.actorUsername.toLowerCase()}
+                      onClick={() => onTogglePostLike(thread.post.sourceReviewId, Boolean(thread.post.viewerHasLiked), thread.post.actorUsername)}
+                      disabled={!viewerUsername || likingPostId === thread.post.sourceReviewId || viewerUsername.toLowerCase() === thread.post.actorUsername.toLowerCase()}
                     >
                       <Heart className="h-4 w-4" />
-                      <span>{thread.review.likesCount}</span>
+                      <span>{thread.post.likesCount}</span>
                     </button>
                     <span className="inline-flex h-7 items-center justify-center gap-1 text-white/60">
                       <MessageCircle className="h-4 w-4" />
-                      <span>{thread.review.commentsCount}</span>
+                      <span>{thread.post.commentsCount}</span>
                     </span>
                     <button
                       type="button"
                       title="Repost"
                       aria-label="Repost post"
                       className="inline-flex h-7 items-center justify-center gap-1 text-white/65 transition hover:text-[#3EB489]"
-                      onClick={() => onToggleReviewRepost(thread.review.sourceReviewId, Boolean(thread.review.viewerHasReposted), thread.review.actorUsername)}
-                      disabled={!viewerUsername || repostingReviewId === thread.review.sourceReviewId || viewerUsername.toLowerCase() === thread.review.actorUsername.toLowerCase()}
+                      onClick={() => onTogglePostRepost(thread.post.sourceReviewId, Boolean(thread.post.viewerHasReposted), thread.post.actorUsername)}
+                      disabled={!viewerUsername || repostingPostId === thread.post.sourceReviewId || viewerUsername.toLowerCase() === thread.post.actorUsername.toLowerCase()}
                     >
                       <Repeat2 className="h-4 w-4" />
-                      <span>{thread.review.repostsCount}</span>
+                      <span>{thread.post.repostsCount}</span>
                     </button>
                   </div>
                 </div>
               </article>
             ) : (
               <ReviewCard
-                item={thread.review}
-                timeAgo={timeAgo(thread.review.createdAt)}
-                onOpenUser={() => navigate(`/u/${thread.review.actorUsername}`)}
+                item={thread.post}
+                timeAgo={timeAgo(thread.post.createdAt)}
+                onOpenUser={() => navigate(`/u/${thread.post.actorUsername}`)}
                 onOpenFragrance={() => {
-                  if (!thread.review.fragranceExternalId) return;
-                  const source = String(thread.review.fragranceSource ?? "FRAGELLA").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
-                  navigate(`/fragrances/${encodeURIComponent(thread.review.fragranceExternalId)}?source=${source}`);
+                  if (!thread.post.fragranceExternalId) return;
+                  const source = String(thread.post.fragranceSource ?? "FRAGELLA").toUpperCase() === "COMMUNITY" ? "COMMUNITY" : "FRAGELLA";
+                  navigate(`/fragrances/${encodeURIComponent(thread.post.fragranceExternalId)}?source=${source}`);
                 }}
                 onToggleLike={
-                  viewerUsername && thread.review.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
-                    ? () => onToggleReviewLike(thread.review.sourceReviewId, Boolean(thread.review.viewerHasLiked), thread.review.actorUsername)
+                  viewerUsername && thread.post.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
+                    ? () => onTogglePostLike(thread.post.sourceReviewId, Boolean(thread.post.viewerHasLiked), thread.post.actorUsername)
                     : undefined
                 }
                 onToggleRepost={
-                  viewerUsername && thread.review.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
-                    ? () => onToggleReviewRepost(thread.review.sourceReviewId, Boolean(thread.review.viewerHasReposted), thread.review.actorUsername)
+                  viewerUsername && thread.post.actorUsername.toLowerCase() !== viewerUsername.toLowerCase()
+                    ? () => onTogglePostRepost(thread.post.sourceReviewId, Boolean(thread.post.viewerHasReposted), thread.post.actorUsername)
                     : undefined
                 }
-                liking={likingReviewId === thread.review.sourceReviewId}
-                reposting={repostingReviewId === thread.review.sourceReviewId}
+                liking={likingPostId === thread.post.sourceReviewId}
+                reposting={repostingPostId === thread.post.sourceReviewId}
+                hideMetaActions
               />
             )}
 
@@ -628,6 +754,19 @@ export default function ReviewThreadPage() {
         onDetailsChange={setReportDetails}
         submitting={Boolean(reportCommentId && workingCommentId === reportCommentId)}
         onSubmit={() => void onSubmitReportComment()}
+      />
+      <ReportDialog
+        open={postReportDialogOpen}
+        onOpenChange={setPostReportDialogOpen}
+        title="Report Post"
+        targetLabel={thread ? `@${thread.post.actorUsername} • ${postTypeLabel(thread.post.type)}` : "Post"}
+        reasons={[...POST_REPORT_REASONS]}
+        reason={postReportReason}
+        onReasonChange={(next) => setPostReportReason(next as "SPAM" | "INAPPROPRIATE" | "HARASSMENT" | "OTHER")}
+        details={postReportDetails}
+        onDetailsChange={setPostReportDetails}
+        submitting={reportingPost}
+        onSubmit={() => void onSubmitReportPost()}
       />
     </div>
   );

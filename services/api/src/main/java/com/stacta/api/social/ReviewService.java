@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ReviewService {
+  private static final java.util.Set<String> REPORT_REASONS = java.util.Set.of("SPAM", "INAPPROPRIATE", "HARASSMENT", "OTHER");
 
   private final ActivityEventRepository activities;
   private final UserRepository users;
@@ -250,6 +251,51 @@ public class ReviewService {
     return new ReviewRepostResponse(getRepostsCount(reviewId), false);
   }
 
+  @Transactional
+  public void report(String viewerSub, UUID reviewId, String reasonRaw, String detailsRaw) {
+    User me = users.findByCognitoSub(viewerSub).orElseThrow(() -> new ApiException("NOT_ONBOARDED"));
+    ActivityEvent review = getEngageablePostOrThrow(reviewId);
+    if (me.getId().equals(review.getActorUserId())) {
+      throw new ApiException("REVIEW_FORBIDDEN");
+    }
+
+    String reason = normalizeReportReason(reasonRaw);
+    String details = nullIfBlank(detailsRaw);
+    if (details != null && details.length() > 1000) {
+      throw new ApiException("INVALID_REVIEW");
+    }
+
+    Integer openCount = jdbc.queryForObject(
+      """
+      SELECT COUNT(*)
+      FROM review_report
+      WHERE review_id = ?
+        AND reported_by_user_id = ?
+        AND status = 'OPEN'
+      """,
+      Integer.class,
+      reviewId,
+      me.getId()
+    );
+    if ((openCount == null ? 0 : openCount) > 0) {
+      throw new ApiException("REVIEW_REPORT_ALREADY_EXISTS");
+    }
+
+    int inserted = jdbc.update(
+      """
+      INSERT INTO review_report (review_id, reported_by_user_id, reason, details)
+      VALUES (?, ?, ?, ?)
+      """,
+      reviewId,
+      me.getId(),
+      reason,
+      details
+    );
+    if (inserted <= 0) {
+      throw new ApiException("REVIEW_NOT_FOUND");
+    }
+  }
+
   private ActivityEvent getEngageablePostOrThrow(UUID reviewId) {
     ActivityEvent event = activities.findById(reviewId).orElseThrow(() -> new ApiException("REVIEW_NOT_FOUND"));
     if (!isEngageablePostType(event.getType())) {
@@ -420,5 +466,13 @@ public class ReviewService {
     if (!isPublic) {
       throw new ApiException("INVALID_REVIEW");
     }
+  }
+
+  private String normalizeReportReason(String raw) {
+    String reason = safeTrim(raw).toUpperCase(Locale.ROOT);
+    if (!REPORT_REASONS.contains(reason)) {
+      throw new ApiException("INVALID_REVIEW");
+    }
+    return reason;
   }
 }

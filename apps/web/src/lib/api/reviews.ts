@@ -107,6 +107,18 @@ export type ReportReviewCommentRequest = {
   details?: string | null;
 };
 
+export type ReportReviewRequest = {
+  reason: "SPAM" | "INAPPROPRIATE" | "HARASSMENT" | "OTHER";
+  details?: string | null;
+};
+
+export function reportReview(reviewId: string, body: ReportReviewRequest) {
+  return authedFetch<void>(`/api/v1/reviews/${encodeURIComponent(reviewId)}/report`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function reportReviewComment(reviewId: string, commentId: string, body: ReportReviewCommentRequest) {
   return authedFetch<void>(`/api/v1/reviews/${encodeURIComponent(reviewId)}/comments/${encodeURIComponent(commentId)}/report`, {
     method: "POST",

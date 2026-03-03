@@ -97,6 +97,7 @@ export default function ReviewCard({
   onToggleRepost,
   reposting,
   onOpenRepostActor,
+  hideMetaActions,
 }: {
   item: FeedItem;
   timeAgo: string;
@@ -111,6 +112,7 @@ export default function ReviewCard({
   onToggleRepost?: () => void;
   reposting?: boolean;
   onOpenRepostActor?: () => void;
+  hideMetaActions?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -187,53 +189,55 @@ export default function ReviewCard({
             <div className="truncate text-xs text-white/60">@{item.actorUsername}</div>
           </div>
         </button>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/85">
-            Review
-          </span>
-          <div className="relative" ref={menuRef}>
-            <button
-              type="button"
-              title="More actions"
-              aria-label="More actions"
-              onClick={() => setMenuOpen((v) => !v)}
-              className="inline-flex items-center justify-center px-1 py-0.5 text-white/70 transition hover:text-white"
-            >
-              <Ellipsis className="h-4 w-4" />
-            </button>
-            {menuOpen ? (
-              <div className="absolute right-0 z-20 mt-2 min-w-[160px] rounded-xl border border-white/15 bg-[#101114]/95 p-1.5 shadow-[0_14px_28px_rgba(0,0,0,0.45)] backdrop-blur">
-                {onDelete ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onDelete();
-                    }}
-                    disabled={Boolean(deleting)}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-red-100 transition hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>{deleting ? "Deleting..." : "Delete review"}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onReport?.();
-                    }}
-                    disabled={!onReport}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Flag className="h-3.5 w-3.5" />
-                    <span>Report review</span>
-                  </button>
-                )}
-              </div>
-            ) : null}
+        {!hideMetaActions ? (
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/85">
+              Review
+            </span>
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                title="More actions"
+                aria-label="More actions"
+                onClick={() => setMenuOpen((v) => !v)}
+                className="inline-flex items-center justify-center px-1 py-0.5 text-white/70 transition hover:text-white"
+              >
+                <Ellipsis className="h-4 w-4" />
+              </button>
+              {menuOpen ? (
+                <div className="absolute right-0 z-20 mt-2 min-w-[160px] rounded-xl border border-white/15 bg-[#101114]/95 p-1.5 shadow-[0_14px_28px_rgba(0,0,0,0.45)] backdrop-blur">
+                  {onDelete ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onDelete();
+                      }}
+                      disabled={Boolean(deleting)}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-red-100 transition hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>{deleting ? "Deleting..." : "Delete review"}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onReport?.();
+                      }}
+                      disabled={!onReport}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Flag className="h-3.5 w-3.5" />
+                      <span>Report review</span>
+                    </button>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
 
       <div className="mt-3 flex items-start gap-3">

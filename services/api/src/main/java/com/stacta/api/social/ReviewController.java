@@ -4,6 +4,7 @@ import com.stacta.api.social.dto.CreateReviewRequest;
 import com.stacta.api.social.dto.CreateScentPostRequest;
 import com.stacta.api.social.dto.CreateReviewCommentRequest;
 import com.stacta.api.social.dto.ReportReviewCommentRequest;
+import com.stacta.api.social.dto.ReportReviewRequest;
 import com.stacta.api.social.dto.ReviewCommentItem;
 import com.stacta.api.social.dto.ReviewLikeResponse;
 import com.stacta.api.social.dto.ReviewRepostResponse;
@@ -96,6 +97,15 @@ public class ReviewController {
     @PathVariable("reviewId") UUID reviewId
   ) {
     return reviewComments.thread(jwt.getSubject(), reviewId);
+  }
+
+  @PostMapping("/{reviewId}/report")
+  public void report(
+    @AuthenticationPrincipal Jwt jwt,
+    @PathVariable("reviewId") UUID reviewId,
+    @Valid @RequestBody ReportReviewRequest request
+  ) {
+    reviewService.report(jwt.getSubject(), reviewId, request.reason(), request.details());
   }
 
   @GetMapping("/{reviewId}/comments")
