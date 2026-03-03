@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCheck, Heart, Home, MessageCircle, Repeat2, ShieldAlert, Trash2, UserPlus, Users } from "lucide-react";
+import { CheckCheck, Heart, MessageCircle, Repeat2, ShieldAlert, Trash2, UserPlus, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/ui/loading-spinner";
@@ -190,36 +190,19 @@ export default function NotificationsPage() {
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
       <div className="mx-auto max-w-3xl px-4 pb-10">
-        <header className="mb-4 rounded-3xl border border-cyan-200/15 bg-[linear-gradient(135deg,rgba(62,180,137,0.16),rgba(18,20,24,0.82)_45%,rgba(10,12,16,0.9))] p-4 backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight">Notifications</h1>
-              <p className="mt-1 text-sm text-cyan-50/75">{headerLabel}</p>
-            </div>
-            <Button
-              variant="secondary"
-              className="h-9 rounded-lg border border-white/20 bg-white/12 px-3 text-white hover:bg-white/18"
-              onClick={() => navigate("/home")}
-            >
-              <Home className="mr-1.5 h-4 w-4" />
-              Home
-            </Button>
-          </div>
-        </header>
-
         {error ? (
           <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
           </div>
         ) : null}
 
-        {isPrivateAccount ? (
+        {isPrivateAccount && pendingPreview.length > 0 ? (
           <section className="mb-4 rounded-2xl border border-white/12 bg-white/[0.04] p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="text-sm text-white/80">
                 Follow requests:{" "}
                 <span className="font-semibold text-white">
-                  {pendingPreview.length === 0 ? "none" : hasMorePending ? "4+" : pendingPreview.length}
+                  {hasMorePending ? "4+" : pendingPreview.length}
                 </span>
               </div>
               <Button
@@ -240,9 +223,12 @@ export default function NotificationsPage() {
           </section>
         ) : null}
 
-        <section className="rounded-3xl border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(8,10,14,0.5))] p-3 sm:p-4">
+        <section>
           <div className="mb-3 flex items-center justify-between gap-2">
-            <p className="text-xs uppercase tracking-[0.12em] text-white/45">Activity</p>
+            <div>
+              <p className="text-xs uppercase tracking-[0.12em] text-white/45">Activity</p>
+              <p className="mt-1 text-sm text-cyan-50/75">{headerLabel}</p>
+            </div>
             <button
               type="button"
               title="Clear read"
@@ -265,7 +251,7 @@ export default function NotificationsPage() {
             </div>
           ) : items.length === 0 ? (
             <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-3 text-sm text-white/60">
-              No activity yet.
+              You're all caught up.
             </div>
           ) : (
             <div className="space-y-4">

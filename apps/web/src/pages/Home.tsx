@@ -35,7 +35,7 @@ function eventLabel(item: FeedItem) {
   if (item.type === "COLLECTION_ITEM_ADDED") return "added to collection";
   if (item.type === "WISHLIST_ITEM_ADDED") return "added to wishlist";
   if (item.type === "REVIEW_REPOSTED") return "reposted a review";
-  return "followed";
+  return "shared activity";
 }
 
 function kindPill(type: FeedItem["type"]) {
@@ -44,7 +44,7 @@ function kindPill(type: FeedItem["type"]) {
   if (type === "COLLECTION_ITEM_ADDED") return "Collection";
   if (type === "WISHLIST_ITEM_ADDED") return "Wishlist";
   if (type === "REVIEW_REPOSTED") return "Repost";
-  return "Follow";
+  return "Activity";
 }
 
 function collectionTagLabel(tag: string | null | undefined) {
@@ -120,6 +120,10 @@ export default function HomePage() {
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
+  function isDisplayFeedItem(item: FeedItem) {
+    return item.type !== "USER_FOLLOWED_USER";
+  }
+
   useEffect(() => {
     let cancelled = false;
     getMe()
@@ -143,7 +147,7 @@ export default function HomePage() {
     setError(null);
     try {
       const page = await listFeed({ tab, filter, limit: 20 });
-      setItems(page.items);
+      setItems(page.items.filter(isDisplayFeedItem));
       setCursor(page.nextCursor);
     } catch (e: any) {
       setError(e?.message || "Failed to load feed.");
@@ -188,7 +192,7 @@ export default function HomePage() {
     setError(null);
     try {
       const page = await listFeed({ tab, filter, limit: 20, cursor });
-      setItems((prev) => [...prev, ...page.items]);
+      setItems((prev) => [...prev, ...page.items.filter(isDisplayFeedItem)]);
       setCursor(page.nextCursor);
     } catch (e: any) {
       setError(e?.message || "Failed to load more feed items.");
@@ -319,7 +323,6 @@ export default function HomePage() {
     { value: "SCENT_POSTED", label: "Posts" },
     { value: "COLLECTION_ITEM_ADDED", label: "Collection" },
     { value: "WISHLIST_ITEM_ADDED", label: "Wishlist" },
-    { value: "USER_FOLLOWED_USER", label: "Follows" },
   ];
 
   const composerTypeOptions: Array<{ value: ComposerPostType; label: string; description: string }> = [
@@ -607,7 +610,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen text-white stacta-fade-rise">
-      <div className="mx-auto max-w-7xl px-4 pb-10">
+      <div className="mx-auto -mt-6 max-w-7xl px-4 pb-10">
         <div className="mb-4">
           <div className="mb-1 grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-white/10 pb-1">
             <div aria-hidden="true" />
@@ -981,16 +984,7 @@ export default function HomePage() {
 
                     <div className="mt-3 text-sm text-white/85">
                       <span className="font-semibold">{item.actorDisplayName || item.actorUsername}</span> {eventLabel(item)}{" "}
-                      {item.type === "USER_FOLLOWED_USER" ? (
-                        <button
-                          className="font-semibold text-cyan-200 hover:underline"
-                          onClick={() => item.targetUsername && navigate(`/u/${item.targetUsername}`, { state: { from: { pathname: "/home" } } })}
-                        >
-                          {item.targetDisplayName || item.targetUsername || "user"}
-                        </button>
-                      ) : (
-                        <span className="font-semibold text-amber-100">{item.fragranceName || "a fragrance"}</span>
-                      )}
+                      <span className="font-semibold text-amber-100">{item.fragranceName || "a fragrance"}</span>
                       {item.type === "COLLECTION_ITEM_ADDED" && collectionTagLabel(item.collectionTag) ? (
                         <span className="ml-2 inline-flex items-center rounded-full border border-[#3EB489]/45 bg-[#3EB489]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#9de2ca]">
                           {collectionTagLabel(item.collectionTag)}
@@ -1060,7 +1054,7 @@ export default function HomePage() {
               <div className="mt-2 space-y-2 text-sm text-white/75">
                 <div>Prioritize reviews and adds to collection/wishlist.</div>
                 <div>Collapse repetitive low-signal events.</div>
-                <div>Keep follows lower in ranking than content posts.</div>
+                <div>Favor high-signal posts and reviews.</div>
               </div>
             </div>
 
