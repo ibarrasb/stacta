@@ -184,7 +184,7 @@ export default function AdminNoteReportsPage() {
 
   if (loadingAuth) {
     return (
-      <div className="mx-auto max-w-6xl px-4 pb-24">
+      <div className="mx-auto max-w-6xl px-3 pb-24 sm:px-4">
         <div className="mt-6 rounded-2xl border border-white/15 bg-black/25 p-4 text-sm text-white/75">
           <span className="inline-flex items-center gap-2">
             <InlineSpinner />
@@ -197,7 +197,7 @@ export default function AdminNoteReportsPage() {
 
   if (!isAdmin) {
     return (
-      <div className="mx-auto max-w-6xl px-4 pb-24">
+      <div className="mx-auto max-w-6xl px-3 pb-24 sm:px-4">
         <div className="mt-6 rounded-2xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-100">
           Admin access required.
         </div>
@@ -206,24 +206,25 @@ export default function AdminNoteReportsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-24 text-white">
-      <div className="mt-6 rounded-3xl border border-white/15 bg-black/30 p-5">
+    <div className="mx-auto max-w-6xl px-3 pb-24 text-white sm:px-4">
+      <div className="mt-6 rounded-3xl border border-white/15 bg-black/30 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xs uppercase tracking-[0.16em] text-amber-200/80">Admin</div>
-            <h1 className="mt-1 text-2xl font-semibold">Note Reports</h1>
+            <h1 className="mt-1 text-xl font-semibold sm:text-2xl">Note Reports</h1>
             <div className="mt-1 text-sm text-white/65">
               {openCount} open note report(s) • {openFragranceCount} open fragrance report(s)
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="-mx-1 w-full overflow-x-auto px-1 pb-1 sm:mx-0 sm:w-auto sm:overflow-visible sm:px-0 sm:pb-0">
+            <div className="flex min-w-max items-center gap-2 sm:min-w-0 sm:flex-wrap sm:justify-end">
             {(["OPEN", "ALL", "RESOLVED_DISMISSED", "RESOLVED_MERGED"] as Filter[]).map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setFilter(value)}
                 className={[
-                  "rounded-xl border px-3 py-1.5 text-xs font-semibold",
+                  "shrink-0 rounded-xl border px-3 py-1.5 text-xs font-semibold",
                   filter === value
                     ? "border-amber-200/35 bg-amber-300/20 text-amber-100"
                     : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white",
@@ -232,9 +233,10 @@ export default function AdminNoteReportsPage() {
                 {value.replaceAll("_", " ")}
               </button>
             ))}
-            <Button variant="secondary" className="h-8 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={load}>
+            <Button variant="secondary" className="h-8 shrink-0 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={load}>
               Refresh
             </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -249,9 +251,9 @@ export default function AdminNoteReportsPage() {
           </div>
         ) : reports.length ? (
           reports.map((r) => (
-            <div key={r.id} className="rounded-2xl border border-white/15 bg-black/25 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-semibold">{r.noteName}</div>
+            <div key={r.id} className="rounded-2xl border border-white/15 bg-black/25 p-3 sm:p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="break-words text-sm font-semibold">{r.noteName}</div>
                 <div className="text-xs text-white/60">
                   {r.status} • usage {r.noteUsageCount}
                 </div>
@@ -259,18 +261,18 @@ export default function AdminNoteReportsPage() {
               <div className="mt-2 text-xs text-white/70">
                 Reason: {r.reason} • Reporter: {r.reportedByUsername ? `@${r.reportedByUsername}` : (r.reportedByDisplayName || "Unknown")}
               </div>
-              {r.details ? <div className="mt-1 text-xs text-white/60">{r.details}</div> : null}
-              <div className="mt-1 text-[11px] text-white/45">
+              {r.details ? <div className="mt-1 break-words text-xs text-white/60">{r.details}</div> : null}
+              <div className="mt-1 break-all text-[11px] text-white/45">
                 noteId: {r.noteId}
               </div>
 
               {r.status === "OPEN" ? (
                 <div className="mt-3 space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                     <Button
                       type="button"
                       variant="secondary"
-                      className="h-8 rounded-xl border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20"
+                      className="h-8 w-full rounded-xl border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20 sm:w-auto"
                       onClick={() => dismissReport(r.id)}
                       disabled={savingId === r.id}
                     >
@@ -280,11 +282,11 @@ export default function AdminNoteReportsPage() {
                       value={mergeTargetById[r.id] ?? ""}
                       onChange={(e) => setMergeTargetById((prev) => ({ ...prev, [r.id]: e.target.value }))}
                       placeholder="Target note UUID"
-                      className="h-8 min-w-[240px] flex-1 rounded-xl border border-white/15 bg-white/5 px-3 text-xs text-white outline-none"
+                      className="h-8 w-full min-w-0 flex-1 rounded-xl border border-white/15 bg-white/5 px-3 text-xs text-white outline-none sm:min-w-[240px]"
                     />
                     <Button
                       type="button"
-                      className="h-8 rounded-xl px-3 text-xs"
+                      className="h-8 w-full rounded-xl px-3 text-xs sm:w-auto"
                       onClick={() => mergeReport(r.id)}
                       disabled={savingId === r.id}
                     >
@@ -293,7 +295,7 @@ export default function AdminNoteReportsPage() {
                     <Button
                       type="button"
                       variant="secondary"
-                      className="h-8 rounded-xl border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20"
+                      className="h-8 w-full rounded-xl border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20 sm:w-auto"
                       onClick={() => loadOffenders(r.id)}
                       disabled={Boolean(loadingOffendersByReportId[r.id])}
                     >
@@ -302,7 +304,7 @@ export default function AdminNoteReportsPage() {
                   </div>
 
                   {offendersByReportId[r.id] ? (
-                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2.5 sm:p-3">
                       <div className="mb-2 text-xs font-medium text-white/70">Linked creators</div>
                       {offendersByReportId[r.id].length ? (
                         <div className="space-y-2">
@@ -318,16 +320,16 @@ export default function AdminNoteReportsPage() {
                                     fragrances: {o.fragranceCount} • strikes: {o.strikeCount}
                                   </div>
                                 </div>
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <div className="mt-2 flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                   <input
                                     value={strikeReasonByUserKey[key] ?? ""}
                                     onChange={(e) => setStrikeReasonByUserKey((prev) => ({ ...prev, [key]: e.target.value }))}
                                     placeholder="Strike reason (optional)"
-                                    className="h-8 min-w-[220px] flex-1 rounded-lg border border-white/15 bg-white/5 px-3 text-xs text-white outline-none"
+                                    className="h-8 w-full min-w-0 flex-1 rounded-lg border border-white/15 bg-white/5 px-3 text-xs text-white outline-none sm:min-w-[220px]"
                                   />
                                   <Button
                                     type="button"
-                                    className="h-8 rounded-lg px-3 text-xs"
+                                    className="h-8 w-full rounded-lg px-3 text-xs sm:w-auto"
                                     onClick={() =>
                                       openConfirm(
                                         {
@@ -372,7 +374,7 @@ export default function AdminNoteReportsPage() {
         )}
       </div>
 
-      <div className="mt-8 rounded-3xl border border-white/15 bg-black/25 p-4">
+      <div className="mt-8 rounded-3xl border border-white/15 bg-black/25 p-3 sm:p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Fragrance Reports</h2>
           <div className="text-xs text-white/60">{fragranceReports.length} items</div>
@@ -380,22 +382,22 @@ export default function AdminNoteReportsPage() {
         {fragranceReports.length ? (
           <div className="space-y-3">
             {fragranceReports.map((r) => (
-              <div key={r.id} className="rounded-2xl border border-white/15 bg-black/20 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-semibold">
+              <div key={r.id} className="rounded-2xl border border-white/15 bg-black/20 p-3 sm:p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="break-words text-sm font-semibold">
                     {r.fragranceBrand} - {r.fragranceName}
                   </div>
                   <div className="text-xs text-white/60">{r.status}</div>
                 </div>
-                <div className="mt-1 text-xs text-white/65">
+                <div className="mt-1 break-words text-xs text-white/65">
                   Creator: {r.creatorUsername ? `@${r.creatorUsername}` : "Unknown"} • Reporter:{" "}
                   {r.reportedByUsername ? `@${r.reportedByUsername}` : r.reportedByDisplayName || "Unknown"}
                 </div>
                 <div className="mt-1 text-xs text-white/65">Reason: {r.reason}</div>
-                {r.details ? <div className="mt-1 text-xs text-white/55">{r.details}</div> : null}
-                <div className="mt-2 flex flex-wrap items-center gap-2">
+                {r.details ? <div className="mt-1 break-words text-xs text-white/55">{r.details}</div> : null}
+                <div className="mt-2 flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <Link
-                    className="rounded-xl border border-cyan-300/25 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100 hover:bg-cyan-400/20"
+                    className="rounded-xl border border-cyan-300/25 bg-cyan-400/10 px-3 py-1.5 text-center text-xs text-cyan-100 hover:bg-cyan-400/20"
                     to={`/fragrances/${encodeURIComponent(r.fragranceExternalId)}?source=COMMUNITY`}
                   >
                     View fragrance
@@ -405,7 +407,7 @@ export default function AdminNoteReportsPage() {
                       <Button
                         type="button"
                         variant="secondary"
-                        className="h-8 rounded-xl border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20"
+                        className="h-8 w-full rounded-xl border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/20 sm:w-auto"
                         onClick={async () => {
                           try {
                             await resolveFragranceReport(r.id, { action: "DISMISS" });
@@ -419,7 +421,7 @@ export default function AdminNoteReportsPage() {
                       </Button>
                       <Button
                         type="button"
-                        className="h-8 rounded-xl bg-red-500/80 px-3 text-xs text-white hover:bg-red-500"
+                        className="h-8 w-full rounded-xl bg-red-500/80 px-3 text-xs text-white hover:bg-red-500 sm:w-auto"
                         onClick={() =>
                           openConfirm(
                             {
@@ -444,7 +446,7 @@ export default function AdminNoteReportsPage() {
                       {r.creatorUserId ? (
                         <Button
                           type="button"
-                          className="h-8 rounded-xl px-3 text-xs"
+                          className="h-8 w-full rounded-xl px-3 text-xs sm:w-auto"
                           onClick={() =>
                             openConfirm(
                               {
@@ -485,7 +487,7 @@ export default function AdminNoteReportsPage() {
         )}
       </div>
 
-      <div className="mt-6 text-xs text-white/45">
+      <div className="mt-6 text-xs leading-relaxed text-white/45">
         Tip: if you need note IDs, open search and copy from network payloads, or add a quick internal notes table page next.
       </div>
 

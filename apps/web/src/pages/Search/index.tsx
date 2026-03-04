@@ -10,6 +10,7 @@ import fragrancePlaceholder from "@/assets/illustrations/NotFound.png";
 const FALLBACK_IMG = fragrancePlaceholder;
 const RECENT_FRAGRANCE_SEARCHES_KEY = "stacta:recent-fragrance-searches";
 const MAX_RECENT_FRAGRANCE_SEARCHES = 8;
+const SEARCH_SKELETON_COUNT = 9;
 const QUICK_SEARCH_TERMS = [
   "Dior Sauvage",
   "Bleu de Chanel",
@@ -254,6 +255,31 @@ const ResultCard = React.memo(function ResultCard({
   );
 });
 
+function SearchResultSkeleton({ idx }: { idx: number }) {
+  return (
+    <div
+      className="relative overflow-hidden rounded-3xl border border-white/12 bg-[linear-gradient(150deg,rgba(20,20,20,0.86),rgba(8,8,8,0.8))] p-3"
+      style={{ animationDelay: `${Math.min(idx * 40, 240)}ms` }}
+    >
+      <div className="pointer-events-none absolute -left-8 top-2 h-14 w-14 rounded-full bg-cyan-300/10 blur-2xl" />
+      <div className="pointer-events-none absolute -right-10 bottom-2 h-16 w-16 rounded-full bg-amber-200/10 blur-2xl" />
+      <div className="stacta-skeleton-sheen pointer-events-none absolute inset-0" />
+      <div className="animate-pulse">
+        <div className="aspect-[4/3] w-full rounded-2xl bg-white/10" />
+        <div className="mt-3 space-y-2 px-1 pb-1">
+          <div className="h-2.5 w-1/3 rounded-full bg-white/10" />
+          <div className="h-3 w-4/5 rounded-full bg-white/12" />
+          <div className="flex gap-2 pt-1">
+            <div className="h-6 w-16 rounded-full bg-white/10" />
+            <div className="h-6 w-20 rounded-full bg-white/10" />
+            <div className="h-6 w-14 rounded-full bg-white/10" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 export default function SearchPage() {
   const navigate = useNavigate();
@@ -266,6 +292,7 @@ export default function SearchPage() {
   const [searchText, setSearchText] = useState(urlQuery);
 
   const [loading, setLoading] = useState(false);
+  const [resultsVisible, setResultsVisible] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
@@ -334,6 +361,12 @@ export default function SearchPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (loading) return;
+    const timeout = window.setTimeout(() => setResultsVisible(true), 32);
+    return () => window.clearTimeout(timeout);
+  }, [loading]);
+
   // cleanup any in-flight request on unmount
   useEffect(() => {
     return () => {
@@ -377,6 +410,7 @@ export default function SearchPage() {
     const ctrl = new AbortController();
     searchAbortRef.current = ctrl;
 
+    setResultsVisible(false);
     setLoading(true);
     const nextVisible = 10;
     setVisibleCount(nextVisible);
@@ -540,6 +574,7 @@ export default function SearchPage() {
           return;
         }
 
+        setResultsVisible(false);
         setLoading(true);
         try {
           const [fragellaData, communityData] = await Promise.all([
@@ -694,70 +729,80 @@ export default function SearchPage() {
         </div>
 
         <div className="mt-6">
-          {visibleResults.length > 0 && (
-            <div className="mb-3 flex items-center justify-between rounded-2xl border border-white/12 bg-black/25 px-4 py-3">
-              <div className="text-sm text-white/70">
-                Showing <span className="font-semibold text-white">{visibleResults.length}</span> of{" "}
-                <span className="font-semibold text-white">{Math.min(results.length, 50)}</span>
+          {loading ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: SEARCH_SKELETON_COUNT }).map((_, idx) => (
+                <SearchResultSkeleton key={`search-skeleton-${idx}`} idx={idx} />
+              ))}
+            </div>
+          ) : (
+            <div className={["transition-all duration-500", resultsVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"].join(" ")}>
+              {visibleResults.length > 0 && (
+                <div className="mb-3 flex items-center justify-between rounded-2xl border border-white/12 bg-black/25 px-4 py-3">
+                  <div className="text-sm text-white/70">
+                    Showing <span className="font-semibold text-white">{visibleResults.length}</span> of{" "}
+                    <span className="font-semibold text-white">{Math.min(results.length, 50)}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                      onClick={goToCommunityCreator}
+                    >
+                      Not seeing it?
+                    </Button>
+
+                    {canShowMore && (
+                      <Button
+                        variant="secondary"
+                        className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                        onClick={onShowMore}
+                      >
+                        More results
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {showProminentCantFind && (
+                <div className="mb-4 rounded-3xl border border-amber-200/25 bg-[linear-gradient(135deg,rgba(255,194,94,0.16),rgba(255,255,255,0.05))] p-6">
+                  <div className="text-sm font-semibold">Can’t find what you’re looking for?</div>
+                  <div className="mt-1 text-sm text-white/70">
+                    Add it as a community fragrance (private by default).
+                  </div>
+                  <div className="mt-4">
+                    <Button className="h-10 rounded-xl bg-white text-black hover:bg-white/90 px-5" onClick={goToCommunityCreator}>
+                      Add community fragrance
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {visibleResults.map((item, idx) => (
+                  <div key={`${item.source ?? "x"}:${item.externalId ?? "noid"}:${idx}`} style={{ animationDelay: `${Math.min(idx * 30, 300)}ms` }} className="stacta-feed-item-in">
+                    <ResultCard
+                      item={item}
+                      idx={idx}
+                      exactMatch={isExactResult(item, query)}
+                      onOpen={onOpenResult}
+                    />
+                  </div>
+                ))}
               </div>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-                  onClick={goToCommunityCreator}
-                >
-                  Not seeing it?
-                </Button>
-
-                {canShowMore && (
-                  <Button
-                    variant="secondary"
-                    className="h-10 rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-                    onClick={onShowMore}
+              {didSearch && !loading && query.length >= 3 && (
+                <div className="mt-6 flex items-center justify-center">
+                  <button
+                    className="text-sm text-white/60 underline-offset-4 hover:underline"
+                    onClick={goToCommunityCreator}
                   >
-                    More results
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {showProminentCantFind && (
-            <div className="mb-4 rounded-3xl border border-amber-200/25 bg-[linear-gradient(135deg,rgba(255,194,94,0.16),rgba(255,255,255,0.05))] p-6">
-              <div className="text-sm font-semibold">Can’t find what you’re looking for?</div>
-              <div className="mt-1 text-sm text-white/70">
-                Add it as a community fragrance (private by default).
-              </div>
-              <div className="mt-4">
-                <Button className="h-10 rounded-xl bg-white text-black hover:bg-white/90 px-5" onClick={goToCommunityCreator}>
-                  Add community fragrance
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {visibleResults.map((item, idx) => (
-              <div key={`${item.source ?? "x"}:${item.externalId ?? "noid"}:${idx}`} style={{ animationDelay: `${Math.min(idx * 30, 300)}ms` }} className="stacta-fade-rise">
-                <ResultCard
-                  item={item}
-                  idx={idx}
-                  exactMatch={isExactResult(item, query)}
-                  onOpen={onOpenResult}
-                />
-              </div>
-            ))}
-          </div>
-
-          {didSearch && !loading && query.length >= 3 && (
-            <div className="mt-6 flex items-center justify-center">
-              <button
-                className="text-sm text-white/60 underline-offset-4 hover:underline"
-                onClick={goToCommunityCreator}
-              >
-                Can’t find what you’re looking for? Add it as a community fragrance.
-              </button>
+                    Can’t find what you’re looking for? Add it as a community fragrance.
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

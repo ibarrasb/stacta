@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Home, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
 import { acceptFollowRequest, declineFollowRequest, listPendingFollowRequests } from "@/lib/api/follows";
 import { getMe } from "@/lib/api/me";
@@ -35,9 +34,34 @@ function relativeTime(value: string) {
   return `${year}y`;
 }
 
+function RequestSkeleton({ idx }: { idx: number }) {
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] px-3 py-3"
+      style={{ animationDelay: `${Math.min(idx * 45, 180)}ms` }}
+    >
+      <div className="stacta-skeleton-sheen pointer-events-none absolute inset-0" />
+      <div className="animate-pulse">
+        <div className="flex items-start gap-2">
+          <div className="h-9 w-9 shrink-0 rounded-full bg-white/12" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="h-3 w-4/5 rounded-full bg-white/12" />
+            <div className="h-2.5 w-24 rounded-full bg-white/8" />
+          </div>
+          <div className="flex gap-2">
+            <div className="h-8 w-16 rounded-lg bg-white/10" />
+            <div className="h-8 w-16 rounded-lg bg-white/12" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function NotificationRequestsPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [contentVisible, setContentVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
   const [pending, setPending] = useState<PendingFollowRequestItem[]>([]);
@@ -47,6 +71,7 @@ export default function NotificationRequestsPage() {
   const [actingType, setActingType] = useState<"accept" | "decline" | null>(null);
 
   const load = useCallback(async () => {
+    setContentVisible(false);
     setLoading(true);
     setError(null);
     try {
@@ -70,6 +95,12 @@ export default function NotificationRequestsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (loading) return;
+    const timeout = window.setTimeout(() => setContentVisible(true), 32);
+    return () => window.clearTimeout(timeout);
+  }, [loading]);
 
   async function onAccept(requestId: string) {
     setActingId(requestId);
@@ -152,8 +183,10 @@ export default function NotificationRequestsPage() {
             ) : null}
           </div>
           {loading ? (
-            <div className="rounded-xl border border-white/8 bg-black/20 p-6">
-              <LoadingSpinner label="Loading requests..." />
+            <div className="space-y-2.5">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <RequestSkeleton key={`request-skeleton-${idx}`} idx={idx} />
+              ))}
             </div>
           ) : !isPrivateAccount ? (
             <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-3 text-sm text-white/60">
@@ -164,7 +197,7 @@ export default function NotificationRequestsPage() {
               You have no pending follow requests.
             </div>
           ) : (
-            <div className="space-y-2.5">
+            <div className={["space-y-2.5 transition-all duration-500", contentVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"].join(" ")}>
               {pending.map((req) => (
                 <div
                   key={req.id}
@@ -230,19 +263,27 @@ export default function NotificationRequestsPage() {
                 </div>
               ))}
               {pendingCursor ? (
-                <Button
-                  variant="secondary"
-                  className="mt-2 h-8 w-full rounded-lg border border-white/15 bg-white/8 text-sm text-white hover:bg-white/14"
-                  disabled={loadingMorePending}
-                  onClick={loadMorePending}
-                >
+                <>
+                  <Button
+                    variant="secondary"
+                    className="mt-2 h-8 w-full rounded-lg border border-white/15 bg-white/8 text-sm text-white hover:bg-white/14"
+                    disabled={loadingMorePending}
+                    onClick={loadMorePending}
+                  >
+                    {loadingMorePending ? (
+                      <span className="inline-flex items-center gap-2">
+                        <InlineSpinner />
+                        <span>Loading</span>
+                      </span>
+                    ) : "Load more requests"}
+                  </Button>
                   {loadingMorePending ? (
-                    <span className="inline-flex items-center gap-2">
-                      <InlineSpinner />
-                      <span>Loading</span>
-                    </span>
-                  ) : "Load more requests"}
-                </Button>
+                    <div className="space-y-2.5">
+                      <RequestSkeleton idx={0} />
+                      <RequestSkeleton idx={1} />
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </div>
           )}

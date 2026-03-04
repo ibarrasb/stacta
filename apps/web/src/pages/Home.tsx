@@ -4,7 +4,6 @@ import { ArrowLeft, BarChart3, Check, Heart, MessageCircle, MoreHorizontal, Pape
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
-import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
 import ReviewCard from "@/components/feed/ReviewCard";
 import { getMe } from "@/lib/api/me";
@@ -15,6 +14,7 @@ import fragranceFallbackImg from "@/assets/illustrations/NotFound.png";
 
 const DEFAULT_AVATAR_IMG = "/stacta.png";
 const FALLBACK_FRAGRANCE_IMG = fragranceFallbackImg;
+const FEED_SKELETON_COUNT = 5;
 
 function timeAgo(iso: string) {
   const then = new Date(iso).getTime();
@@ -89,6 +89,48 @@ function parseScentSelections(payload: string | null | undefined): ScentSelectio
   }
 }
 
+function FeedSkeletonCard({ idx }: { idx: number }) {
+  return (
+    <div
+      className="relative overflow-hidden rounded-3xl border border-white/12 bg-[linear-gradient(150deg,rgba(20,20,20,0.86),rgba(8,8,8,0.8))] p-4"
+      style={{ animationDelay: `${Math.min(idx * 50, 200)}ms` }}
+    >
+      <div className="pointer-events-none absolute -left-10 top-4 h-16 w-16 rounded-full bg-cyan-300/10 blur-2xl" />
+      <div className="pointer-events-none absolute -right-10 bottom-2 h-20 w-20 rounded-full bg-rose-300/10 blur-2xl" />
+      <div className="stacta-skeleton-sheen pointer-events-none absolute inset-0" />
+      <div className="animate-pulse space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 rounded-full bg-white/10" />
+            <div className="space-y-1.5">
+              <div className="h-3 w-28 rounded-full bg-white/12" />
+              <div className="h-2.5 w-20 rounded-full bg-white/8" />
+            </div>
+          </div>
+          <div className="h-5 w-16 rounded-full bg-white/10" />
+        </div>
+        <div className="flex items-start gap-3">
+          <div className="h-14 w-14 rounded-xl bg-white/10" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-2/5 rounded-full bg-white/12" />
+            <div className="h-2.5 w-1/3 rounded-full bg-white/8" />
+            <div className="h-2.5 w-full rounded-full bg-white/10" />
+            <div className="h-2.5 w-11/12 rounded-full bg-white/10" />
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="h-2.5 w-12 rounded-full bg-white/8" />
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 rounded-full bg-white/8" />
+            <div className="h-6 w-6 rounded-full bg-white/8" />
+            <div className="h-6 w-6 rounded-full bg-white/8" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<FeedTab>("FOLLOWING");
@@ -96,6 +138,7 @@ export default function HomePage() {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [feedVisible, setFeedVisible] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewerUsername, setViewerUsername] = useState<string | null>(null);
@@ -143,6 +186,7 @@ export default function HomePage() {
   }, []);
 
   const loadFeed = useCallback(async () => {
+    setFeedVisible(false);
     setLoading(true);
     setError(null);
     try {
@@ -161,6 +205,12 @@ export default function HomePage() {
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  useEffect(() => {
+    if (loading) return;
+    const timeout = window.setTimeout(() => setFeedVisible(true), 32);
+    return () => window.clearTimeout(timeout);
+  }, [loading]);
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -699,18 +749,19 @@ export default function HomePage() {
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <section className="space-y-3">
             {loading ? (
-              <div className="rounded-3xl border border-white/15 bg-black/25 p-6">
-                <LoadingSpinner label="Loading feed..." />
-              </div>
+              Array.from({ length: FEED_SKELETON_COUNT }).map((_, idx) => (
+                <FeedSkeletonCard key={`feed-skeleton-${idx}`} idx={idx} />
+              ))
             ) : items.length === 0 ? (
               <div className="rounded-3xl border border-white/15 bg-black/25 p-6 text-sm text-white/70">
                 No feed items yet for this view.
               </div>
             ) : (
-              items.map((item, idx) => (
+              <div className={["space-y-3 transition-all duration-500", feedVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"].join(" ")}>
+              {items.map((item, idx) => (
                 item.type === "REVIEW_POSTED" || item.type === "REVIEW_REPOSTED" ? (
+                  <div key={item.id} className="stacta-feed-item-in" style={{ animationDelay: `${Math.min(idx * 28, 220)}ms` }}>
                   <ReviewCard
-                    key={item.id}
                     item={item}
                     timeAgo={timeAgo(item.createdAt)}
                     onOpenUser={() => navigate(`/u/${item.actorUsername}`, { state: { from: { pathname: "/home" } } })}
@@ -758,10 +809,11 @@ export default function HomePage() {
                     reposting={repostingReviewId === item.sourceReviewId}
                     deleting={deletingReviewId === item.id}
                   />
+                  </div>
                 ) : item.type === "SCENT_POSTED" ? (
                   <article
                     key={item.id}
-                    className="cursor-pointer rounded-3xl border border-white/15 bg-[linear-gradient(140deg,rgba(34,211,238,0.08),rgba(244,114,182,0.07),rgba(0,0,0,0.28))] p-4"
+                    className="stacta-feed-item-in cursor-pointer rounded-3xl border border-white/15 bg-[linear-gradient(140deg,rgba(34,211,238,0.08),rgba(244,114,182,0.07),rgba(0,0,0,0.28))] p-4"
                     style={{ animationDelay: `${Math.min(idx * 28, 260)}ms` }}
                     onClick={(e) => {
                       const target = e.target as HTMLElement | null;
@@ -907,7 +959,7 @@ export default function HomePage() {
                 ) : (
                   <article
                     key={item.id}
-                    className="rounded-3xl border border-white/15 bg-black/25 p-4"
+                    className="stacta-feed-item-in rounded-3xl border border-white/15 bg-black/25 p-4"
                     style={{ animationDelay: `${Math.min(idx * 28, 260)}ms` }}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -1029,22 +1081,32 @@ export default function HomePage() {
                   </article>
                 )
               ))
+              }
+              </div>
             )}
 
             {cursor ? (
-              <Button
-                variant="secondary"
-                className="h-10 w-full rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
-                onClick={loadMore}
-                disabled={loadingMore}
-              >
+              <>
+                <Button
+                  variant="secondary"
+                  className="h-10 w-full rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/18"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? (
+                    <span className="inline-flex items-center gap-2">
+                      <InlineSpinner />
+                      <span>Loading</span>
+                    </span>
+                  ) : "Load more"}
+                </Button>
                 {loadingMore ? (
-                  <span className="inline-flex items-center gap-2">
-                    <InlineSpinner />
-                    <span>Loading</span>
-                  </span>
-                ) : "Load more"}
-              </Button>
+                  <>
+                    <FeedSkeletonCard idx={0} />
+                    <FeedSkeletonCard idx={1} />
+                  </>
+                ) : null}
+              </>
             ) : null}
           </section>
 

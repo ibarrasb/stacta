@@ -400,7 +400,7 @@ export default function AddCommunityFragranceDialog({
                 Upload image
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0] ?? null;

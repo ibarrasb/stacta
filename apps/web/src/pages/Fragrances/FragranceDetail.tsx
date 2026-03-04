@@ -784,6 +784,47 @@ function normalizePurchaseUrlForSubmit(raw: string) {
   return trimmed;
 }
 
+function extractApiErrorDetail(err: any): string {
+  const body = err?.body;
+  if (body && typeof body === "object") {
+    const obj = body as Record<string, unknown>;
+    const detail = typeof obj.detail === "string" ? obj.detail.trim() : "";
+    const message = typeof obj.message === "string" ? obj.message.trim() : "";
+    const code = typeof obj.error === "string" ? obj.error.trim() : "";
+    return detail || message || code || "";
+  }
+  return "";
+}
+
+function buildCommunityPublishError(err: any, stage: "upload" | "publish", isCreateMode: boolean): string {
+  const action = isCreateMode ? "publish" : "update";
+  const stageLabel = stage === "upload" ? "image upload" : "fragrance save";
+  const status = Number(err?.status);
+  const rawMessage = String(err?.message ?? "").trim();
+  const detail = extractApiErrorDetail(err);
+  const low = `${rawMessage} ${detail}`.toLowerCase();
+
+  if (low.includes("load failed") || low.includes("failed to fetch") || low.includes("networkerror")) {
+    return `Could not ${action} (${stageLabel}) because your phone could not reach the API. Check connection and try again.`;
+  }
+  if (status === 413 || low.includes("too large")) {
+    return "Image is too large. Max size is 5 MB.";
+  }
+  if (status === 415 || low.includes("unsupported")) {
+    return "Image type not supported by upload service. Use JPEG, PNG, WebP, HEIC, or HEIF.";
+  }
+  if (status === 401) {
+    return "Your session expired. Sign in again and retry.";
+  }
+  if (status === 403) {
+    return `Permission denied during ${stageLabel}. Please retry, and if it persists, contact support.`;
+  }
+
+  const best = detail || rawMessage;
+  if (best) return `Could not ${action} during ${stageLabel}: ${best}`;
+  return isCreateMode ? "Failed to publish fragrance." : "Failed to update fragrance.";
+}
+
 export default function FragranceDetailPage() {
   const navigate = useNavigate();
   const location = useLocation() as any;
@@ -2040,10 +2081,12 @@ export default function FragranceDetailPage() {
       return;
     }
     setSavingEdit(true);
+    let failedStage: "upload" | "publish" = "publish";
     try {
       let uploadedImageObjectKey = draftImageObjectKey;
       let uploadedImageUrl = draftImageUrl.trim() || null;
       if (draftImageFile) {
+        failedStage = "upload";
         setUploadingDraftImage(true);
         const uploaded = await uploadImageFile(draftImageFile, "FRAGRANCE");
         uploadedImageObjectKey = uploaded.objectKey;
@@ -2097,6 +2140,7 @@ export default function FragranceDetailPage() {
         middleNoteNames: toCustomNameList(draftMiddleNotes),
         baseNoteNames: toCustomNameList(draftBaseNotes),
       };
+      failedStage = "publish";
       const saved = isCreateMode
         ? await createCommunityFragrance(body)
         : await updateCommunityFragrance(fragrance.externalId, body);
@@ -2119,7 +2163,7 @@ export default function FragranceDetailPage() {
       setDraftImageError(null);
     } catch (e: any) {
       setNoticeTitle(isCreateMode ? "Publish" : "Edit");
-      setNotice(e?.message || (isCreateMode ? "Failed to publish fragrance." : "Failed to update fragrance."));
+      setNotice(buildCommunityPublishError(e, failedStage, isCreateMode));
     } finally {
       setUploadingDraftImage(false);
       setSavingEdit(false);
@@ -2404,7 +2448,7 @@ export default function FragranceDetailPage() {
                           Upload image
                           <input
                             type="file"
-                            accept="image/jpeg,image/png,image/webp"
+                            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
                             className="hidden"
                             onChange={(e) => onPickDraftImage(e.target.files?.[0] ?? null)}
                           />
@@ -2804,7 +2848,7 @@ export default function FragranceDetailPage() {
                         Upload image
                         <input
                           type="file"
-                          accept="image/jpeg,image/png,image/webp"
+                          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
                           className="hidden"
                           onChange={(e) => onPickDraftImage(e.target.files?.[0] ?? null)}
                         />

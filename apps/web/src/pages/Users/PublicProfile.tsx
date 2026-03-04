@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
-import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
 import ReviewCard from "@/components/feed/ReviewCard";
 import VerifiedBadge from "@/components/profile/VerifiedBadge";
@@ -105,6 +104,56 @@ function parseScentSelections(payload: string | null | undefined): ScentSelectio
   }
 }
 
+function ProfileSurfaceSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 p-5">
+        <div className="stacta-skeleton-sheen pointer-events-none absolute inset-0" />
+        <div className="animate-pulse">
+          <div className="flex items-start gap-4">
+            <div className="h-24 w-24 rounded-3xl bg-white/12" />
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="h-5 w-52 rounded-full bg-white/12" />
+              <div className="h-3 w-36 rounded-full bg-white/10" />
+              <div className="h-3 w-full rounded-full bg-white/10" />
+              <div className="h-3 w-5/6 rounded-full bg-white/8" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, idx) => (
+          <div key={`profile-stat-skeleton-${idx}`} className="h-20 rounded-2xl border border-white/10 bg-white/5 animate-pulse" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FeedTabSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <div className="mt-4 space-y-3">
+      {Array.from({ length: count }).map((_, idx) => (
+        <div
+          key={`feed-tab-skeleton-${idx}`}
+          className="relative overflow-hidden rounded-3xl border border-white/12 bg-black/25 p-4"
+          style={{ animationDelay: `${Math.min(idx * 45, 180)}ms` }}
+        >
+          <div className="stacta-skeleton-sheen pointer-events-none absolute inset-0" />
+          <div className="animate-pulse space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-full bg-white/12" />
+              <div className="h-3 w-40 rounded-full bg-white/12" />
+            </div>
+            <div className="h-3 w-full rounded-full bg-white/10" />
+            <div className="h-3 w-11/12 rounded-full bg-white/8" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PublicProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -112,6 +161,7 @@ export default function PublicProfilePage() {
 
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileVisible, setProfileVisible] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<{ title: string; message: string } | null>(null);
@@ -119,12 +169,14 @@ export default function PublicProfilePage() {
   const [reviewItems, setReviewItems] = useState<FeedItem[]>([]);
   const [reviewCursor, setReviewCursor] = useState<string | null>(null);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsVisible, setReviewsVisible] = useState(true);
   const [reviewsLoadingMore, setReviewsLoadingMore] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
   const [postItems, setPostItems] = useState<FeedItem[]>([]);
   const [postCursor, setPostCursor] = useState<string | null>(null);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [postsVisible, setPostsVisible] = useState(true);
   const [postsLoadingMore, setPostsLoadingMore] = useState(false);
   const [postsError, setPostsError] = useState<string | null>(null);
   const [postsLoaded, setPostsLoaded] = useState(false);
@@ -148,6 +200,7 @@ export default function PublicProfilePage() {
     let cancelled = false;
 
     async function load() {
+      setProfileVisible(false);
       setLoading(true);
       setError(null);
       try {
@@ -175,6 +228,12 @@ export default function PublicProfilePage() {
   }, [username]);
 
   useEffect(() => {
+    if (loading) return;
+    const timeout = window.setTimeout(() => setProfileVisible(true), 32);
+    return () => window.clearTimeout(timeout);
+  }, [loading]);
+
+  useEffect(() => {
     setReviewItems([]);
     setReviewCursor(null);
     setReviewsError(null);
@@ -191,6 +250,7 @@ export default function PublicProfilePage() {
     const targetUsername = profile.username;
 
     async function loadReviews() {
+      setReviewsVisible(false);
       setReviewsLoading(true);
       setReviewsError(null);
       try {
@@ -216,11 +276,18 @@ export default function PublicProfilePage() {
   }, [activeTab, profile, reviewsLoaded]);
 
   useEffect(() => {
+    if (reviewsLoading) return;
+    const timeout = window.setTimeout(() => setReviewsVisible(true), 24);
+    return () => window.clearTimeout(timeout);
+  }, [reviewsLoading]);
+
+  useEffect(() => {
     if (!profile || activeTab !== "posts" || !profile.isVisible || postsLoaded) return;
     let cancelled = false;
     const targetUsername = profile.username;
 
     async function loadPosts() {
+      setPostsVisible(false);
       setPostsLoading(true);
       setPostsError(null);
       try {
@@ -244,6 +311,12 @@ export default function PublicProfilePage() {
       cancelled = true;
     };
   }, [activeTab, postsLoaded, profile]);
+
+  useEffect(() => {
+    if (postsLoading) return;
+    const timeout = window.setTimeout(() => setPostsVisible(true), 24);
+    return () => window.clearTimeout(timeout);
+  }, [postsLoading]);
 
   async function onLoadMoreReviews() {
     if (!profile || !reviewCursor || reviewsLoadingMore) return;
@@ -481,9 +554,7 @@ export default function PublicProfilePage() {
         <div>
           <div className="rounded-3xl border border-white/15 bg-white/6 p-6 backdrop-blur">
             {loading && (
-              <div className="rounded-2xl border border-white/10 bg-black/25 p-6">
-                <LoadingSpinner label="Loading profile..." />
-              </div>
+              <ProfileSurfaceSkeleton />
             )}
 
             {error && (
@@ -493,7 +564,7 @@ export default function PublicProfilePage() {
             )}
 
             {!loading && !error && profile && (
-              <div className="space-y-6">
+              <div className={["space-y-6 transition-all duration-500", profileVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"].join(" ")}>
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 items-start gap-4 sm:gap-5">
                     <button
@@ -828,15 +899,13 @@ export default function PublicProfilePage() {
                         {reviewsError}
                       </div>
                     ) : reviewsLoading ? (
-                      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-5">
-                        <LoadingSpinner label="Loading reviews..." />
-                      </div>
+                      <FeedTabSkeleton />
                     ) : !reviewItems.length ? (
                       <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
                         No reviews posted yet.
                       </div>
                     ) : (
-                      <div className="mt-4 space-y-3">
+                      <div className={["mt-4 space-y-3 transition-all duration-500", reviewsVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"].join(" ")}>
                         {reviewItems.map((item) => (
                           <ReviewCard
                             key={item.id}
@@ -893,15 +962,13 @@ export default function PublicProfilePage() {
                         {postsError}
                       </div>
                     ) : postsLoading ? (
-                      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-5">
-                        <LoadingSpinner label="Loading posts..." />
-                      </div>
+                      <FeedTabSkeleton />
                     ) : !postItems.length ? (
                       <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
                         No posts yet.
                       </div>
                     ) : (
-                      <div className="mt-4 space-y-3">
+                      <div className={["mt-4 space-y-3 transition-all duration-500", postsVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"].join(" ")}>
                         {postItems.map((item) => (
                           <article
                             key={item.id}

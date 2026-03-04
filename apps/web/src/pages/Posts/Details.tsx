@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Ellipsis, Flag, Heart, MessageCircle, Repeat2, Reply, Trash2 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReviewCard from "@/components/feed/ReviewCard";
-import LoadingSpinner from "@/components/ui/loading-spinner";
 import InlineSpinner from "@/components/ui/inline-spinner";
 import ReportDialog from "@/components/ui/report-dialog";
 import { Button } from "@/components/ui/button";
@@ -92,6 +91,50 @@ function postTypeLabel(type: string) {
   return "Post";
 }
 
+function ThreadSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="relative overflow-hidden rounded-3xl border border-white/12 bg-black/25 p-4">
+        <div className="stacta-skeleton-sheen pointer-events-none absolute inset-0" />
+        <div className="animate-pulse space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 rounded-full bg-white/12" />
+            <div className="h-3 w-40 rounded-full bg-white/12" />
+          </div>
+          <div className="h-3 w-full rounded-full bg-white/10" />
+          <div className="h-3 w-11/12 rounded-full bg-white/8" />
+        </div>
+      </div>
+      <div className="relative overflow-hidden rounded-3xl border border-white/12 bg-black/25 p-4">
+        <div className="stacta-skeleton-sheen pointer-events-none absolute inset-0" />
+        <div className="animate-pulse space-y-2.5">
+          <div className="h-4 w-32 rounded-full bg-white/12" />
+          <div className="h-24 w-full rounded-xl bg-white/8" />
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        {Array.from({ length: 3 }).map((_, idx) => (
+          <div
+            key={`comment-skeleton-${idx}`}
+            className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-3"
+            style={{ animationDelay: `${Math.min(idx * 45, 180)}ms` }}
+          >
+            <div className="stacta-skeleton-sheen pointer-events-none absolute inset-0" />
+            <div className="animate-pulse space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-white/12" />
+                <div className="h-3 w-36 rounded-full bg-white/12" />
+              </div>
+              <div className="h-3 w-full rounded-full bg-white/10" />
+              <div className="h-3 w-4/5 rounded-full bg-white/8" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CommentActionMenu({
   open,
   canDelete,
@@ -152,6 +195,7 @@ export default function PostDetailsPage() {
   const backTarget = (location.state as any)?.from?.pathname || "/home";
 
   const [loading, setLoading] = useState(true);
+  const [contentVisible, setContentVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [thread, setThread] = useState<PostThreadResponse | null>(null);
   const [viewerUsername, setViewerUsername] = useState<string | null>(null);
@@ -178,6 +222,7 @@ export default function PostDetailsPage() {
 
   const loadPostThread = useCallback(async () => {
     if (!postId) return;
+    setContentVisible(false);
     setLoading(true);
     setError(null);
     try {
@@ -198,6 +243,16 @@ export default function PostDetailsPage() {
   useEffect(() => {
     void loadPostThread();
   }, [loadPostThread]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, [postId]);
+
+  useEffect(() => {
+    if (loading) return;
+    const timeout = window.setTimeout(() => setContentVisible(true), 32);
+    return () => window.clearTimeout(timeout);
+  }, [loading]);
 
   useEffect(() => {
     let cancelled = false;
@@ -537,15 +592,13 @@ export default function PostDetailsPage() {
         ) : null}
 
         {loading ? (
-          <div className="rounded-2xl border border-white/12 bg-black/25 p-6">
-            <LoadingSpinner label="Loading comments..." />
-          </div>
+          <ThreadSkeleton />
         ) : !thread ? (
           <div className="rounded-2xl border border-white/12 bg-black/25 px-4 py-3 text-sm text-white/65">
             Post not found.
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className={["space-y-4 transition-all duration-500", contentVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"].join(" ")}>
             {thread.post.type === "SCENT_POSTED" ? (
               <article className="rounded-3xl border border-white/15 bg-[linear-gradient(140deg,rgba(34,211,238,0.08),rgba(244,114,182,0.07),rgba(0,0,0,0.28))] p-4">
                 <div className="flex items-start justify-between gap-3">

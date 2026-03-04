@@ -13,8 +13,31 @@ const MAX_RECENT_USERS = 8;
 type RecentUserSearch = {
   username: string;
   displayName: string;
+  avatarUrl: string | null;
   isPrivate: boolean;
 };
+
+function initials(value: string) {
+  const cleaned = value.trim();
+  if (!cleaned) return "U";
+  const parts = cleaned.split(/\s+/).slice(0, 2);
+  return parts.map((part) => part[0]?.toUpperCase() || "").join("") || "U";
+}
+
+function avatarTone(username: string) {
+  const tones = [
+    "from-rose-400/90 to-orange-300/80",
+    "from-sky-400/90 to-cyan-300/80",
+    "from-emerald-400/90 to-teal-300/80",
+    "from-fuchsia-400/90 to-pink-300/80",
+    "from-amber-400/90 to-yellow-300/80",
+  ];
+  const sum = username
+    .toLowerCase()
+    .split("")
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return tones[sum % tones.length];
+}
 
 export default function UsersSearchPage() {
   const navigate = useNavigate();
@@ -40,6 +63,7 @@ export default function UsersSearchPage() {
         .map((item) => ({
           username: String(item.username).trim(),
           displayName: String(item.displayName || item.username).trim(),
+          avatarUrl: typeof item.avatarUrl === "string" ? item.avatarUrl : null,
           isPrivate: Boolean(item.isPrivate),
         }));
       setRecentSearches(clean);
@@ -53,10 +77,11 @@ export default function UsersSearchPage() {
     localStorage.setItem(RECENT_USERS_KEY, JSON.stringify(next));
   }
 
-  function saveRecentSearch(user: Pick<UserSearchItem, "username" | "displayName" | "isPrivate">) {
+  function saveRecentSearch(user: Pick<UserSearchItem, "username" | "displayName" | "avatarUrl" | "isPrivate">) {
     const next: RecentUserSearch = {
       username: user.username.trim(),
       displayName: (user.displayName || user.username).trim(),
+      avatarUrl: user.avatarUrl?.trim() ? user.avatarUrl : null,
       isPrivate: Boolean(user.isPrivate),
     };
     if (!next.username) return;
@@ -68,13 +93,9 @@ export default function UsersSearchPage() {
     });
   }
 
-  function openUserProfile(user: Pick<UserSearchItem, "username" | "displayName" | "isPrivate">) {
+  function openUserProfile(user: Pick<UserSearchItem, "username" | "displayName" | "avatarUrl" | "isPrivate">) {
     saveRecentSearch(user);
     navigate(`/u/${user.username}`);
-  }
-
-  function removeRecentSearch(username: string) {
-    persistRecentSearches(recentSearches.filter((item) => item.username.toLowerCase() !== username.toLowerCase()));
   }
 
   useEffect(() => {
@@ -191,7 +212,10 @@ export default function UsersSearchPage() {
           {recentSearches.length > 0 && (
             <div className="mt-5 border-t border-white/10 pt-4">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-white/60">Recent</div>
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-white/60">Recent users</div>
+                  <div className="text-[11px] text-white/45">Jump back into profiles you opened recently.</div>
+                </div>
                 <button
                   type="button"
                   className="text-xs text-white/55 transition hover:text-white"
@@ -200,31 +224,36 @@ export default function UsersSearchPage() {
                   Clear all
                 </button>
               </div>
-              <div className="space-y-2">
+              <div className="mb-4 flex gap-3 overflow-x-auto pb-1">
                 {recentSearches.map((user) => (
-                  <div
-                    key={`recent-${user.username}`}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2"
+                  <button
+                    key={`recent-story-${user.username}`}
+                    type="button"
+                    onClick={() => openUserProfile(user)}
+                    className="group shrink-0 text-center"
                   >
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => openUserProfile(user)}>
-                      <div className="truncate text-sm text-white">{user.displayName || user.username}</div>
-                      <div className="truncate text-xs text-white/60">@{user.username}</div>
-                    </button>
-                    <div className="flex items-center gap-2">
-                      {user.isPrivate ? (
-                        <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/75">
-                          Private
+                    <span
+                      className={`relative mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br p-[2px] ${avatarTone(
+                        user.username,
+                      )}`}
+                    >
+                      {user.avatarUrl?.trim() ? (
+                        <img
+                          src={user.avatarUrl}
+                          alt={`${user.username} avatar`}
+                          className="h-full w-full rounded-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center rounded-full bg-black text-sm font-semibold text-white">
+                          {initials(user.displayName || user.username)}
                         </span>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="text-xs text-white/50 transition hover:text-white"
-                        onClick={() => removeRecentSearch(user.username)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
+                      )}
+                    </span>
+                    <span className="mt-1 block max-w-20 truncate text-[11px] text-white/70 transition group-hover:text-white">
+                      @{user.username}
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
