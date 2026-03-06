@@ -225,7 +225,7 @@ export default function SignUpPage() {
                   type="text"
                   autoComplete="nickname"
                   placeholder="John Doe"
-                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35"
+                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-base text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35 md:text-sm"
                 />
               </div>
 
@@ -241,7 +241,7 @@ export default function SignUpPage() {
                     type="text"
                     autoComplete="username"
                     placeholder="stacta"
-                    className="h-11 w-full rounded-xl border border-white/15 bg-black/30 pl-7 pr-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35"
+                    className="h-11 w-full rounded-xl border border-white/15 bg-black/30 pl-7 pr-3 text-base text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35 md:text-sm"
                   />
                 </div>
 
@@ -261,7 +261,7 @@ export default function SignUpPage() {
                   type="email"
                   autoComplete="email"
                   placeholder="you@example.com"
-                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35"
+                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-base text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35 md:text-sm"
                 />
               </div>
 
@@ -273,7 +273,7 @@ export default function SignUpPage() {
                   type="password"
                   autoComplete="new-password"
                   placeholder="At least 8 characters"
-                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35"
+                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-base text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35 md:text-sm"
                 />
                 <div className="mt-2 text-xs text-white/50">
                   Use a strong password (uppercase, lowercase, number, symbol).

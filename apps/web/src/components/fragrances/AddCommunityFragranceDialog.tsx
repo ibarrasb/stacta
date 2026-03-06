@@ -81,6 +81,37 @@ function parseAccordsFromInitial(fragrance: FragranceSearchResult | null | undef
   return Array.from(deduped.values()).slice(0, 20);
 }
 
+function AccordStrengthButtons({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-1.5">
+      {ACCORD_STRENGTH_LABELS.map((label, idx) => {
+        const active = value === idx;
+        return (
+          <button
+            key={`${label}-${idx}`}
+            type="button"
+            onClick={() => onChange(idx)}
+            className={[
+              "min-h-10 rounded-md border px-2.5 py-2 text-center text-[11px] font-medium leading-snug whitespace-normal break-normal hyphens-none [overflow-wrap:normal] transition touch-manipulation",
+              active
+                ? "border-cyan-300/55 bg-cyan-400/20 text-cyan-100"
+                : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10 hover:text-white",
+            ].join(" ")}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AddCommunityFragranceDialog({
   open,
   onOpenChange,
@@ -356,35 +387,43 @@ export default function AddCommunityFragranceDialog({
           <DialogTitle className="text-lg">{isEdit ? "Edit community fragrance" : "Add a community fragrance"}</DialogTitle>
         </DialogHeader>
       )}
+      <p className="text-sm text-white/60">
+        Set the core details first, then add accords and notes to shape the scent profile.
+      </p>
 
-      {error ? <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
+      {error ? <div className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
 
-        {!isEdit ? (
-          <div className="rounded-2xl border border-amber-200/25 bg-amber-200/10 px-4 py-3 text-xs text-amber-100/95">
-            Draft tip: keep this fragrance private while you build it out. You can switch between private and public anytime while editing.
+      {!isEdit ? (
+        <div className="rounded-md border border-amber-200/25 bg-amber-200/10 px-4 py-3 text-xs text-amber-100/95">
+          Draft tip: keep this fragrance private while you build it out. You can switch between private and public anytime while editing.
+        </div>
+      ) : null}
+
+      <div className="grid gap-5">
+        <section className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h4 className="text-sm font-semibold tracking-wide text-white/90">Core details</h4>
+            <div className="text-[11px] uppercase tracking-[0.12em] text-white/45">Required: brand, name</div>
           </div>
-        ) : null}
-
-        <div className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <div className="mb-1 text-xs text-white/60">Brand</div>
-              <Input value={brand} onChange={(e) => setBrand(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="Dior" />
+              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-white/60">Brand</div>
+              <Input value={brand} onChange={(e) => setBrand(e.target.value)} className="h-10 rounded-md border-white/10 bg-white/5 text-white" placeholder="Dior" />
             </div>
             <div>
-              <div className="mb-1 text-xs text-white/60">Name</div>
-              <Input value={name} onChange={(e) => setName(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="Sauvage" />
+              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-white/60">Name</div>
+              <Input value={name} onChange={(e) => setName(e.target.value)} className="h-10 rounded-md border-white/10 bg-white/5 text-white" placeholder="Sauvage" />
             </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <div className="mb-1 text-xs text-white/60">Year (optional)</div>
-              <Input value={year} onChange={(e) => setYear(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="2015" />
+              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-white/60">Year (optional)</div>
+              <Input value={year} onChange={(e) => setYear(e.target.value)} className="h-10 rounded-md border-white/10 bg-white/5 text-white" placeholder="2015" />
             </div>
             <div>
-              <div className="mb-1 text-xs text-white/60">Concentration (optional)</div>
-              <select value={concentration} onChange={(e) => setConcentration(e.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none focus-visible:border-white/20">
+              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-white/60">Concentration (optional)</div>
+              <select value={concentration} onChange={(e) => setConcentration(e.target.value)} className="h-10 w-full rounded-md border border-white/10 bg-white/5 px-3 text-sm text-white outline-none focus-visible:border-white/20">
                 <option value="">Select concentration</option>
                 {CONCENTRATION_OPTIONS.map((option) => (
                   <option key={option} value={option}>{option}</option>
@@ -392,11 +431,12 @@ export default function AddCommunityFragranceDialog({
               </select>
             </div>
           </div>
+          </section>
 
-          <div>
-            <div className="mb-1 text-xs text-white/60">Image (optional)</div>
+          <section className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+            <div className="mb-1 text-xs font-medium uppercase tracking-wide text-white/60">Image (optional)</div>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10">
+              <label className="inline-flex h-8 cursor-pointer items-center rounded-md border border-white/12 bg-white/5 px-3 text-xs font-medium text-white/85 hover:bg-white/10">
                 Upload image
                 <input
                   type="file"
@@ -425,7 +465,7 @@ export default function AddCommunityFragranceDialog({
               <Button
                 type="button"
                 variant="secondary"
-                className="h-8 rounded-full border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/18"
+                className="h-8 rounded-md border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/18"
                 onClick={() => {
                   setImageFile(null);
                   setImagePreviewUrl((prev) => {
@@ -443,7 +483,7 @@ export default function AddCommunityFragranceDialog({
             </div>
             {imageError ? <div className="mt-2 text-xs text-red-200">{imageError}</div> : null}
             {(imagePreviewUrl || imageUrl) ? (
-              <div className="mt-3 overflow-hidden rounded-2xl border border-white/15 bg-black/20">
+              <div className="mt-3 overflow-hidden rounded-md border border-white/15 bg-black/20">
                 <img
                   src={(imagePreviewUrl || imageUrl) ?? ""}
                   alt="Fragrance preview"
@@ -454,48 +494,45 @@ export default function AddCommunityFragranceDialog({
                 />
               </div>
             ) : null}
-          </div>
+          </section>
 
-          <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+          <section className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-medium">Visibility</div>
-              <div className="text-xs text-white/60">{isPublic ? "Public: others can find it." : "Private: only you can see it."}</div>
+              <div className="text-xs text-white/60">{isPublic ? "Public: appears in community search and lists." : "Private: only you can see and edit this draft."}</div>
             </div>
             <div className="flex items-center gap-3">
-              <span className={`text-xs ${!isPublic ? "text-white" : "text-white/60"}`}>Private</span>
+              <span className={`text-xs font-medium ${!isPublic ? "text-white" : "text-white/60"}`}>Private</span>
               <Switch checked={isPublic} onCheckedChange={setIsPublic} />
-              <span className={`text-xs ${isPublic ? "text-white" : "text-white/60"}`}>Public</span>
+              <span className={`text-xs font-medium ${isPublic ? "text-white" : "text-white/60"}`}>Public</span>
             </div>
-          </div>
+          </section>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <section className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-medium">Main accords</div>
               <div className="text-xs text-white/55">{accords.length}/20</div>
             </div>
             <div className="mt-3 flex gap-2">
-              <Input value={accordInput} onChange={(e) => setAccordInput(e.target.value)} className="h-10 rounded-xl border-white/10 bg-white/5 text-white" placeholder="Add accord (e.g. woody)" />
-              <Button type="button" className="h-10 rounded-xl px-4" onClick={addAccord}>Add</Button>
+              <Input value={accordInput} onChange={(e) => setAccordInput(e.target.value)} className="h-10 rounded-md border-white/10 bg-white/5 text-white" placeholder="Add accord (e.g. woody)" />
+              <Button type="button" className="h-10 rounded-md px-4" onClick={addAccord}>Add</Button>
             </div>
             {accords.length ? (
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {accords.map((item) => (
-                  <div key={item.name} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div key={item.name} className="rounded-md border border-white/10 bg-black/20 p-3">
                     <div className="mb-2 flex items-center justify-between">
                       <div className="text-sm text-white/90 capitalize">{item.name}</div>
-                      <button type="button" className="rounded-lg px-2 py-1 text-xs text-white/60 hover:bg-white/10 hover:text-white" onClick={() => removeAccord(item.name)}>Remove</button>
+                      <button type="button" className="rounded-md px-2 py-1 text-xs text-white/60 hover:bg-white/10 hover:text-white" onClick={() => removeAccord(item.name)}>Remove</button>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <input type="range" min={0} max={3} step={1} value={item.strength} onChange={(e) => updateAccordStrength(item.name, Number(e.target.value))} className="w-full accent-cyan-300" />
-                      <div className="w-20 text-right text-xs text-cyan-100">{ACCORD_STRENGTH_LABELS[item.strength]}</div>
-                    </div>
+                    <AccordStrengthButtons value={item.strength} onChange={(next) => updateAccordStrength(item.name, next)} />
                   </div>
                 ))}
               </div>
             ) : null}
-          </div>
+          </section>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <section className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-sm font-medium">Notes</div>
@@ -504,12 +541,12 @@ export default function AddCommunityFragranceDialog({
               <div className="text-xs text-white/50">{loadingNotes ? "Searching…" : ""}</div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2">
               <div className="text-xs text-white/60">Add next note to:</div>
-              <ToggleGroup type="single" value={stage} onValueChange={(v) => v && setStage(v as StageKey)} className="gap-2">
-                <ToggleGroupItem value="TOP" className="h-8 rounded-xl px-3 text-xs">Top</ToggleGroupItem>
-                <ToggleGroupItem value="MIDDLE" className="h-8 rounded-xl px-3 text-xs">Mid</ToggleGroupItem>
-                <ToggleGroupItem value="BASE" className="h-8 rounded-xl px-3 text-xs">Base</ToggleGroupItem>
+              <ToggleGroup type="single" value={stage} onValueChange={(v) => v && setStage(v as StageKey)} className="gap-1">
+                <ToggleGroupItem value="TOP" className="h-8 rounded-md px-3 text-xs">Top</ToggleGroupItem>
+                <ToggleGroupItem value="MIDDLE" className="h-8 rounded-md px-3 text-xs">Mid</ToggleGroupItem>
+                <ToggleGroupItem value="BASE" className="h-8 rounded-md px-3 text-xs">Base</ToggleGroupItem>
               </ToggleGroup>
             </div>
 
@@ -524,13 +561,13 @@ export default function AddCommunityFragranceDialog({
                       addCustomNote();
                     }
                   }}
-                  className="h-10 w-full rounded-xl border-white/10 bg-white/5 text-white sm:flex-1"
+                  className="h-10 w-full rounded-md border-white/10 bg-white/5 text-white sm:flex-1"
                   placeholder="Search notes (e.g. bergamot, amber, vanilla)…"
                 />
                 <Button
                   type="button"
                   variant="secondary"
-                  className="h-10 w-full rounded-xl border border-white/12 bg-white/10 px-3 text-xs text-white hover:bg-white/15 sm:w-auto"
+                  className="h-10 w-full rounded-md border border-white/12 bg-white/10 px-3 text-xs text-white hover:bg-white/15 sm:w-auto"
                   onClick={addCustomNote}
                   disabled={!noteSearch.trim()}
                 >
@@ -546,23 +583,27 @@ export default function AddCommunityFragranceDialog({
               <div className="mt-3 max-h-60 overflow-y-auto pr-1">
                 <div className="grid gap-2 sm:grid-cols-2">
                   {noteResults.slice(0, 30).map((n) => (
-                    <div key={n.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                    <div key={n.id} className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 transition-colors hover:bg-white/[0.09]">
                       <div className="flex min-w-0 items-center gap-3">
                         <img
                           src={n.imageUrl || DEFAULT_NOTE_IMG}
                           onError={(e) => { e.currentTarget.src = DEFAULT_NOTE_IMG; }}
                           alt={n.name}
-                          className={`h-9 w-9 shrink-0 rounded-xl object-cover ${!n.imageUrl ? "scale-[1.30]" : "scale-100"}`}
+                          className={`h-9 w-9 shrink-0 rounded-md object-cover ${!n.imageUrl ? "scale-[1.30]" : "scale-100"}`}
                         />
                         <div className="min-w-0">
                           <div className="truncate text-sm">{n.name}</div>
                           <div className="mt-0.5 text-[11px] text-white/50">{typeof n.usageCount === "number" ? `Used ${n.usageCount}` : ""}</div>
                         </div>
                       </div>
-                      <Button type="button" className="h-8 rounded-xl px-3 text-xs" onClick={() => addNote(stage, n)}>Add</Button>
+                      <Button type="button" className="h-8 rounded-md px-3 text-xs" onClick={() => addNote(stage, n)}>Add</Button>
                     </div>
                   ))}
                 </div>
+              </div>
+            ) : noteSearch.trim().length >= 2 && !loadingNotes ? (
+              <div className="mt-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
+                No matches found. You can still add it as a custom note.
               </div>
             ) : null}
 
@@ -571,11 +612,11 @@ export default function AddCommunityFragranceDialog({
               <Stage title="Middle" items={middle} onRemove={(id) => removeNote("MIDDLE", id)} />
               <Stage title="Base" items={base} onRemove={(id) => removeNote("BASE", id)} />
             </div>
-          </div>
+          </section>
 
-        <div className="flex items-center justify-end gap-2">
-          <Button type="button" variant="secondary" className="h-10 rounded-xl border border-white/12 bg-white/10 text-white hover:bg-white/15" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="button" className="h-10 rounded-xl px-5" onClick={onSave} disabled={!canSave || saving || uploadingImage}>{saving || uploadingImage ? (isEdit ? "Saving…" : "Creating…") : (isEdit ? "Save changes" : "Create")}</Button>
+        <div className="mt-1 flex items-center justify-end gap-2 border-t border-white/10 pt-4">
+          <Button type="button" variant="secondary" className="h-10 rounded-md border border-white/12 bg-white/10 text-white hover:bg-white/15" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" className="h-10 rounded-md px-5" onClick={onSave} disabled={!canSave || saving || uploadingImage}>{saving || uploadingImage ? (isEdit ? "Saving…" : "Creating…") : (isEdit ? "Save changes" : "Create")}</Button>
         </div>
       </div>
     </>
@@ -584,7 +625,7 @@ export default function AddCommunityFragranceDialog({
   if (inlineMode) {
     if (!open) return null;
     return (
-      <div className="rounded-3xl border border-white/10 bg-[#0b0b10] p-4">
+      <div className="rounded-lg border border-white/10 bg-[#0b0b10] p-4">
         {formBody}
       </div>
     );
@@ -592,7 +633,7 @@ export default function AddCommunityFragranceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] w-[calc(100vw-24px)] max-w-2xl overflow-y-auto overscroll-contain rounded-3xl border border-white/10 bg-[#0b0b10] text-white [-webkit-overflow-scrolling:touch]">
+      <DialogContent className="max-h-[85dvh] w-[calc(100vw-24px)] max-w-3xl overflow-y-auto overscroll-contain rounded-lg border border-white/10 bg-[#0b0b10] text-white [-webkit-overflow-scrolling:touch]">
         {formBody}
       </DialogContent>
     </Dialog>
@@ -601,7 +642,7 @@ export default function AddCommunityFragranceDialog({
 
 function Stage({ title, items, onRemove }: { title: string; items: NoteDictionaryItem[]; onRemove: (id: string) => void; }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+    <div className="rounded-md border border-white/10 bg-white/5 p-3">
       <div className="mb-2 flex items-center justify-between">
         <div className="text-xs font-medium text-white/80">{title}</div>
         <div className="text-[10px] text-white/50">{items.length}</div>
@@ -609,13 +650,13 @@ function Stage({ title, items, onRemove }: { title: string; items: NoteDictionar
       <div className="space-y-2">
         {items.length ? (
           items.map((n) => (
-            <div key={n.id} className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-2 py-2">
+            <div key={n.id} className="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-white/5 px-2 py-2">
               <div className="min-w-0 truncate text-xs text-white/85">{n.name}</div>
-              <button type="button" className="shrink-0 rounded-lg px-2 py-1 text-xs text-white/60 hover:bg-white/10 hover:text-white" onClick={() => onRemove(n.id)} aria-label={`Remove ${n.name}`}>✕</button>
+              <button type="button" className="shrink-0 rounded-md px-2 py-1 text-xs text-white/60 hover:bg-white/10 hover:text-white" onClick={() => onRemove(n.id)} aria-label={`Remove ${n.name}`}>✕</button>
             </div>
           ))
         ) : (
-          <div className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-xs text-white/40">—</div>
+          <div className="rounded-md border border-white/10 bg-white/5 px-2 py-2 text-xs text-white/40">—</div>
         )}
       </div>
     </div>

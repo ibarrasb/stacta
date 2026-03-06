@@ -192,7 +192,7 @@ export default function ConfirmSignUpPage() {
                   value={email}
                   readOnly
                   aria-readonly="true"
-                  className="mt-2 h-11 w-full cursor-not-allowed rounded-xl border border-white/10 bg-neutral-950/30 px-3 text-sm text-white/70 outline-none ring-0"
+                  className="mt-2 h-11 w-full cursor-not-allowed rounded-xl border border-white/10 bg-neutral-950/30 px-3 text-base text-white/70 outline-none ring-0 md:text-sm"
                 />
 
                 <div className="mt-2 text-xs text-white/50">
@@ -213,7 +213,7 @@ export default function ConfirmSignUpPage() {
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   placeholder="123456"
-                  className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-neutral-950/40 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-white/20"
+                  className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-neutral-950/40 px-3 text-base text-white placeholder:text-white/30 outline-none ring-0 focus:border-white/20 md:text-sm"
                 />
               </div>
 

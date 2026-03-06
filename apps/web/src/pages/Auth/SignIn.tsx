@@ -148,7 +148,7 @@ export default function SignInPage() {
                   type="email"
                   autoComplete="email"
                   placeholder="you@example.com"
-                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35"
+                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-base text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35 md:text-sm"
                 />
               </div>
 
@@ -170,7 +170,7 @@ export default function SignInPage() {
                   type="password"
                   autoComplete="current-password"
                   placeholder="••••••••"
-                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35"
+                  className="mt-2 h-11 w-full rounded-xl border border-white/15 bg-black/30 px-3 text-base text-white placeholder:text-white/30 outline-none ring-0 focus:border-amber-200/35 md:text-sm"
                 />
               </div>
 

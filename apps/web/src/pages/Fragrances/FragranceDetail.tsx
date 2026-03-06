@@ -1,7 +1,7 @@
 // apps/web/src/pages/Fragrances/FragranceDetail.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { BookmarkPlus, Check, ChevronDown, PenSquare, Plus, ShoppingBag } from "lucide-react";
+import { BookmarkPlus, Check, ChevronDown, PenSquare, Plus, Search, ShoppingBag } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -589,7 +589,7 @@ function ConcentrationDropdown({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 w-full items-center justify-between gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+        className="flex h-8 w-full items-center justify-between gap-2 rounded-md border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -597,7 +597,7 @@ function ConcentrationDropdown({
         <ChevronDown className={cx("h-3.5 w-3.5 text-white/65 transition", open ? "rotate-180" : "")} />
       </button>
       {open ? (
-        <div className="absolute left-0 right-0 z-30 mt-2 max-h-56 overflow-auto rounded-xl border border-white/12 bg-[#0f1118]/96 p-1 shadow-[0_14px_28px_rgba(0,0,0,0.45)] backdrop-blur sm:right-auto sm:min-w-[240px]">
+        <div className="absolute left-0 right-0 z-30 mt-2 max-h-56 overflow-auto rounded-md border border-white/12 bg-[#0f1118]/96 p-1 shadow-[0_14px_28px_rgba(0,0,0,0.45)] backdrop-blur sm:right-auto sm:min-w-[240px]">
           <button
             type="button"
             role="option"
@@ -629,6 +629,74 @@ function ConcentrationDropdown({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function AccordStrengthButtons({
+  value,
+  onChange,
+}: {
+  value: 0 | 1 | 2 | 3;
+  onChange: (next: 0 | 1 | 2 | 3) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-1.5">
+      {ACCORD_STRENGTH_LABELS.map((label, idx) => {
+        const next = idx as 0 | 1 | 2 | 3;
+        const active = value === next;
+        return (
+          <button
+            key={label}
+            type="button"
+            onClick={() => onChange(next)}
+            className={cx(
+              "min-h-10 rounded-md border px-2.5 py-2 text-center text-[11px] font-medium leading-snug whitespace-normal break-normal hyphens-none [overflow-wrap:normal] transition touch-manipulation",
+              active
+                ? "border-cyan-300/55 bg-cyan-400/20 text-cyan-100"
+                : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10 hover:text-white"
+            )}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function VoteScaleButtons({
+  labels,
+  value,
+  onChange,
+}: {
+  labels: readonly string[];
+  value: number | null;
+  onChange: (next: number | null) => void;
+}) {
+  const choices = labels.slice(1);
+  return (
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-1.5">
+      {choices.map((label, idx) => {
+        const score = idx + 1;
+        const active = value === score;
+        return (
+          <button
+            key={`${label}-${score}`}
+            type="button"
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={() => onChange(active ? null : score)}
+            className={cx(
+              "min-h-10 rounded-md border px-2.5 py-2 text-center text-[11px] font-medium leading-snug whitespace-normal break-normal hyphens-none [overflow-wrap:normal] transition touch-manipulation",
+              active
+                ? "border-cyan-300/55 bg-cyan-400/20 text-cyan-100"
+                : "border-white/15 bg-white/5 text-white/75 hover:bg-white/10 hover:text-white"
+            )}
+          >
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -873,11 +941,11 @@ export default function FragranceDetailPage() {
   const communityVoteLastSavedRef = useRef<string>("{}");
   const communityVoteHydratingRef = useRef(false);
   const communityVoteHydratedExternalIdRef = useRef<string | null>(null);
+  const draftNoteInputRef = useRef<HTMLInputElement | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [draftAccordInput, setDraftAccordInput] = useState("");
   const [draftNoteSearch, setDraftNoteSearch] = useState("");
   const [draftNoteResults, setDraftNoteResults] = useState<NoteDictionaryItem[]>([]);
-  const [draftNoteAddedHint, setDraftNoteAddedHint] = useState<string | null>(null);
   const [draftStage, setDraftStage] = useState<StageKey>("TOP");
   const [draftBrand, setDraftBrand] = useState("");
   const [draftName, setDraftName] = useState("");
@@ -998,7 +1066,6 @@ export default function FragranceDetailPage() {
     setDraftAccordInput("");
     setDraftNoteSearch("");
     setDraftNoteResults([]);
-    setDraftNoteAddedHint(null);
     setDraftStage("TOP");
   }, [editingCommunity, fragrance, isCreateMode]);
 
@@ -1028,15 +1095,8 @@ export default function FragranceDetailPage() {
     setDraftAccordInput("");
     setDraftNoteSearch("");
     setDraftNoteResults([]);
-    setDraftNoteAddedHint(null);
     setDraftStage("TOP");
   }, [isCreateMode, location?.state]);
-
-  useEffect(() => {
-    if (!draftNoteAddedHint) return;
-    const t = window.setTimeout(() => setDraftNoteAddedHint(null), 1400);
-    return () => window.clearTimeout(t);
-  }, [draftNoteAddedHint]);
 
   useEffect(() => {
     return () => {
@@ -2011,6 +2071,25 @@ export default function FragranceDetailPage() {
   const shownConfidence01 = isEditingForm ? clamp01(draftConfidence / 4) : confidence01;
   const shownPopularity01 = isEditingForm ? clamp01(draftPopularity / 4) : popularity01;
   const canSaveEdit = draftBrand.trim().length > 0 && draftName.trim().length > 0 && !uploadingDraftImage;
+  const yearOptions = useMemo(() => {
+    const latest = new Date().getFullYear() + 1;
+    const list: string[] = [];
+    for (let year = latest; year >= 1900; year -= 1) {
+      list.push(String(year));
+    }
+    if (/^\d{4}$/.test(draftYear) && !list.includes(draftYear)) {
+      list.unshift(draftYear);
+    }
+    return list;
+  }, [draftYear]);
+  const activeDraftNotes = useMemo(() => {
+    if (draftStage === "TOP") return draftTopNotes;
+    if (draftStage === "MIDDLE") return draftMiddleNotes;
+    return draftBaseNotes;
+  }, [draftStage, draftTopNotes, draftMiddleNotes, draftBaseNotes]);
+  const activeDraftNotesPreview = useMemo(() => {
+    return activeDraftNotes.map((note, index) => ({ note, index })).slice(-6).reverse();
+  }, [activeDraftNotes]);
 
   function addDraftAccord() {
     const cleaned = draftAccordInput.trim();
@@ -2050,11 +2129,23 @@ export default function FragranceDetailPage() {
         return true;
       }).slice(0, 20);
     };
-    if (draftStage === "TOP") setDraftTopNotes((prev) => dedupe([...prev, mapped]));
-    if (draftStage === "MIDDLE") setDraftMiddleNotes((prev) => dedupe([...prev, mapped]));
-    if (draftStage === "BASE") setDraftBaseNotes((prev) => dedupe([...prev, mapped]));
-    const stageLabel = draftStage === "TOP" ? "Top notes" : draftStage === "MIDDLE" ? "Middle notes" : "Base notes";
-    setDraftNoteAddedHint(`Added to ${stageLabel}`);
+    if (draftStage === "TOP") {
+      setDraftTopNotes((prev) => {
+        return dedupe([...prev, mapped]);
+      });
+    }
+    if (draftStage === "MIDDLE") {
+      setDraftMiddleNotes((prev) => {
+        return dedupe([...prev, mapped]);
+      });
+    }
+    if (draftStage === "BASE") {
+      setDraftBaseNotes((prev) => {
+        return dedupe([...prev, mapped]);
+      });
+    }
+    setDraftNoteSearch("");
+    setDraftNoteResults([]);
   }
 
   function addCustomDraftNote() {
@@ -2066,8 +2157,12 @@ export default function FragranceDetailPage() {
       imageUrl: null,
       usageCount: null,
     });
-    setDraftNoteSearch("");
-    setDraftNoteResults([]);
+  }
+
+  function removeDraftNoteAtStage(stage: StageKey, index: number) {
+    if (stage === "TOP") setDraftTopNotes((prev) => prev.filter((_, i) => i !== index));
+    if (stage === "MIDDLE") setDraftMiddleNotes((prev) => prev.filter((_, i) => i !== index));
+    if (stage === "BASE") setDraftBaseNotes((prev) => prev.filter((_, i) => i !== index));
   }
 
   const saveInPlaceEdit = useCallback(async () => {
@@ -2362,10 +2457,26 @@ export default function FragranceDetailPage() {
               <div className="min-w-0 overflow-hidden rounded-3xl border border-white/15 bg-black/25 lg:sticky ">
                 <div className="p-4">
                   <div className="mb-4 lg:hidden">
+                    {isCommunityFragrance && isEditingForm ? (
+                      <div className="mb-2 flex w-full min-w-0 items-center justify-between gap-2 rounded-md border border-cyan-300/35 bg-cyan-400/12 px-3 py-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90">Visibility</span>
+                        <Switch
+                          checked={draftVisibility === "PUBLIC"}
+                          onCheckedChange={(checked) => setDraftVisibility(checked ? "PUBLIC" : "PRIVATE")}
+                          aria-label="Set fragrance visibility"
+                        />
+                        <span className="text-[11px] font-medium text-cyan-100">{shownVisibilityLabel}</span>
+                      </div>
+                    ) : null}
+                    {isCommunityFragrance && isEditingForm ? (
+                      <div className="mb-2 rounded-md border border-amber-200/25 bg-amber-200/10 px-3 py-2 text-[11px] text-amber-100/95">
+                        Draft tip: keep this private while you are still building it. You can switch between private and public anytime.
+                      </div>
+                    ) : null}
                     {isEditingForm ? (
                       <div className="space-y-2">
-                        <input value={draftBrand} onChange={(e) => setDraftBrand(e.target.value)} placeholder="Brand" className="h-9 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none" />
-                        <input value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="Name" className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-lg font-semibold text-white outline-none" />
+                        <input value={draftBrand} onChange={(e) => setDraftBrand(e.target.value)} placeholder="Brand" className="h-9 w-full rounded-md border border-white/10 bg-white/5 px-3 text-base text-white outline-none md:text-sm" />
+                        <input value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="Name" className="h-10 w-full rounded-md border border-white/10 bg-white/5 px-3 text-lg font-semibold text-white outline-none" />
                       </div>
                     ) : (
                       <>
@@ -2373,63 +2484,54 @@ export default function FragranceDetailPage() {
                         <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
                       </>
                     )}
-                    {isCommunityFragrance && isEditingForm ? (
-                      <div className="mt-2 rounded-xl border border-amber-200/25 bg-amber-200/10 px-3 py-2 text-[11px] text-amber-100/95">
-                        Draft tip: keep this private while you are still building it. You can switch between private and public anytime.
-                      </div>
-                    ) : null}
-
                     <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {!isEditingForm && isCommunityFragrance ? (
+                        <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
+                          {shownVisibilityLabel}
+                        </span>
+                      ) : null}
                       {isEditingForm ? (
-                        <ConcentrationDropdown
-                          value={draftConcentration}
-                          onChange={setDraftConcentration}
-                          options={CONCENTRATION_OPTIONS}
-                          className="w-full sm:w-auto"
-                        />
+                        <div className="flex w-full items-center gap-2">
+                          <ConcentrationDropdown
+                            value={draftConcentration}
+                            onChange={setDraftConcentration}
+                            options={CONCENTRATION_OPTIONS}
+                            className="min-w-0 flex-1"
+                          />
+                          <select
+                            value={draftYear}
+                            onChange={(e) => setDraftYear(e.target.value)}
+                            className="h-8 w-24 rounded-md border border-white/10 bg-white/5 px-2 text-base text-white outline-none md:text-xs"
+                          >
+                            <option value="">Year</option>
+                            {yearOptions.map((year) => (
+                              <option key={`year-mobile-${year}`} value={year}>
+                                {year}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       ) : oilType ? (
                         <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/85">
                           {oilType}
                         </span>
                       ) : null}
 
-                        <div className="text-sm text-white/60">
-                          {isEditingForm ? (
-                            <input
-                              value={draftYear}
-                              onChange={(e) => setDraftYear(e.target.value)}
-                              placeholder="Year"
-                              className="h-8 w-24 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
-                            />
-                          ) : headerMeta.year || headerMeta.gender ? (
-                            <span className="inline-flex items-center gap-2">
-                              {headerMeta.year ? (
-                                <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-white font-semibold tabular-nums">
-                                  {headerMeta.year}
-                                </span>
-                              ) : null}
-                              {headerMeta.gender ? <span>{headerMeta.gender}</span> : null}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                        </div>
-                        {isCommunityFragrance ? (
-                          isEditingForm ? (
-                            <div className="flex w-full min-w-0 items-center justify-between gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 sm:w-auto sm:justify-start">
-                              <span className="text-[11px] text-white/65">Visibility</span>
-                              <Switch
-                                checked={draftVisibility === "PUBLIC"}
-                                onCheckedChange={(checked) => setDraftVisibility(checked ? "PUBLIC" : "PRIVATE")}
-                                aria-label="Set fragrance visibility"
-                              />
-                              <span className="text-[11px] text-cyan-100">{shownVisibilityLabel}</span>
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
-                              {shownVisibilityLabel}
-                            </span>
-                          )
+                        {!isEditingForm ? (
+                          <div className="text-sm text-white/60">
+                            {headerMeta.year || headerMeta.gender ? (
+                              <span className="inline-flex items-center gap-2">
+                                {headerMeta.year ? (
+                                  <span className="rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-white font-semibold tabular-nums">
+                                    {headerMeta.year}
+                                  </span>
+                                ) : null}
+                                {headerMeta.gender ? <span>{headerMeta.gender}</span> : null}
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </div>
                         ) : null}
                         {createdByUsername ? (
                           <button
@@ -2443,51 +2545,55 @@ export default function FragranceDetailPage() {
 
                     </div>
                     {isEditingForm ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <label className="inline-flex cursor-pointer items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10">
-                          Upload image
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                            className="hidden"
-                            onChange={(e) => onPickDraftImage(e.target.files?.[0] ?? null)}
-                          />
-                        </label>
-                        <input
-                          value={draftImageLabel}
-                          readOnly
-                          placeholder="No image selected"
-                          className="h-8 w-full rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none sm:w-auto sm:flex-1"
-                        />
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="h-8 rounded-full border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/18"
-                          onClick={() => {
-                            setDraftImageUrl("");
-                            setDraftImageObjectKey(null);
-                            setDraftImageFile(null);
-                            setDraftImageError(null);
-                            setDraftImageLabel("");
-                          }}
-                          disabled={!draftImageUrl.trim() && !draftImageObjectKey && !draftImageFile}
-                        >
-                          Clear
-                        </Button>
-                      </div>
-                    ) : null}
-                    {isEditingForm && draftImageError ? (
-                      <div className="mt-2 text-xs text-red-200">{draftImageError}</div>
-                    ) : null}
-                    {isEditingForm ? (
                       <div className="mt-2">
                         <input
                           value={draftPurchaseUrl}
                           onChange={(e) => setDraftPurchaseUrl(e.target.value)}
                           placeholder="Buy link (optional) e.g. https://shop.com/product"
-                          className="h-9 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                          className="h-9 w-full rounded-md border border-white/10 bg-white/5 px-3 text-base text-white outline-none md:text-xs"
                         />
                       </div>
+                    ) : null}
+                    {isEditingForm ? (
+                      <div className="mt-2 rounded-lg border border-cyan-300/35 bg-cyan-400/10 p-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-cyan-300/45 bg-cyan-300/18 px-3 py-1 text-xs font-semibold text-cyan-50 hover:bg-cyan-300/24">
+                            <Plus className="h-3.5 w-3.5" />
+                            Upload cover image
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                              className="hidden"
+                              onChange={(e) => onPickDraftImage(e.target.files?.[0] ?? null)}
+                            />
+                          </label>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="h-8 rounded-md border border-white/20 bg-white/15 px-3 text-xs text-white hover:bg-white/22"
+                            onClick={() => {
+                              setDraftImageUrl("");
+                              setDraftImageObjectKey(null);
+                              setDraftImageFile(null);
+                              setDraftImageError(null);
+                              setDraftImageLabel("");
+                            }}
+                            disabled={!draftImageUrl.trim() && !draftImageObjectKey && !draftImageFile}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                        <input
+                          value={draftImageLabel}
+                          readOnly
+                          placeholder="No image selected"
+                          className="mt-2 h-8 w-full rounded-md border border-white/10 bg-white/5 px-3 text-base text-white outline-none md:text-xs"
+                        />
+                        <div className="mt-2 text-[11px] text-cyan-100/85">Image makes this fragrance stand out in search and feed cards.</div>
+                      </div>
+                    ) : null}
+                    {isEditingForm && draftImageError ? (
+                      <div className="mt-2 text-xs text-red-200">{draftImageError}</div>
                     ) : null}
                   </div>
 
@@ -2673,20 +2779,11 @@ export default function FragranceDetailPage() {
                       />
                       {canVoteFragrance && !isEditingForm ? (
                         <>
-                          <input
-                            type="range"
-                            min={1}
-                            max={5}
-                            step={1}
-                            value={communityLongevityVote ?? 1}
-                            onChange={(e) => setCommunityLongevityVote(Number(e.target.value))}
-                            className="h-9 w-full cursor-pointer accent-cyan-300 touch-pan-y"
-                            aria-label="Community longevity vote"
+                          <VoteScaleButtons
+                            labels={COMMUNITY_LONGEVITY_LEVEL_LABELS}
+                            value={communityLongevityVote}
+                            onChange={setCommunityLongevityVote}
                           />
-                          <div className="mt-1 flex items-center justify-between text-[10px] text-white/45">
-                            <span>Fleeting</span>
-                            <span>Endless</span>
-                          </div>
                           <div className="text-[11px] text-white/55">
                             Your vote: {communityLongevityVote ? COMMUNITY_LONGEVITY_LEVEL_LABELS[communityLongevityVote] : "Not voted"}
                           </div>
@@ -2703,20 +2800,11 @@ export default function FragranceDetailPage() {
                       />
                       {canVoteFragrance && !isEditingForm ? (
                         <>
-                          <input
-                            type="range"
-                            min={1}
-                            max={5}
-                            step={1}
-                            value={communitySillageVote ?? 1}
-                            onChange={(e) => setCommunitySillageVote(Number(e.target.value))}
-                            className="h-9 w-full cursor-pointer accent-cyan-300 touch-pan-y"
-                            aria-label="Community sillage vote"
+                          <VoteScaleButtons
+                            labels={COMMUNITY_SILLAGE_LEVEL_LABELS}
+                            value={communitySillageVote}
+                            onChange={setCommunitySillageVote}
                           />
-                          <div className="mt-1 flex items-center justify-between text-[10px] text-white/45">
-                            <span>Skin scent</span>
-                            <span>Nuclear</span>
-                          </div>
                           <div className="text-[11px] text-white/55">
                             Your vote: {communitySillageVote ? COMMUNITY_SILLAGE_LEVEL_LABELS[communitySillageVote] : "Not voted"}
                           </div>
@@ -2762,10 +2850,26 @@ export default function FragranceDetailPage() {
 
               <div className="min-w-0 space-y-5 [&>*]:min-w-0">
                 <div className="hidden lg:block">
+                  {isCommunityFragrance && isEditingForm ? (
+                    <div className="mb-2 flex w-full max-w-2xl min-w-0 items-center justify-between gap-2 rounded-md border border-cyan-300/35 bg-cyan-400/12 px-3 py-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90">Visibility</span>
+                      <Switch
+                        checked={draftVisibility === "PUBLIC"}
+                        onCheckedChange={(checked) => setDraftVisibility(checked ? "PUBLIC" : "PRIVATE")}
+                        aria-label="Set fragrance visibility"
+                      />
+                      <span className="text-[11px] font-medium text-cyan-100">{shownVisibilityLabel}</span>
+                    </div>
+                  ) : null}
+                  {isCommunityFragrance && isEditingForm ? (
+                    <div className="mb-2 max-w-2xl rounded-md border border-amber-200/25 bg-amber-200/10 px-3 py-2 text-[11px] text-amber-100/95">
+                      Draft tip: keep this private while you are still building it. You can switch between private and public anytime.
+                    </div>
+                  ) : null}
                   {isEditingForm ? (
                     <div className="space-y-2">
-                      <input value={draftBrand} onChange={(e) => setDraftBrand(e.target.value)} placeholder="Brand" className="h-9 w-full max-w-md rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none" />
-                      <input value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="Name" className="h-10 w-full max-w-md rounded-xl border border-white/10 bg-white/5 px-3 text-lg font-semibold text-white outline-none" />
+                      <input value={draftBrand} onChange={(e) => setDraftBrand(e.target.value)} placeholder="Brand" className="h-9 w-full max-w-md rounded-md border border-white/10 bg-white/5 px-3 text-base text-white outline-none md:text-sm" />
+                      <input value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="Name" className="h-10 w-full max-w-md rounded-md border border-white/10 bg-white/5 px-3 text-lg font-semibold text-white outline-none" />
                     </div>
                   ) : (
                     <>
@@ -2773,13 +2877,12 @@ export default function FragranceDetailPage() {
                       <div className="mt-1 text-2xl font-semibold tracking-tight">{fragrance.name || "—"}</div>
                     </>
                   )}
-                  {isCommunityFragrance && isEditingForm ? (
-                    <div className="mt-2 max-w-2xl rounded-xl border border-amber-200/25 bg-amber-200/10 px-3 py-2 text-[11px] text-amber-100/95">
-                      Draft tip: keep this private while you are still building it. You can switch between private and public anytime.
-                    </div>
-                  ) : null}
-
                   <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {!isEditingForm && isCommunityFragrance ? (
+                      <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
+                        {shownVisibilityLabel}
+                      </span>
+                    ) : null}
                     {isEditingForm ? (
                       <ConcentrationDropdown
                         value={draftConcentration}
@@ -2795,12 +2898,18 @@ export default function FragranceDetailPage() {
 
                       <div className="text-sm text-white/60">
                         {isEditingForm ? (
-                          <input
+                          <select
                             value={draftYear}
                             onChange={(e) => setDraftYear(e.target.value)}
-                            placeholder="Year"
-                            className="h-8 w-24 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
-                          />
+                            className="h-8 w-24 rounded-md border border-white/10 bg-white/5 px-2 text-base text-white outline-none md:text-xs"
+                          >
+                            <option value="">Year</option>
+                            {yearOptions.map((year) => (
+                              <option key={`year-desktop-${year}`} value={year}>
+                                {year}
+                              </option>
+                            ))}
+                          </select>
                         ) : headerMeta.year || headerMeta.gender ? (
                           <span className="inline-flex items-center gap-2">
                             {headerMeta.year ? (
@@ -2814,23 +2923,6 @@ export default function FragranceDetailPage() {
                           "—"
                         )}
                       </div>
-                      {isCommunityFragrance ? (
-                        isEditingForm ? (
-                          <div className="flex w-full min-w-0 items-center justify-between gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 sm:w-auto sm:justify-start">
-                            <span className="text-[11px] text-white/65">Visibility</span>
-                            <Switch
-                              checked={draftVisibility === "PUBLIC"}
-                              onCheckedChange={(checked) => setDraftVisibility(checked ? "PUBLIC" : "PRIVATE")}
-                              aria-label="Set fragrance visibility"
-                            />
-                            <span className="text-[11px] text-cyan-100">{shownVisibilityLabel}</span>
-                          </div>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs text-white/80">
-                            {shownVisibilityLabel}
-                          </span>
-                        )
-                      ) : null}
                       {createdByUsername ? (
                         <button
                           type="button"
@@ -2843,55 +2935,59 @@ export default function FragranceDetailPage() {
 
                   </div>
                   {isEditingForm ? (
-                    <div className="mt-2 flex max-w-2xl flex-wrap items-center gap-2">
-                      <label className="inline-flex cursor-pointer items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/85 hover:bg-white/10">
-                        Upload image
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                          className="hidden"
-                          onChange={(e) => onPickDraftImage(e.target.files?.[0] ?? null)}
-                        />
-                      </label>
-                      <input
-                        value={draftImageLabel}
-                        readOnly
-                        placeholder="No image selected"
-                        className="h-8 w-full rounded-full border border-white/10 bg-white/5 px-3 text-xs text-white outline-none sm:w-auto sm:flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="h-8 rounded-full border border-white/20 bg-white/10 px-3 text-xs text-white hover:bg-white/18"
-                        onClick={() => {
-                          setDraftImageUrl("");
-                          setDraftImageObjectKey(null);
-                          setDraftImageFile(null);
-                          setDraftImageError(null);
-                          setDraftImageLabel("");
-                        }}
-                        disabled={!draftImageUrl.trim() && !draftImageObjectKey && !draftImageFile}
-                      >
-                        Clear
-                      </Button>
-                    </div>
-                  ) : null}
-                  {isEditingForm && draftImageError ? (
-                    <div className="mt-2 text-xs text-red-200">{draftImageError}</div>
-                  ) : null}
-                  {isEditingForm ? (
                     <div className="mt-2 max-w-2xl">
                       <input
                         value={draftPurchaseUrl}
                         onChange={(e) => setDraftPurchaseUrl(e.target.value)}
                         placeholder="Buy link (optional) e.g. https://shop.com/product"
-                        className="h-9 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-white outline-none"
+                        className="h-9 w-full rounded-md border border-white/10 bg-white/5 px-3 text-base text-white outline-none md:text-xs"
                       />
                     </div>
                   ) : null}
+                  {isEditingForm ? (
+                    <div className="mt-2 max-w-2xl rounded-lg border border-cyan-300/35 bg-cyan-400/10 p-2.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-cyan-300/45 bg-cyan-300/18 px-3 py-1 text-xs font-semibold text-cyan-50 hover:bg-cyan-300/24">
+                          <Plus className="h-3.5 w-3.5" />
+                          Upload cover image
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                            className="hidden"
+                            onChange={(e) => onPickDraftImage(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-8 rounded-md border border-white/20 bg-white/15 px-3 text-xs text-white hover:bg-white/22"
+                          onClick={() => {
+                            setDraftImageUrl("");
+                            setDraftImageObjectKey(null);
+                            setDraftImageFile(null);
+                            setDraftImageError(null);
+                            setDraftImageLabel("");
+                          }}
+                          disabled={!draftImageUrl.trim() && !draftImageObjectKey && !draftImageFile}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                      <input
+                        value={draftImageLabel}
+                        readOnly
+                        placeholder="No image selected"
+                        className="mt-2 h-8 w-full rounded-md border border-white/10 bg-white/5 px-3 text-base text-white outline-none md:text-xs"
+                      />
+                      <div className="mt-2 text-[11px] text-cyan-100/85">Image makes this fragrance stand out in search and feed cards.</div>
+                    </div>
+                  ) : null}
+                  {isEditingForm && draftImageError ? (
+                    <div className="mt-2 text-xs text-red-200">{draftImageError}</div>
+                  ) : null}
                 </div>
 
-                <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
+                <div className="rounded-lg border border-white/15 bg-black/20 p-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-xs font-medium text-white/80">Main accords</div>
@@ -2908,14 +3004,14 @@ export default function FragranceDetailPage() {
                             value={draftAccordInput}
                             onChange={(e) => setDraftAccordInput(e.target.value)}
                             placeholder="Add accord (e.g. woody)"
-                            className="h-9 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none"
+                            className="h-9 flex-1 rounded-md border border-white/10 bg-white/5 px-3 text-base text-white outline-none md:text-sm"
                           />
-                          <Button className="h-9 rounded-xl px-4" onClick={addDraftAccord}>
+                          <Button className="h-9 rounded-md px-4" onClick={addDraftAccord}>
                             Add
                           </Button>
                         </div>
                         {draftAccords.length ? draftAccords.map((it) => (
-                          <div key={it.name} className="rounded-xl border border-white/10 bg-black/25 p-3">
+                          <div key={it.name} className="rounded-md border border-white/10 bg-black/25 p-3">
                             <div className="mb-2 flex items-center justify-between">
                               <div className="text-sm capitalize text-white/90">{it.name}</div>
                               <button
@@ -2926,23 +3022,12 @@ export default function FragranceDetailPage() {
                                 Remove
                               </button>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <input
-                                type="range"
-                                min={0}
-                                max={3}
-                                step={1}
-                                value={it.strength}
-                                onChange={(e) => {
-                                  const next = Number(e.target.value) as 0 | 1 | 2 | 3;
-                                  setDraftAccords((prev) => prev.map((x) => x.name === it.name ? { ...x, strength: next } : x));
-                                }}
-                                className="w-full accent-cyan-300"
-                              />
-                              <div className="w-20 text-right text-xs text-cyan-100">
-                                {ACCORD_STRENGTH_LABELS[it.strength]}
-                              </div>
-                            </div>
+                            <AccordStrengthButtons
+                              value={it.strength}
+                              onChange={(next) => {
+                                setDraftAccords((prev) => prev.map((x) => (x.name === it.name ? { ...x, strength: next } : x)));
+                              }}
+                            />
                           </div>
                         )) : (
                           <div className="text-xs text-white/50">No accords yet.</div>
@@ -3018,10 +3103,37 @@ export default function FragranceDetailPage() {
                       <div className="text-sm font-semibold">Perfume pyramid</div>
                       <div className="mt-1 text-xs text-white/55">Edit top / middle / base notes in place.</div>
                     </div>
-                    <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
-                      <div className="flex flex-wrap items-center gap-3">
+                    <div className="rounded-lg border border-white/15 bg-black/20 p-4">
+                      <div className="mt-3 rounded-md border border-white/10 bg-white/5 p-2.5">
+                        <div className="mb-2 flex items-center justify-between">
+                          <div className="text-[11px] font-medium text-white/75">
+                            {draftStage === "TOP" ? "Top" : draftStage === "MIDDLE" ? "Middle" : "Base"} notes selected
+                          </div>
+                          <div className="text-[11px] text-white/55">{activeDraftNotes.length}/20</div>
+                        </div>
+                        {activeDraftNotesPreview.length ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {activeDraftNotesPreview.map(({ note, index }) => (
+                              <button
+                                key={`${note.id ?? note.name}-${index}`}
+                                type="button"
+                                onClick={() => removeDraftNoteAtStage(draftStage, index)}
+                                className="inline-flex max-w-full items-center gap-1 rounded-md border border-white/12 bg-black/25 px-2 py-1 text-[11px] text-white/85 hover:bg-black/35"
+                                aria-label={`Remove ${note.name}`}
+                              >
+                                <span className="max-w-[8rem] truncate sm:max-w-[12rem]">{note.name}</span>
+                                <span className="text-white/50">x</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-white/50">No notes selected for this stage yet.</div>
+                        )}
+                      </div>
+                      <div className="mt-2 text-[11px] text-white/50">Tap a selected chip to remove it.</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
                         <div className="text-xs text-white/60">Add next note to:</div>
-                        <div className="inline-flex rounded-xl border border-white/10 bg-white/5 p-1">
+                        <div className="inline-flex rounded-md border border-white/10 bg-white/5 p-1">
                           {(["TOP", "MIDDLE", "BASE"] as StageKey[]).map((s) => (
                             <button
                               key={s}
@@ -3037,46 +3149,75 @@ export default function FragranceDetailPage() {
                           ))}
                         </div>
                       </div>
-                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                        <input
-                          value={draftNoteSearch}
-                          onChange={(e) => setDraftNoteSearch(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              addCustomDraftNote();
-                            }
-                          }}
-                          placeholder="Search note (e.g. bergamot)"
-                          className="h-9 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none sm:flex-1"
-                        />
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="h-9 w-full rounded-xl border border-white/15 bg-white/10 px-3 text-xs text-white hover:bg-white/15 sm:w-auto"
-                          onClick={addCustomDraftNote}
-                          disabled={!draftNoteSearch.trim()}
-                        >
-                          Add custom
-                        </Button>
-                      </div>
-                      {draftNoteAddedHint ? (
-                        <div className="mt-2 text-[11px] text-cyan-100/90">{draftNoteAddedHint}</div>
-                      ) : null}
-                      {draftNoteResults.length ? (
-                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                          {draftNoteResults.slice(0, 12).map((n) => (
-                            <button
-                              key={n.id}
-                              type="button"
-                              onClick={() => addDraftNote(n)}
-                              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white/85 hover:bg-white/10"
-                            >
-                              {n.name}
-                            </button>
-                          ))}
+                      <div className="relative mt-2 rounded-md border border-cyan-300/35 bg-cyan-400/10 p-2">
+                        <div className="mb-1 text-[11px] font-medium text-cyan-100/90">Search notes</div>
+                        {draftNoteResults.length ? (
+                          <div className="mt-1">
+                            <div className="text-[11px] text-white/60 sm:hidden">Swipe to see more notes</div>
+                            <div className="mt-2 flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 sm:mt-1 sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0">
+                              {draftNoteResults.slice(0, 12).map((n) => (
+                                <button
+                                  key={n.id}
+                                  type="button"
+                                  onPointerDown={(e) => e.preventDefault()}
+                                  onClick={() => addDraftNote(n)}
+                                  className="flex w-full shrink-0 snap-start items-center justify-between gap-3 rounded-md border border-white/10 bg-[#0f1118] px-3 py-2 text-left transition hover:bg-white/10 sm:w-auto sm:bg-white/5"
+                                >
+                                  <div className="flex min-w-0 items-center gap-2.5">
+                                    <img
+                                      src={n.imageUrl || DEFAULT_NOTE_IMG}
+                                      onError={(e) => { e.currentTarget.src = DEFAULT_NOTE_IMG; }}
+                                      alt={n.name}
+                                      className={`h-9 w-9 shrink-0 rounded-md object-cover ${!n.imageUrl ? "scale-[1.30]" : "scale-100"}`}
+                                    />
+                                    <div className="min-w-0">
+                                      <div className="truncate text-base text-white/90 md:text-sm">{n.name}</div>
+                                      <div className="text-[11px] text-white/55">
+                                        Add to {draftStage === "TOP" ? "Top" : draftStage === "MIDDLE" ? "Middle" : "Base"} notes
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <span className="shrink-0 rounded-md border border-cyan-300/35 bg-cyan-400/12 px-2 py-1 text-[11px] text-cyan-100">
+                                    Add
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : draftNoteSearch.trim().length >= 2 ? (
+                          <div className="mt-1 rounded-md border border-white/10 bg-[#0f1118] px-3 py-2 text-xs text-white/60 sm:bg-white/5">
+                            No note matches. Tap <span className="text-white/85">Add custom</span> to add your own.
+                          </div>
+                        ) : null}
+                        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                          <div className="relative w-full sm:flex-1">
+                            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-100/70" />
+                            <input
+                              ref={draftNoteInputRef}
+                              value={draftNoteSearch}
+                              onChange={(e) => setDraftNoteSearch(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  addCustomDraftNote();
+                                }
+                              }}
+                              placeholder="Type note name (e.g. bergamot)"
+                              className="h-9 w-full rounded-md border border-cyan-300/30 bg-black/30 pl-9 pr-3 text-base text-white outline-none placeholder:text-white/45 focus:border-cyan-200/50 sm:flex-1 md:text-sm"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onPointerDown={(e) => e.preventDefault()}
+                            className="h-9 w-full rounded-md border border-cyan-300/35 bg-cyan-400/18 px-3 text-xs text-cyan-100 hover:bg-cyan-400/24 sm:w-auto"
+                            onClick={addCustomDraftNote}
+                            disabled={!draftNoteSearch.trim()}
+                          >
+                            Add custom
+                          </Button>
                         </div>
-                      ) : null}
+                      </div>
                     </div>
 
                     <div className="grid gap-4">
