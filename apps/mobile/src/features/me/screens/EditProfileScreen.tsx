@@ -111,7 +111,7 @@ export function EditProfileScreen({ onBack }: EditProfileScreenProps) {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.topBar}>
           <Pressable style={styles.topAction} onPress={onBack} disabled={saving}>
@@ -173,7 +173,7 @@ export function EditProfileScreen({ onBack }: EditProfileScreenProps) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#070A11" },
-  content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20, gap: 18 },
+  content: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 20, gap: 18 },
   topBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   topAction: { minWidth: 56 },
   topActionText: { color: "#FFFFFFCC", fontSize: 16 },

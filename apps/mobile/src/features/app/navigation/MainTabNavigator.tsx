@@ -1,7 +1,8 @@
 import { NavigationContainer, DarkTheme } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import { Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import { useFonts, Iceberg_400Regular } from "@expo-google-fonts/iceberg";
 import { MeStackNavigator } from "../../me/navigation/MeStackNavigator";
 
 type MainTabParamList = {
@@ -41,6 +42,7 @@ type MainTabNavigatorProps = {
 };
 
 export function MainTabNavigator({ userLabel, submitting, onSignOut }: MainTabNavigatorProps) {
+  const [fontLoaded] = useFonts({ Iceberg_400Regular });
   const iconNameByRoute: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> = {
     Home: "home-outline",
     Search: "search-outline",
@@ -54,9 +56,20 @@ export function MainTabNavigator({ userLabel, submitting, onSignOut }: MainTabNa
       <Tab.Navigator
         initialRouteName="Home"
         screenOptions={({ route }) => ({
-          headerShown: false,
+          headerShown: true,
+          headerTitleAlign: "left",
+          headerTitle: () => (
+            <Text style={[styles.brandTitle, fontLoaded ? styles.brandTitleIceberg : null]}>Stacta</Text>
+          ),
+          headerStyle: {
+            backgroundColor: "#070A11",
+            shadowColor: "transparent",
+            elevation: 0,
+          },
+          headerShadowVisible: false,
+          headerTintColor: "#FFFFFF",
           tabBarActiveTintColor: "#FCD34D",
-          tabBarInactiveTintColor: "#FFFFFFA3",
+          tabBarInactiveTintColor: "#FFFFFF8F",
           tabBarIcon: ({ color, size, focused }) => {
             const base = iconNameByRoute[route.name as keyof MainTabParamList];
             const activeName =
@@ -66,7 +79,7 @@ export function MainTabNavigator({ userLabel, submitting, onSignOut }: MainTabNa
                   ? "search"
                   : base === "people-outline"
                     ? "people"
-                    : base === "notifications-outline"
+                  : base === "notifications-outline"
                       ? "notifications"
                       : "person";
             return <Ionicons name={focused ? activeName : base} size={size} color={color} />;
@@ -77,6 +90,16 @@ export function MainTabNavigator({ userLabel, submitting, onSignOut }: MainTabNa
             borderTopColor: "transparent",
             elevation: 0,
             shadowOpacity: 0,
+            height: 58,
+            paddingTop: 4,
+            paddingBottom: 4,
+          },
+          tabBarItemStyle: { paddingVertical: 1 },
+          tabBarLabelStyle: {
+            fontSize: 10,
+            fontWeight: "500",
+            letterSpacing: 0.1,
+            marginTop: -1,
           },
         })}
       >
@@ -97,3 +120,25 @@ export function MainTabNavigator({ userLabel, submitting, onSignOut }: MainTabNa
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  brandTitle: {
+    color: "#F8FAFC",
+    fontSize: 22,
+    lineHeight: 24,
+    letterSpacing: 0.1,
+    fontWeight: "600",
+    fontFamily: Platform.select({
+      ios: "System",
+      android: "sans-serif-medium",
+      default: "sans-serif",
+    }),
+  },
+  brandTitleIceberg: {
+    fontFamily: "Iceberg_400Regular",
+    fontSize: 30,
+    lineHeight: 30,
+    letterSpacing: 0.2,
+    fontWeight: "400",
+  },
+});

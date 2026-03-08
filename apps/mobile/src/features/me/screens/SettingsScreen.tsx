@@ -105,7 +105,7 @@ export function SettingsScreen({ onBack, onSignOut, submitting }: SettingsScreen
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={["left", "right"]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerCard}>
           <View style={styles.headerRow}>
@@ -223,7 +223,7 @@ export function SettingsScreen({ onBack, onSignOut, submitting }: SettingsScreen
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#070A11" },
-  content: { padding: 16, gap: 12 },
+  content: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 16, gap: 12 },
   headerCard: {
     borderRadius: 20,
     borderWidth: 1,
