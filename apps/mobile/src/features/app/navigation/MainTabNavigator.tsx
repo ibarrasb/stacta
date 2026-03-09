@@ -1,9 +1,11 @@
 import { NavigationContainer, DarkTheme } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import { Platform, StyleSheet, Text, View } from "react-native";
-import { useFonts, Iceberg_400Regular } from "@expo-google-fonts/iceberg";
+import { Image, Platform, StyleSheet, Text, View } from "react-native";
+import * as SvgLib from "react-native-svg";
+import { useFonts, BungeeHairline_400Regular } from "@expo-google-fonts/bungee-hairline";
 import { MeStackNavigator } from "../../me/navigation/MeStackNavigator";
+import stactaLogo from "../../../../assets/stacta.png";
 
 type MainTabParamList = {
   Home: undefined;
@@ -42,9 +44,9 @@ type MainTabNavigatorProps = {
 };
 
 export function MainTabNavigator({ userLabel, submitting, onSignOut }: MainTabNavigatorProps) {
-  const [fontLoaded] = useFonts({ Iceberg_400Regular });
+  const [fontLoaded] = useFonts({ BungeeHairline_400Regular });
   const iconNameByRoute: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> = {
-    Home: "home-outline",
+    Home: "newspaper-outline",
     Search: "search-outline",
     People: "people-outline",
     Alerts: "notifications-outline",
@@ -59,7 +61,10 @@ export function MainTabNavigator({ userLabel, submitting, onSignOut }: MainTabNa
           headerShown: true,
           headerTitleAlign: "left",
           headerTitle: () => (
-            <Text style={[styles.brandTitle, fontLoaded ? styles.brandTitleIceberg : null]}>Stacta</Text>
+            <View style={styles.brandHeaderWrap}>
+              <Image source={stactaLogo} style={styles.brandLogo} resizeMode="contain" />
+              <Text style={[styles.brandTitle, fontLoaded ? styles.brandTitleBungeeHairline : null]}>Stacta</Text>
+            </View>
           ),
           headerStyle: {
             backgroundColor: "#070A11",
@@ -71,36 +76,130 @@ export function MainTabNavigator({ userLabel, submitting, onSignOut }: MainTabNa
           tabBarActiveTintColor: "#FCD34D",
           tabBarInactiveTintColor: "#FFFFFF8F",
           tabBarIcon: ({ color, size, focused }) => {
+            if (route.name === "Search") {
+              return (
+                <SvgLib.Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+                  <SvgLib.Path
+                    d="m21 21-4.34-4.34"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <SvgLib.Circle
+                    cx="11"
+                    cy="11"
+                    r="8"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                  />
+                </SvgLib.Svg>
+              );
+            }
+            if (route.name === "Alerts") {
+              return (
+                <SvgLib.Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+                  <SvgLib.Path
+                    d="M10.268 21a2 2 0 0 0 3.464 0"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <SvgLib.Path
+                    d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </SvgLib.Svg>
+              );
+            }
+            if (route.name === "People") {
+              return (
+                <SvgLib.Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+                  <SvgLib.Path
+                    d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <SvgLib.Path
+                    d="M16 3.128a4 4 0 0 1 0 7.744"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <SvgLib.Path
+                    d="M22 21v-2a4 4 0 0 0-3-3.87"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <SvgLib.Circle
+                    cx="9"
+                    cy="7"
+                    r="4"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                  />
+                </SvgLib.Svg>
+              );
+            }
+            if (route.name === "Me") {
+              return (
+                <SvgLib.Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+                  <SvgLib.Circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                  />
+                  <SvgLib.Circle
+                    cx="12"
+                    cy="10"
+                    r="3"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                  />
+                  <SvgLib.Path
+                    d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"
+                    stroke={color}
+                    strokeWidth={focused ? 2.4 : 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </SvgLib.Svg>
+              );
+            }
             const base = iconNameByRoute[route.name as keyof MainTabParamList];
             const activeName =
-              base === "home-outline"
-                ? "home"
-                : base === "search-outline"
-                  ? "search"
-                  : base === "people-outline"
+              base === "newspaper-outline"
+                ? "newspaper"
+                : base === "people-outline"
                     ? "people"
                   : base === "notifications-outline"
                       ? "notifications"
                       : "person";
             return <Ionicons name={focused ? activeName : base} size={size} color={color} />;
           },
+          tabBarShowLabel: false,
           tabBarStyle: {
             backgroundColor: "#0B0F18",
             borderTopWidth: 0,
             borderTopColor: "transparent",
             elevation: 0,
             shadowOpacity: 0,
-            height: 58,
-            paddingTop: 4,
-            paddingBottom: 4,
+            height: 68,
+            paddingTop: 10,
+            paddingBottom: 1,
           },
           tabBarItemStyle: { paddingVertical: 1 },
-          tabBarLabelStyle: {
-            fontSize: 10,
-            fontWeight: "500",
-            letterSpacing: 0.1,
-            marginTop: -1,
-          },
         })}
       >
         <Tab.Screen name="Home">{() => <PlaceholderScreen title="Home" />}</Tab.Screen>
@@ -122,6 +221,17 @@ export function MainTabNavigator({ userLabel, submitting, onSignOut }: MainTabNa
 }
 
 const styles = StyleSheet.create({
+  brandHeaderWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  brandLogo: {
+    width: 45,
+    height: 45,
+    borderRadius: 7,
+    marginTop: -8,
+  },
   brandTitle: {
     color: "#F8FAFC",
     fontSize: 22,
@@ -134,11 +244,11 @@ const styles = StyleSheet.create({
       default: "sans-serif",
     }),
   },
-  brandTitleIceberg: {
-    fontFamily: "Iceberg_400Regular",
+  brandTitleBungeeHairline: {
+    fontFamily: "BungeeHairline_400Regular",
     fontSize: 30,
     lineHeight: 30,
-    letterSpacing: 0.2,
+    letterSpacing: 0.5,
     fontWeight: "400",
   },
 });

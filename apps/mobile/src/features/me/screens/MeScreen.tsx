@@ -16,77 +16,26 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getMe } from "../../../lib/api/me";
-import { addTopFragrance, removeFromCollection, removeTopFragrance } from "../../../lib/api/collection";
+import { addToCollection, addTopFragrance, removeFromCollection, removeFromWishlist, removeTopFragrance } from "../../../lib/api/collection";
 import { listMyReviewFeed } from "../../../lib/api/feed";
 import { deleteReview, likeReview, reportReview, repostReview, unlikeReview, unrepostReview } from "../../../lib/api/reviews";
 import type { CollectionItem, FeedItem, MeResponse } from "../../../lib/api/types";
 import fragranceFallback from "../../../../assets/fragrance-fallback.png";
+import {
+  collectionSource,
+  compactCount,
+  fragranceRatingLabel,
+  initials,
+  performanceValueLabel,
+  priceTagFromScore,
+  safeMap,
+  timeAgo,
+} from "../utils";
 
 type ProfileTab = "overview" | "reviews" | "wishlist" | "community" | "posts";
 type CollectionSortKey = "added" | "name" | "rating" | "brand";
+type ReviewSortKey = "recent" | "rating" | "likes" | "comments" | "reposts";
 type SortDirection = "asc" | "desc";
-
-function initials(value: string) {
-  const clean = value.trim();
-  if (!clean) return "S";
-  const parts = clean.split(/[.@\s_-]+/).filter(Boolean);
-  if (parts.length === 0) return "S";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
-}
-
-function compactCount(value: number | null | undefined) {
-  const n = Number(value ?? 0);
-  if (!Number.isFinite(n)) return "0";
-  if (Math.abs(n) < 10_000) return String(Math.trunc(n));
-  return `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k`;
-}
-
-function fragranceRatingLabel(userRating: number | null | undefined) {
-  const rating = Number(userRating);
-  if (!Number.isFinite(rating) || rating <= 0) return "Not rated";
-  return `${rating.toFixed(1)} / 5`;
-}
-
-function timeAgo(iso: string) {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return "now";
-  const seconds = Math.max(1, Math.floor((Date.now() - then) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  const weeks = Math.floor(days / 7);
-  if (weeks < 5) return `${weeks}w ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  const years = Math.floor(days / 365);
-  return `${years}y ago`;
-}
-
-function priceTagFromScore(value: number) {
-  if (value <= 1) return "Very overpriced";
-  if (value === 2) return "A bit overpriced";
-  if (value === 3) return "Fair";
-  if (value === 4) return "Good value";
-  return "Excellent value";
-}
-
-function performanceValueLabel(label: string, value: number) {
-  const key = label.trim().toLowerCase();
-  if (key === "longevity") {
-    const map = ["", "Fleeting", "Weak", "Moderate", "Long lasting", "Endless"];
-    return map[value] ?? `${value}/5`;
-  }
-  if (key === "sillage") {
-    const map = ["", "Skin scent", "Weak", "Moderate", "Strong", "Nuclear"];
-    return map[value] ?? `${value}/5`;
-  }
-  return `${value}/5`;
-}
 
 function StarReputation({ value }: { value: number }) {
   const safe = Number.isFinite(value) ? Math.max(0, Math.min(5, value)) : 0;
@@ -140,6 +89,16 @@ function FragranceCard({ item, topLabel }: { item: CollectionItem; topLabel?: st
       <View style={styles.fragranceMeta}>
         <Text style={styles.fragranceName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.fragranceBrand} numberOfLines={1}>{item.brand || "-"}</Text>
+        <View style={styles.fragranceRatingRow}>
+          {Number(item.userRating ?? 0) >= 1 ? (
+            <>
+              <HalfStars value={Number(item.userRating)} />
+              <Text style={styles.fragranceRatingText}>{Number(item.userRating).toFixed(1)}</Text>
+            </>
+          ) : (
+            <Text style={styles.fragranceRatingMuted}>Not rated</Text>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -232,8 +191,16 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
   const [collectionSortKey, setCollectionSortKey] = useState<CollectionSortKey>("added");
   const [collectionSortDirection, setCollectionSortDirection] = useState<SortDirection>("desc");
+  const [reviewSortKey, setReviewSortKey] = useState<ReviewSortKey>("recent");
+  const [reviewSortDirection, setReviewSortDirection] = useState<SortDirection>("desc");
+  const [wishlistSortKey, setWishlistSortKey] = useState<CollectionSortKey>("added");
+  const [wishlistSortDirection, setWishlistSortDirection] = useState<SortDirection>("desc");
+  const [communitySortKey, setCommunitySortKey] = useState<CollectionSortKey>("added");
+  const [communitySortDirection, setCommunitySortDirection] = useState<SortDirection>("desc");
   const [collectionActionLoadingKey, setCollectionActionLoadingKey] = useState<string | null>(null);
   const [collectionActionItem, setCollectionActionItem] = useState<CollectionItem | null>(null);
+  const [wishlistActionItem, setWishlistActionItem] = useState<CollectionItem | null>(null);
+  const [wishlistActionBusy, setWishlistActionBusy] = useState(false);
   const [reviewItems, setReviewItems] = useState<FeedItem[]>([]);
   const [expandedReviewIds, setExpandedReviewIds] = useState<Record<string, boolean>>({});
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -313,6 +280,13 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
     rating: "Rating",
     brand: "Brand",
   };
+  const reviewSortLabels: Record<ReviewSortKey, string> = {
+    recent: "Recent",
+    rating: "Rating",
+    likes: "Likes",
+    comments: "Comments",
+    reposts: "Reposts",
+  };
   const sortedCollectionItems = useMemo(() => {
     const items = [...(me?.collectionItems ?? [])];
     items.sort((a, b) => {
@@ -334,6 +308,53 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
     });
     return items;
   }, [me?.collectionItems, collectionSortDirection, collectionSortKey]);
+  const sortedWishlistItems = useMemo(() => {
+    const items = [...(me?.wishlistItems ?? [])];
+    items.sort((a, b) => {
+      let base = 0;
+      if (wishlistSortKey === "name") {
+        base = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      } else if (wishlistSortKey === "brand") {
+        base = (a.brand ?? "").localeCompare(b.brand ?? "", undefined, { sensitivity: "base" });
+      } else if (wishlistSortKey === "rating") {
+        base = Number(a.userRating ?? 0) - Number(b.userRating ?? 0);
+      } else {
+        base = new Date(a.addedAt).getTime() - new Date(b.addedAt).getTime();
+      }
+      return wishlistSortDirection === "asc" ? base : -base;
+    });
+    return items;
+  }, [me?.wishlistItems, wishlistSortDirection, wishlistSortKey]);
+  const sortedCommunityItems = useMemo(() => {
+    const items = [...(me?.communityFragrances ?? [])];
+    items.sort((a, b) => {
+      let base = 0;
+      if (communitySortKey === "name") {
+        base = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      } else if (communitySortKey === "brand") {
+        base = (a.brand ?? "").localeCompare(b.brand ?? "", undefined, { sensitivity: "base" });
+      } else if (communitySortKey === "rating") {
+        base = Number(a.userRating ?? 0) - Number(b.userRating ?? 0);
+      } else {
+        base = new Date(a.addedAt).getTime() - new Date(b.addedAt).getTime();
+      }
+      return communitySortDirection === "asc" ? base : -base;
+    });
+    return items;
+  }, [me?.communityFragrances, communitySortDirection, communitySortKey]);
+  const sortedReviewItems = useMemo(() => {
+    const items = [...reviewItems];
+    items.sort((a, b) => {
+      let base = 0;
+      if (reviewSortKey === "rating") base = Number(a.reviewRating ?? 0) - Number(b.reviewRating ?? 0);
+      else if (reviewSortKey === "likes") base = Number(a.likesCount ?? 0) - Number(b.likesCount ?? 0);
+      else if (reviewSortKey === "comments") base = Number(a.commentsCount ?? 0) - Number(b.commentsCount ?? 0);
+      else if (reviewSortKey === "reposts") base = Number(a.repostsCount ?? 0) - Number(b.repostsCount ?? 0);
+      else base = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return reviewSortDirection === "asc" ? base : -base;
+    });
+    return items;
+  }, [reviewItems, reviewSortDirection, reviewSortKey]);
   const reviewBrandByKey = useMemo(() => {
     const map = new Map<string, string>();
     const lists = [me?.collectionItems ?? [], me?.wishlistItems ?? [], me?.communityFragrances ?? [], me?.topFragrances ?? []];
@@ -351,33 +372,20 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
       prev === "added" ? "name" : prev === "name" ? "rating" : prev === "rating" ? "brand" : "added"
     );
   }
-
-  function safeMap(raw: string | null): Array<{ label: string; value: number }> {
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      return Object.entries(parsed)
-        .map(([key, value]) => {
-          const n = Number(value);
-          if (!Number.isFinite(n) || n < 1 || n > 5) return null;
-          return {
-            label: key
-              .split("_")
-              .map((x) => x.charAt(0).toUpperCase() + x.slice(1))
-              .join(" "),
-            value: n,
-          };
-        })
-        .filter(Boolean) as Array<{ label: string; value: number }>;
-    } catch {
-      return [];
-    }
+  function cycleReviewSortKey() {
+    setReviewSortKey((prev) =>
+      prev === "recent" ? "rating" : prev === "rating" ? "likes" : prev === "likes" ? "comments" : prev === "comments" ? "reposts" : "recent"
+    );
   }
-
-  function collectionSource(source: string): "FRAGELLA" | "COMMUNITY" {
-    const s = source.toUpperCase();
-    if (s.includes("COMMUNITY")) return "COMMUNITY";
-    return "FRAGELLA";
+  function cycleWishlistSortKey() {
+    setWishlistSortKey((prev) =>
+      prev === "added" ? "name" : prev === "name" ? "rating" : prev === "rating" ? "brand" : "added"
+    );
+  }
+  function cycleCommunitySortKey() {
+    setCommunitySortKey((prev) =>
+      prev === "added" ? "name" : prev === "name" ? "rating" : prev === "rating" ? "brand" : "added"
+    );
   }
 
   function collectionKey(item: CollectionItem) {
@@ -449,6 +457,31 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
       Alert.alert("Action failed", (err as { message?: string })?.message || "Could not complete action.");
     } finally {
       setCollectionActionLoadingKey(null);
+    }
+  }
+
+  async function runWishlistAction(action: "purchased" | "remove") {
+    if (!wishlistActionItem) return;
+    const source = collectionSource(wishlistActionItem.source);
+    setWishlistActionBusy(true);
+    try {
+      if (action === "purchased") {
+        await addToCollection({
+          source,
+          externalId: wishlistActionItem.externalId,
+          name: wishlistActionItem.name,
+          brand: wishlistActionItem.brand,
+          imageUrl: wishlistActionItem.imageUrl,
+          collectionTag: null,
+        });
+      }
+      await removeFromWishlist({ source, externalId: wishlistActionItem.externalId });
+      await refreshMeSnapshot();
+      setWishlistActionItem(null);
+    } catch (err) {
+      Alert.alert("Wishlist action failed", (err as { message?: string })?.message || "Could not update wishlist item.");
+    } finally {
+      setWishlistActionBusy(false);
     }
   }
 
@@ -605,7 +638,11 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
   return (
     <SafeAreaView style={styles.safe} edges={["left", "right"]}>
       <Animated.View style={[styles.flex, entranceStyle]}>
-        <ScrollView contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.pageScroll}
+          showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={[3]}
+        >
           <View style={styles.headerCard}>
             <Pressable style={styles.settingsTopRight} onPress={onOpenSettings}>
               <Ionicons name="settings-outline" size={18} color="#FFFFFFD9" />
@@ -693,24 +730,26 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
             </View>
           </View>
 
-          <View style={styles.iconTabsRow}>
-            {tabs.map((tab) => {
-              const active = tab.id === activeTab;
-              return (
-                <Pressable
-                  key={tab.id}
-                  style={styles.iconTabBtn}
-                  onPress={() => setActiveTab(tab.id)}
-                >
-                  <Ionicons
-                    name={tab.icon}
-                    size={17}
-                    color={active ? "#F8FAFC" : "#FFFFFF8C"}
-                  />
-                  <View style={[styles.iconTabUnderline, active && styles.iconTabUnderlineActive]} />
-                </Pressable>
-              );
-            })}
+          <View style={styles.iconTabsStickyWrap}>
+            <View style={styles.iconTabsRow}>
+              {tabs.map((tab) => {
+                const active = tab.id === activeTab;
+                return (
+                  <Pressable
+                    key={tab.id}
+                    style={styles.iconTabBtn}
+                    onPress={() => setActiveTab(tab.id)}
+                  >
+                    <Ionicons
+                      name={tab.icon}
+                      size={17}
+                      color={active ? "#F8FAFC" : "#FFFFFF8C"}
+                    />
+                    <View style={[styles.iconTabUnderline, active && styles.iconTabUnderlineActive]} />
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
           {activeTab === "overview" ? (
@@ -771,7 +810,7 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
                             onPress={() => openCollectionItemActions(item)}
                             disabled={collectionActionLoadingKey === collectionKey(item)}
                           >
-                            <Ionicons name="menu" size={16} color="#FFFFFFF0" />
+                            <Ionicons name="ellipsis-horizontal" size={16} color="#FFFFFFF0" />
                           </Pressable>
                         </View>
                         <Text style={styles.collectionShelfBrand} numberOfLines={1}>{item.brand || "-"}</Text>
@@ -797,16 +836,35 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
 
           {activeTab === "reviews" ? (
             <View style={[styles.sectionCard, styles.sectionWrap]}>
-              <SectionHeading
-                icon="chatbubble-ellipses-outline"
-                title="Reviews"
-                subtitle={`You have posted ${me.reviewCount ?? 0} review(s).`}
-              />
+              <View style={styles.collectionHeaderRow}>
+                <SectionHeading
+                  icon="chatbubble-ellipses-outline"
+                  title="Reviews"
+                  subtitle={`You have posted ${me.reviewCount ?? 0} review(s).`}
+                />
+                <View style={styles.collectionFilters}>
+                  <Pressable style={styles.filterBtn} onPress={cycleReviewSortKey}>
+                    <Ionicons name="options-outline" size={12} color="#A5F3FC" />
+                    <Text style={styles.filterBtnText}>{reviewSortLabels[reviewSortKey]}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.filterBtn}
+                    onPress={() => setReviewSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))}
+                  >
+                    <Ionicons
+                      name={reviewSortDirection === "asc" ? "arrow-up-outline" : "arrow-down-outline"}
+                      size={12}
+                      color="#A5F3FC"
+                    />
+                    <Text style={styles.filterBtnText}>{reviewSortDirection.toUpperCase()}</Text>
+                  </Pressable>
+                </View>
+              </View>
               {reviewsLoading ? (
                 <View style={styles.emptyCard}><Text style={styles.emptyText}>Loading reviews…</Text></View>
-              ) : reviewItems.length ? (
+              ) : sortedReviewItems.length ? (
                 <View style={styles.collectionList}>
-                  {reviewItems.map((item) => {
+                  {sortedReviewItems.map((item) => {
                     const perf = safeMap(item.reviewPerformance);
                     const priceRow = perf.find((row) => row.label.toLowerCase() === "price perception") ?? null;
                     const perfRows = perf.filter((row) => row.label.toLowerCase() !== "price perception");
@@ -965,15 +1023,52 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
 
           {activeTab === "wishlist" ? (
             <View style={[styles.sectionCard, styles.sectionWrap]}>
-              <SectionHeading icon="heart-outline" title="Wishlist" subtitle="Fragrances you want to buy or sample." />
-              {me.wishlistItems?.length ? (
-                <View style={styles.collectionList}>
-                  {me.wishlistItems.slice(0, 8).map((item) => (
-                    <View key={`${item.source}:${item.externalId}`} style={styles.collectionCard}>
-                      <Image source={item.imageUrl ? { uri: item.imageUrl } : fragranceFallback} style={styles.collectionImage} />
-                      <View style={styles.collectionMeta}>
-                        <Text style={styles.collectionName} numberOfLines={2}>{item.name}</Text>
-                        <Text style={styles.collectionBrand} numberOfLines={1}>{item.brand || "-"}</Text>
+              <View style={styles.collectionHeaderRow}>
+                <SectionHeading icon="heart-outline" title="Wishlist" subtitle="Fragrances you want to buy or try." />
+                <View style={styles.collectionFilters}>
+                  <Pressable style={styles.filterBtn} onPress={cycleWishlistSortKey}>
+                    <Ionicons name="options-outline" size={12} color="#A5F3FC" />
+                    <Text style={styles.filterBtnText}>{collectionSortLabels[wishlistSortKey]}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.filterBtn}
+                    onPress={() => setWishlistSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))}
+                  >
+                    <Ionicons
+                      name={wishlistSortDirection === "asc" ? "arrow-up-outline" : "arrow-down-outline"}
+                      size={12}
+                      color="#A5F3FC"
+                    />
+                    <Text style={styles.filterBtnText}>{wishlistSortDirection.toUpperCase()}</Text>
+                  </Pressable>
+                </View>
+              </View>
+              {sortedWishlistItems.length ? (
+                <View style={styles.collectionShelfGrid}>
+                  {sortedWishlistItems.slice(0, 8).map((item) => (
+                    <View key={`${item.source}:${item.externalId}`} style={styles.collectionShelfCard}>
+                      <Image source={item.imageUrl ? { uri: item.imageUrl } : fragranceFallback} style={styles.collectionShelfImage} />
+                      <View style={styles.collectionShelfMeta}>
+                        <View style={styles.collectionNameRow}>
+                          <Text style={styles.collectionShelfName} numberOfLines={2}>{item.name}</Text>
+                          <Pressable
+                            style={styles.collectionMoreBtn}
+                            onPress={() => setWishlistActionItem(item)}
+                          >
+                            <Ionicons name="ellipsis-horizontal" size={16} color="#FFFFFFF0" />
+                          </Pressable>
+                        </View>
+                        <Text style={styles.collectionShelfBrand} numberOfLines={1}>{item.brand || "-"}</Text>
+                        <View style={styles.collectionRatingRow}>
+                          {Number(item.userRating ?? 0) >= 1 ? (
+                            <>
+                              <HalfStars value={Number(item.userRating)} />
+                              <Text style={styles.collectionRatingText}>{fragranceRatingLabel(item.userRating)}</Text>
+                            </>
+                          ) : (
+                            <Text style={styles.collectionRatingTextMuted}>Not rated</Text>
+                          )}
+                        </View>
                       </View>
                     </View>
                   ))}
@@ -986,14 +1081,33 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
 
           {activeTab === "community" ? (
             <View style={[styles.sectionCard, styles.sectionWrap]}>
-              <SectionHeading
-                icon="planet-outline"
-                title="Community Fragrances"
-                subtitle="Fragrances you contributed to the community catalog."
-              />
-              {me.communityFragrances?.length ? (
+              <View style={styles.collectionHeaderRow}>
+                <SectionHeading
+                  icon="planet-outline"
+                  title="Community Fragrances"
+                  subtitle="Fragrances you contributed to the community catalog."
+                />
+                <View style={styles.collectionFilters}>
+                  <Pressable style={styles.filterBtn} onPress={cycleCommunitySortKey}>
+                    <Ionicons name="options-outline" size={12} color="#A5F3FC" />
+                    <Text style={styles.filterBtnText}>{collectionSortLabels[communitySortKey]}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.filterBtn}
+                    onPress={() => setCommunitySortDirection((prev) => (prev === "asc" ? "desc" : "asc"))}
+                  >
+                    <Ionicons
+                      name={communitySortDirection === "asc" ? "arrow-up-outline" : "arrow-down-outline"}
+                      size={12}
+                      color="#A5F3FC"
+                    />
+                    <Text style={styles.filterBtnText}>{communitySortDirection.toUpperCase()}</Text>
+                  </Pressable>
+                </View>
+              </View>
+              {sortedCommunityItems.length ? (
                 <View style={styles.collectionList}>
-                  {me.communityFragrances.slice(0, 8).map((item) => (
+                  {sortedCommunityItems.slice(0, 8).map((item) => (
                     <View key={`${item.source}:${item.externalId}`} style={styles.collectionCard}>
                       <Image source={item.imageUrl ? { uri: item.imageUrl } : fragranceFallback} style={styles.collectionImage} />
                       <View style={styles.collectionMeta}>
@@ -1114,6 +1228,45 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
             </View>
           </View>
         </Modal>
+
+        <Modal
+          visible={Boolean(wishlistActionItem)}
+          transparent
+          animationType="fade"
+          onRequestClose={() => (wishlistActionBusy ? null : setWishlistActionItem(null))}
+        >
+          <View style={styles.sheetBackdrop}>
+            <Pressable style={styles.sheetBackdropPress} onPress={() => (wishlistActionBusy ? null : setWishlistActionItem(null))} />
+            <View style={styles.sheetCard}>
+              <Text style={styles.sheetTitle}>Manage Wishlist Item</Text>
+              <Text style={styles.sheetItemName} numberOfLines={2}>{wishlistActionItem?.name ?? ""}</Text>
+              <Text style={styles.sheetItemBrand} numberOfLines={1}>{wishlistActionItem?.brand || "—"}</Text>
+              <View style={styles.sheetActions}>
+                <Pressable
+                  style={[styles.sheetActionBtn, wishlistActionBusy && styles.sheetActionBtnDisabled]}
+                  disabled={wishlistActionBusy || !wishlistActionItem}
+                  onPress={() => void runWishlistAction("purchased")}
+                >
+                  <Text style={styles.sheetActionText}>Purchased (Move to Collection)</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.sheetActionBtn, styles.sheetActionBtnDanger, wishlistActionBusy && styles.sheetActionBtnDisabled]}
+                  disabled={wishlistActionBusy || !wishlistActionItem}
+                  onPress={() => void runWishlistAction("remove")}
+                >
+                  <Text style={styles.sheetActionTextDanger}>Remove from Wishlist</Text>
+                </Pressable>
+              </View>
+              <Pressable
+                style={styles.sheetCancelBtn}
+                onPress={() => (wishlistActionBusy ? null : setWishlistActionItem(null))}
+                disabled={wishlistActionBusy}
+              >
+                <Text style={styles.sheetCancelText}>{wishlistActionBusy ? "Working..." : "Cancel"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
       </Animated.View>
     </SafeAreaView>
   );
@@ -1137,14 +1290,23 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     gap: 10,
   },
+  iconTabsStickyWrap: {
+    width: "100%",
+    backgroundColor: "#070A11",
+    marginTop: 2,
+    zIndex: 5,
+  },
   iconTabsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
     paddingTop: 6,
-    marginTop: 2,
+    columnGap: 8,
+    backgroundColor: "#070A11",
   },
   iconTabBtn: {
-    width: "18%",
+    flex: 1,
+    minWidth: 0,
     height: 36,
     alignItems: "center",
     justifyContent: "flex-end",
@@ -1578,15 +1740,13 @@ const styles = StyleSheet.create({
   },
   fragranceImage: {
     width: "100%",
-    height: 72,
-    borderRadius: 9,
-    backgroundColor: "#FFFFFF0F",
+    aspectRatio: 0.66,
+    borderRadius: 12,
+    backgroundColor: "#0F172A",
   },
   fragranceMeta: {
     marginTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#FFFFFF17",
-    paddingTop: 6,
+    gap: 2,
   },
   fragranceName: {
     color: "#FFFFFFFA",
@@ -1596,8 +1756,23 @@ const styles = StyleSheet.create({
   fragranceBrand: {
     color: "#A5F3FC",
     fontSize: 9,
+    fontWeight: "600",
+  },
+  fragranceRatingRow: {
     marginTop: 2,
-    fontWeight: "500",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  fragranceRatingText: {
+    color: "#FDE68A",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  fragranceRatingMuted: {
+    color: "#FFFFFF7A",
+    fontSize: 9,
+    fontWeight: "600",
   },
   emptyCallout: {
     marginTop: 6,
