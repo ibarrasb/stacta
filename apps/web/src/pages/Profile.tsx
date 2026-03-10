@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Ellipsis, Heart, Lock, LockOpen, MessageCircle, Repeat2, Settings } from "lucide-react";
+import { Ellipsis, Heart, Lock, LockOpen, MessageCircle, PencilLine, Repeat2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
@@ -871,10 +871,12 @@ export default function ProfilePage() {
                     </Button>
                     {!isEditing ? (
                       <Button
-                        className="h-10 rounded-xl px-4"
+                        variant="secondary"
+                        className="h-10 rounded-xl border border-white/14 bg-white/10 px-4 text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)] hover:border-white/22 hover:bg-white/16"
                         onClick={() => setIsEditing(true)}
                       >
-                        Edit profile
+                        <PencilLine className="size-4" />
+                        Customize profile
                       </Button>
                     ) : (
                       <>
