@@ -689,8 +689,9 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
                     : "No ratings"}
                 </Text>
               </View>
-              <Pressable style={styles.primaryBtn} onPress={onOpenEditProfile}>
-                <Text style={styles.primaryBtnText}>Edit profile</Text>
+              <Pressable style={styles.profileActionBtn} onPress={onOpenEditProfile}>
+                <Ionicons name="create-outline" size={13} color="#E5E7EB" />
+                <Text style={styles.profileActionBtnText}>Edit</Text>
               </Pressable>
             </View>
           </View>
@@ -1502,15 +1503,20 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
   },
-  primaryBtn: {
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  profileActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#FFFFFF24",
+    backgroundColor: "#FFFFFF10",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
-  primaryBtnText: {
-    color: "#0B0F18",
-    fontSize: 13,
+  profileActionBtnText: {
+    color: "#F3F4F6",
+    fontSize: 12,
     fontWeight: "700",
   },
   secondaryBtn: {
