@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { StyleSheet } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { configureAmplify } from "./src/lib/amplify";
 import stactaLogo from "./assets/stacta.png";
 import { MainTabNavigator } from "./src/features/app/navigation/MainTabNavigator";
@@ -15,26 +17,42 @@ export default function App() {
   const flow = useAuthFlow({ authEnabled: amplifySetup.ok });
 
   if (!amplifySetup.ok) {
-    return <MissingAuthConfigScreen logo={stactaLogo} missingVars={amplifySetup.missingVars} />;
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <MissingAuthConfigScreen logo={stactaLogo} missingVars={amplifySetup.missingVars} />
+      </GestureHandlerRootView>
+    );
   }
 
   if (flow.loadingSession) {
-    return <LoadingSessionScreen />;
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <LoadingSessionScreen />
+      </GestureHandlerRootView>
+    );
   }
 
   if (flow.userLabel) {
     return (
-      <MainTabNavigator
-        userLabel={flow.userLabel}
-        submitting={flow.submitting}
-        onSignOut={flow.handleSignOut}
-      />
+      <GestureHandlerRootView style={styles.root}>
+        <MainTabNavigator
+          userLabel={flow.userLabel}
+          submitting={flow.submitting}
+          onSignOut={flow.handleSignOut}
+        />
+      </GestureHandlerRootView>
     );
   }
 
   return (
-    <AuthFlowProvider flow={flow}>
-      <AuthNavigator logo={stactaLogo} />
-    </AuthFlowProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <AuthFlowProvider flow={flow}>
+        <AuthNavigator logo={stactaLogo} />
+      </AuthFlowProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});

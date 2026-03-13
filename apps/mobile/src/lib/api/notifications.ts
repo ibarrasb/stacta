@@ -1,0 +1,24 @@
+import { authedFetch } from "./client";
+import type { NotificationsPage } from "./types";
+
+export function listNotifications(params: { limit?: number; cursor?: string } = {}) {
+  const limit = params.limit ?? 30;
+  const query = new URLSearchParams();
+  query.set("limit", String(limit));
+  if (params.cursor) query.set("cursor", params.cursor);
+  return authedFetch<NotificationsPage>(`/api/v1/notifications?${query.toString()}`);
+}
+
+export function getUnreadNotificationsCount() {
+  return authedFetch<{ count: number }>("/api/v1/notifications/unread-count");
+}
+
+export function deleteNotification(notificationId: string) {
+  return authedFetch<void>(`/api/v1/notifications/${encodeURIComponent(notificationId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function clearReadNotifications() {
+  return authedFetch<void>("/api/v1/notifications/read", { method: "DELETE" });
+}

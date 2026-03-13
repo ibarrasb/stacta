@@ -43,6 +43,51 @@ export type UpdateMeRequest = {
   isPrivate?: boolean;
 };
 
+export type FollowActionResponse = {
+  status: "PENDING" | "ACCEPTED";
+};
+
+export type PendingFollowRequestItem = {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  requestedAt: string;
+};
+
+export type PendingFollowRequestsPage = {
+  items: PendingFollowRequestItem[];
+  nextCursor: string | null;
+};
+
+export type NotificationItem = {
+  id: string;
+  type:
+    | "FOLLOWED_YOU"
+    | "FOLLOWED_YOU_BACK"
+    | "MODERATION_STRIKE"
+    | "REVIEW_LIKED"
+    | "REVIEW_COMMENTED"
+    | "REVIEW_COMMENT_REPLIED"
+    | string;
+  actorUsername: string;
+  actorDisplayName: string;
+  actorAvatarUrl: string | null;
+  createdAt: string;
+  followedBack: boolean;
+  sourceReviewId: string | null;
+  sourceCommentId: string | null;
+  aggregateCount: number | null;
+  reviewFragranceName: string | null;
+  reviewFragranceSource: string | null;
+  reviewFragranceExternalId: string | null;
+};
+
+export type NotificationsPage = {
+  items: NotificationItem[];
+  nextCursor: string | null;
+};
+
 export type FeedItem = {
   id: string;
   sourceReviewId: string;

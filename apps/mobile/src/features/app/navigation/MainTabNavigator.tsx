@@ -5,6 +5,7 @@ import { Image, Platform, StyleSheet, Text, View } from "react-native";
 import * as SvgLib from "react-native-svg";
 import { useFonts, BungeeHairline_400Regular } from "@expo-google-fonts/bungee-hairline";
 import { MeStackNavigator } from "../../me/navigation/MeStackNavigator";
+import { AlertsStackNavigator } from "../../alerts/navigation/AlertsStackNavigator";
 import stactaLogo from "../../../../assets/stacta.png";
 
 type MainTabParamList = {
@@ -205,7 +206,7 @@ export function MainTabNavigator({ userLabel, submitting, onSignOut }: MainTabNa
         <Tab.Screen name="Home">{() => <PlaceholderScreen title="Home" />}</Tab.Screen>
         <Tab.Screen name="Search">{() => <PlaceholderScreen title="Search" />}</Tab.Screen>
         <Tab.Screen name="People">{() => <PlaceholderScreen title="People" />}</Tab.Screen>
-        <Tab.Screen name="Alerts">{() => <PlaceholderScreen title="Alerts" />}</Tab.Screen>
+        <Tab.Screen name="Alerts" component={AlertsStackNavigator} />
         <Tab.Screen name="Me">
           {() => (
             <MeStackNavigator

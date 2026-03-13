@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -9,6 +9,7 @@ import {
   Image,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -208,54 +209,47 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
   const [reviewActionItem, setReviewActionItem] = useState<FeedItem | null>(null);
   const [reviewActionBusy, setReviewActionBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
   const entrance = useMemo(() => new Animated.Value(0), []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadProfile = useCallback(
+    async (mode: "initial" | "refresh" | "focus" = "initial") => {
+      if (mode === "initial") {
+        setLoading(true);
+        setError(null);
+        setMe(null);
+      }
+      if (mode === "refresh") {
+        setRefreshing(true);
+        setError(null);
+      }
 
-    async function load() {
-      setLoading(true);
-      setError(null);
-      setMe(null);
       try {
         const data = await getMe();
-        if (cancelled) return;
         setMe(data);
+        if (mode !== "focus") setError(null);
       } catch (err) {
-        if (cancelled) return;
-        const message = (err as { message?: string })?.message;
-        setError(message || "Failed to load profile.");
+        const message = (err as { message?: string })?.message || "Failed to load profile.";
+        if (mode === "focus") return;
+        setError(message);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (mode === "initial") setLoading(false);
+        if (mode === "refresh") setRefreshing(false);
       }
-    }
+    },
+    []
+  );
 
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [userLabel]);
+  useEffect(() => {
+    void loadProfile("initial");
+  }, [loadProfile, userLabel]);
 
   useFocusEffect(
-    useMemo(
-      () => () => {
-        let cancelled = false;
-        (async () => {
-          try {
-            const data = await getMe();
-            if (!cancelled) setMe(data);
-          } catch {
-            // no-op: keep previous profile snapshot on transient refresh errors
-          }
-        })();
-        return () => {
-          cancelled = true;
-        };
-      },
-      []
-    )
+    useCallback(() => {
+      void loadProfile("focus");
+    }, [loadProfile])
   );
 
   const usernameLabel = useMemo(() => {
@@ -398,8 +392,11 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
   }
 
   async function refreshMeSnapshot() {
-    const data = await getMe();
-    setMe(data);
+    await loadProfile("focus");
+  }
+
+  async function onRefreshProfile() {
+    await loadProfile("refresh");
   }
 
   async function setTopFragrancePosition(item: CollectionItem, position: 1 | 2 | 3) {
@@ -642,6 +639,14 @@ export function MeScreen({ userLabel, onOpenSettings, onOpenEditProfile }: MeScr
           contentContainerStyle={styles.pageScroll}
           showsVerticalScrollIndicator={false}
           stickyHeaderIndices={[3]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void onRefreshProfile()}
+              tintColor="#A5F3FC"
+              progressBackgroundColor="#0B1220"
+            />
+          }
         >
           <View style={styles.headerCard}>
             <Pressable style={styles.settingsTopRight} onPress={onOpenSettings}>
