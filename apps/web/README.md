@@ -1,73 +1,141 @@
-# React + TypeScript + Vite
+# Stacta Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript + Vite web app for Stacta.
 
-Currently, two official plugins are available:
+Unless a step says otherwise, run commands from the repository root.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Prerequisites
 
-## React Compiler
+- Node.js 20 or newer
+- npm
+- Docker Desktop, for Postgres and Redis
+- Java 21, for the Spring Boot API
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## First-time setup
 
-## Expanding the ESLint configuration
+Install web dependencies:
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd apps/web
+npm ci
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Create the web environment file:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cp .env.example .env
 ```
+
+For local development, `apps/web/.env` should contain:
+
+```bash
+VITE_AWS_REGION=us-east-1
+VITE_COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX
+VITE_COGNITO_USER_POOL_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
+VITE_API_URL=http://localhost:8081
+```
+
+Use the real Cognito values for the Stacta development user pool.
+
+## Run the backend
+
+The backend has two parts:
+
+- Postgres and Redis run through Docker Compose.
+- The Spring Boot API runs through Gradle.
+
+Start Postgres and Redis:
+
+```bash
+cd services/api
+docker compose up -d
+```
+
+Start the API:
+
+```bash
+cd services/api
+./gradlew bootRun
+```
+
+The API runs on `http://localhost:8081` by default. Confirm it is up:
+
+```bash
+curl http://localhost:8081/health
+```
+
+Expected response:
+
+```text
+stacta-api ok
+```
+
+The default `dev` Spring profile points at:
+
+```text
+Postgres: localhost:15432
+Redis:    localhost:16379
+API:      localhost:8081
+```
+
+Flyway migrations run automatically when the API starts.
+
+## Run the web UI
+
+In a new terminal:
+
+```bash
+cd apps/web
+npm run dev
+```
+
+Open the Vite URL shown in the terminal, usually:
+
+```text
+http://localhost:5173
+```
+
+## Daily local workflow
+
+Use three terminals:
+
+```bash
+# Terminal 1: database and cache
+cd services/api
+docker compose up -d
+```
+
+```bash
+# Terminal 2: API
+cd services/api
+./gradlew bootRun
+```
+
+```bash
+# Terminal 3: web app
+cd apps/web
+npm run dev
+```
+
+## Useful commands
+
+```bash
+npm run build
+npm run test
+npm run test:watch
+npm run lint
+npm run e2e
+```
+
+Install the Playwright browser before running e2e tests for the first time:
+
+```bash
+npm run e2e:install
+```
+
+## Troubleshooting
+
+- If the UI cannot reach the API, confirm `VITE_API_URL=http://localhost:8081` and `curl http://localhost:8081/health` works.
+- If the API fails to connect to Postgres or Redis, confirm Docker Desktop is running and rerun `docker compose up -d` from `services/api`.
+- If port `8081` is already in use, stop the existing process or start the API on another port with `PORT=8082 ./gradlew bootRun` and update `VITE_API_URL` to match.
+- If environment values change while Vite is running, stop and restart `npm run dev`.
